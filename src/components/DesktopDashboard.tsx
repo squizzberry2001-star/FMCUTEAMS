@@ -13,7 +13,8 @@ import {
   ChevronRight,
   TrendingUp,
   Clock,
-  Sparkles
+  Sparkles,
+  ClipboardList
 } from 'lucide-react';
 import { Medicine, User } from '../types';
 import { CalendarStrip } from './CalendarStrip';
@@ -26,10 +27,10 @@ interface DesktopDashboardProps {
   selectedMedicine: Medicine;
   onSelectMedicine: (med: Medicine) => void;
   onOpenNewReminder: () => void;
+  onEditSchedule: (med: Medicine) => void;
   onRemoveMedicine: (id: string) => void;
   onToggleTaken: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
-  onSwitchToMobileShowcase: () => void;
 }
 
 export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
@@ -38,10 +39,10 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   selectedMedicine,
   onSelectMedicine,
   onOpenNewReminder,
+  onEditSchedule,
   onRemoveMedicine,
   onToggleTaken,
   onLogout,
-  onSwitchToMobileShowcase,
 }) => {
   const [selectedDay, setSelectedDay] = useState(5);
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'Month'>('Today');
@@ -79,7 +80,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
               { id: 'schedule', label: 'Schedule', icon: CalendarIcon },
               { id: 'cabinet', label: 'Medicine Cabinet', icon: Pill },
-              { id: 'health', label: 'Health Trends', icon: TrendingUp },
+              { id: 'history', label: 'Dose History', icon: ClipboardList },
               { id: 'settings', label: 'Settings', icon: Settings },
             ].map((item) => {
               const Icon = item.icon;
@@ -101,21 +102,21 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
             })}
           </nav>
 
-          {/* Showcase Mode Promo Card */}
-          <div className="mt-8 bg-gradient-to-br from-slate-50 to-teal-50/50 rounded-2xl p-4 border border-teal-100/60">
+          {/* Quick Adherence Info Box */}
+          <div className="mt-8 bg-gradient-to-br from-slate-50 via-teal-50/40 to-slate-50 rounded-2xl p-4 border border-teal-100/60">
             <div className="flex items-center gap-2 text-teal-700 font-bold text-xs mb-1">
-              <Sparkles className="w-4 h-4" />
-              <span>Mockup Layout</span>
+              <Sparkles className="w-4 h-4 text-teal-500" />
+              <span>Daily Adherence</span>
             </div>
-            <p className="text-[11px] text-slate-500 mb-3">
-              View the 3-phone side-by-side design from the original reference photo.
+            <p className="text-[11px] text-slate-500 mb-2">
+              {takenCount} of {totalCount} medications taken today.
             </p>
-            <button
-              onClick={onSwitchToMobileShowcase}
-              className="w-full py-2 rounded-xl bg-white border border-teal-200 text-teal-700 hover:bg-teal-600 hover:text-white font-bold text-xs shadow-sm transition-all"
-            >
-              Switch to 3-Phones View
-            </button>
+            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-teal-400 to-teal-600 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
           </div>
         </div>
 
@@ -164,7 +165,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 placeholder="Search medicine or cause..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-white border border-slate-200/80 rounded-full pl-10 pr-4 py-2 text-xs font-medium text-slate-800 outline-none focus:border-teal-500 w-56 transition-all"
+                className="bg-white border border-slate-200/80 rounded-full pl-10 pr-4 py-2 text-xs font-medium text-slate-800 outline-none focus:border-teal-500 w-60 transition-all"
               />
             </div>
 
@@ -315,7 +316,11 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               Selected Medicine
             </span>
             <button
-              onClick={() => onRemoveMedicine(selectedMedicine.id)}
+              onClick={() => {
+                if (window.confirm(`Are you sure you want to remove ${selectedMedicine.name}?`)) {
+                  onRemoveMedicine(selectedMedicine.id);
+                }
+              }}
               className="px-4 py-1 rounded-full bg-gradient-to-r from-[#FF7E98] to-[#FF5376] text-white text-xs font-bold shadow-pill-coral hover:brightness-105 active:scale-95 transition-all"
             >
               Remove
@@ -436,7 +441,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => alert(`Schedule editor for ${selectedMedicine.name} opened!`)}
+            onClick={() => onEditSchedule(selectedMedicine)}
             className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
           >
             <span>Edit Schedule</span>
