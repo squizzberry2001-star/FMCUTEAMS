@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F8F9FD;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #1E293B;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Soft Shadows and Ambient Glows matching the photo */
+.shadow-soft-card {
+  box-shadow: 0 10px 30px -5px rgba(30, 41, 59, 0.05), 0 2px 6px -1px rgba(30, 41, 59, 0.02);
+}
+
+.shadow-pill-coral {
+  box-shadow: 0 10px 25px -4px rgba(255, 107, 139, 0.45);
+}
+
+.shadow-pill-teal {
+  box-shadow: 0 12px 28px -6px rgba(43, 179, 160, 0.45);
+}
+
+.shadow-pill-blue {
+  box-shadow: 0 10px 24px -5px rgba(92, 124, 250, 0.4);
+}
+
+.shadow-dock {
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.03), 0 12px 32px rgba(30, 41, 59, 0.08);
+}
+
+/* Dreamy pastel background blurs */
+.ambient-bg-glow {
+  background: 
+    radial-gradient(circle at 10% 20%, rgba(212, 244, 226, 0.6) 0%, transparent 40%),
+    radial-gradient(circle at 90% 15%, rgba(255, 230, 213, 0.6) 0%, transparent 45%),
+    radial-gradient(circle at 50% 80%, rgba(232, 238, 255, 0.7) 0%, transparent 50%),
+    radial-gradient(circle at 85% 75%, rgba(255, 218, 226, 0.5) 0%, transparent 40%);
+}
+
+.phone-screen {
+  aspect-ratio: 9 / 19.5;
+  border-radius: 44px;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #E2E8F0;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #CBD5E1;
+}
