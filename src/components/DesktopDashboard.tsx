@@ -31,6 +31,7 @@ interface DesktopDashboardProps {
   onRemoveMedicine: (id: string) => void;
   onToggleTaken: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
+  onOpenGasModal?: () => void;
 }
 
 export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
@@ -43,6 +44,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   onRemoveMedicine,
   onToggleTaken,
   onLogout,
+  onOpenGasModal,
 }) => {
   const [selectedDay, setSelectedDay] = useState(5);
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'Month'>('Today');
@@ -177,6 +179,17 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               <Bell className="w-5 h-5" />
               <span className="w-2 h-2 rounded-full bg-[#2BB3A0] absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
             </button>
+
+            {/* Google Apps Script Drive Button */}
+            {onOpenGasModal && (
+              <button
+                onClick={onOpenGasModal}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 text-xs font-bold transition-all border border-slate-200/80"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>Google Drive</span>
+              </button>
+            )}
 
             {/* Add New Reminder Button */}
             <button

@@ -11,7 +11,9 @@ import { ProfileView } from './components/ProfileView';
 import { DesktopDashboard } from './components/DesktopDashboard';
 import { EditScheduleModal } from './components/EditScheduleModal';
 import { LoginPage } from './components/LoginPage';
-import { Smartphone, Monitor, X } from 'lucide-react';
+import { Smartphone, Monitor, X, Link2 } from 'lucide-react';
+import { GasConnectionModal } from './components/GasConnectionModal';
+import { getGasUrl } from './services/googleAppsScript';
 
 export const App: React.FC = () => {
   // 1. Data State with LocalStorage persistence
@@ -55,6 +57,8 @@ export const App: React.FC = () => {
   // Desktop modals
   const [showDesktopNewReminderModal, setShowDesktopNewReminderModal] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
+  const [showGasModal, setShowGasModal] = useState(false);
+  const [isGasConnected, setIsGasConnected] = useState<boolean>(() => !!getGasUrl());
 
   // Forced layout override (auto / desktop / mobile) for testing on PC
   const [layoutMode, setLayoutMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
@@ -191,12 +195,27 @@ export const App: React.FC = () => {
     <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
       {/* Real Web Header / Control Banner for Desktop Viewers */}
       <div className="hidden lg:flex items-center justify-between px-6 py-2 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-bold text-slate-800">FMCU TEAMS Live Web Application</span>
-          <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
-            Real Web Mode
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-bold text-slate-800">FMCU TEAMS Live Web Application</span>
+            <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+              Real Web Mode
+            </span>
+          </div>
+
+          {/* Google Apps Script Connection Indicator */}
+          <button
+            onClick={() => setShowGasModal(true)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all border ${
+              isGasConnected
+                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isGasConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+            <span>{isGasConnected ? 'Google Drive Aktif' : 'Hubungkan Google Apps Script'}</span>
+          </button>
         </div>
 
         {/* Layout Switcher (Allows testing true mobile layout right inside the desktop browser!) */}
@@ -304,6 +323,7 @@ export const App: React.FC = () => {
           onRemoveMedicine={handleRemoveMedicine}
           onToggleTaken={handleToggleTaken}
           onLogout={handleLogout}
+          onOpenGasModal={() => setShowGasModal(true)}
         />
       )}
 
@@ -333,6 +353,13 @@ export const App: React.FC = () => {
           onSave={handleSaveSchedule}
         />
       )}
+
+      {/* Google Apps Script Connection Modal */}
+      <GasConnectionModal
+        isOpen={showGasModal}
+        onClose={() => setShowGasModal(false)}
+        onConnectionSuccess={() => setIsGasConnected(true)}
+      />
     </div>
   );
 };
