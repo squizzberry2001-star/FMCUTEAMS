@@ -27,23 +27,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   const [revealedSet, setRevealedSet] = useState<Set<number>>(() => new Set());
   const [currentActiveChar, setCurrentActiveChar] = useState<number>(-1);
 
-  // Random per-character positional offsets (kept centered around the middle axis) & randomized visit order
+  // Randomized ball trajectory across letters while keeping "FMCU TEAMS" text 100% neat & straight
   const randomChoreography = React.useMemo(() => {
-    const rawOffsets = CHARACTERS.map((ch) => {
-      if (ch === ' ') return { dx: 0, dy: 0 };
-      const dx = Math.round((Math.random() - 0.5) * 6);
-      const dy = Math.round((Math.random() - 0.5) * 32); // -16px to +16px random vertical position
-      return { dx, dy };
-    });
-    // Ensure vertical average is 0 so the whole word remains dead-center
-    const nonSpace = rawOffsets.filter((_, i) => CHARACTERS[i] !== ' ');
-    const avgY =
-      nonSpace.reduce((sum, item) => sum + item.dy, 0) / Math.max(1, nonSpace.length);
-    const offsets = rawOffsets.map((item, i) =>
-      CHARACTERS[i] === ' ' ? item : { dx: item.dx, dy: Math.round(item.dy - avgY) }
-    );
-
-    // Randomize order in which the dot visits each letter
+    // Randomize order in which the ball visits each letter (ensure first visited letter is not 'F')
     const indices = CHARACTERS.map((ch, idx) => (ch === ' ' ? -1 : idx)).filter(
       (idx) => idx !== -1
     );
@@ -51,12 +37,25 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       const j = Math.floor(Math.random() * (i + 1));
       [indices[i], indices[j]] = [indices[j], indices[i]];
     }
+    if (indices[0] === 0 && indices.length > 1) {
+      const swapIdx = 1 + Math.floor(Math.random() * (indices.length - 1));
+      [indices[0], indices[swapIdx]] = [indices[swapIdx], indices[0]];
+    }
 
-    // Random initial drop offset away from letter 'F' (never directly on 'F')
-    const dropOffsetX = Math.round(-55 - Math.random() * 30);
-    const dropOffsetY = Math.round((Math.random() > 0.5 ? -1 : 1) * (24 + Math.random() * 18));
+    // Subtle random contact offset for the BALL only at each letter (text stays 100% straight)
+    const ballOffsets = CHARACTERS.map((ch) => {
+      if (ch === ' ') return { dx: 0, dy: 0 };
+      return {
+        dx: Math.round((Math.random() - 0.5) * 8),
+        dy: Math.round((Math.random() - 0.5) * 20),
+      };
+    });
 
-    return { offsets, visitOrder: indices, dropOffsetX, dropOffsetY };
+    // Initial drop position safely INSIDE the frame (25%..75% across the text width, and slightly above/below 'F')
+    const dropRatioX = 0.25 + Math.random() * 0.5;
+    const dropOffsetY = Math.round((Math.random() > 0.5 ? -1 : 1) * (28 + Math.random() * 14));
+
+    return { ballOffsets, visitOrder: indices, dropRatioX, dropOffsetY };
   }, []);
 
   const [dotPos, setDotPos] = useState<{
@@ -388,14 +387,14 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       const positions: { x: number; y: number }[] = [];
       for (let i = 0; i < CHARACTERS.length; i++) {
         const el = charRefs.current[i];
-        const off = randomChoreography.offsets[i] || { dx: 0, dy: 0 };
+        const ballOff = randomChoreography.ballOffsets[i] || { dx: 0, dy: 0 };
         if (el) {
           positions.push({
-            x: el.offsetLeft + el.offsetWidth / 2 + off.dx,
-            y: el.offsetTop + el.offsetHeight / 2 + off.dy,
+            x: el.offsetLeft + el.offsetWidth / 2 + ballOff.dx,
+            y: el.offsetTop + el.offsetHeight / 2 + ballOff.dy,
           });
         } else {
-          positions.push({ x: off.dx, y: contRect.height / 2 + off.dy });
+          positions.push({ x: ballOff.dx, y: contRect.height / 2 + ballOff.dy });
         }
       }
 
@@ -442,9 +441,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             ];
 
       const fPos = validPositions[0];
-      // Phase 1: Initial drop point is offset away from 'F' (never directly on 'F')
-      const initialDropX = fPos.x + randomChoreography.dropOffsetX;
-      const initialDropY = fPos.y + randomChoreography.dropOffsetY;
+      const lastCharPos = validPositions[CHARACTERS.length - 1] || fPos;
+      const spanWidth = Math.max(120, lastCharPos.x - fPos.x);
+
+      // Phase 1: Initial drop point stays safely INSIDE the frame (away from 'F')
+      const initialDropX = Math.round(fPos.x + spanWidth * randomChoreography.dropRatioX);
+      const initialDropY = Math.round(fPos.y + randomChoreography.dropOffsetY);
 
       setDotPos({
         x: initialDropX,
@@ -749,7 +751,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             {CHARACTERS.map((char, idx) => {
               const isRevealed = revealedSet.has(idx);
               const isCurrent = currentActiveChar === idx;
-              const off = randomChoreography.offsets[idx] || { dx: 0, dy: 0 };
 
               if (char === ' ') {
                 return (
@@ -771,8 +772,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                   style={{
                     opacity: isRevealed ? 1 : 0,
                     transform: isRevealed
-                      ? `translate3d(${off.dx}px, ${off.dy}px, 0) scale(1)`
-                      : `translate3d(${off.dx}px, ${off.dy + 8}px, 0) scale(0.75)`,
+                      ? 'translate3d(0, 0, 0) scale(1)'
+                      : 'translate3d(0, 6px, 0) scale(0.85)',
                     color: '#FFFFFF',
                     textShadow: isCurrent
                       ? '0 0 10px #FFFFFF, 0 0 20px rgba(45, 212, 191, 0.9), 0 0 40px rgba(45, 212, 191, 0.45)'
