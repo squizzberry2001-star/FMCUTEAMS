@@ -126,110 +126,120 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     <div
       ref={scrollContainerRef}
       onScroll={handleScroll}
-      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-6 pb-28 max-w-xl mx-auto w-full relative select-none"
+      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-0 pb-28 max-w-xl mx-auto w-full relative select-none"
     >
-      {/* Section 1 Item 1: Head Title "Your Weekly Schedule" & Time-based Greeting */}
-      <div className="flex items-start justify-between mb-5">
+      {/* ============================================================
+          STICKY FROSTED HEADER (Title, Greeting, Bell & Calendar Strip)
+          - Protected with safe-area-inset-top so it never collides with status bar / notch
+          - Stays sticky at top when scrolling ("tetap terlihat walaupun di scroll")
+          - Compacts gracefully on scroll for maximum agenda viewport
+          ============================================================ */}
+      <div className="sticky top-0 z-30 bg-[#F8F9FD]/95 backdrop-blur-xl -mx-5 px-5 sm:-mx-6 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top,20px))] pb-2.5 mb-3 border-b border-slate-200/50 shadow-xs transition-all duration-300">
+        {/* Head Title "Your Weekly Schedule" & Time-based Greeting & Notification Bell */}
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-[26px] font-extrabold text-slate-900 leading-[1.15] tracking-tight">
-              Your Weekly<br />Schedule
+            <h1 className={`font-black text-slate-900 tracking-tight transition-all duration-300 ${
+              isScrolled ? 'text-lg leading-tight' : 'text-2xl sm:text-[26px] leading-[1.15]'
+            }`}>
+              Your Weekly Schedule
             </h1>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              Selamat {getTimeGreeting()}, {fullName}! 👋
-            </p>
+            {!isScrolled && (
+              <p className="text-xs text-slate-500 font-semibold mt-0.5 animate-in fade-in duration-200">
+                Selamat {getTimeGreeting()}, {fullName}! 👋
+              </p>
+            )}
           </div>
 
           <button
             onClick={() => alert(`Notifikasi: Ada ${displayedAgendas.length} agenda terjadwal untuk tanggal ${selectedDate}.`)}
-            className="w-10 h-10 rounded-full bg-[#EAF8F2] flex items-center justify-center text-[#2BB3A0] shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative flex-shrink-0"
+            className="w-9 h-9 rounded-full bg-[#EAF8F2] flex items-center justify-center text-[#2BB3A0] shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative flex-shrink-0"
+            title="Notifikasi Agenda"
           >
-            <Bell className="w-5 h-5" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[#2BB3A0] absolute top-2.5 right-2.5 border-2 border-white ring-2 ring-[#EAF8F2]" />
+            <Bell className="w-4 h-4" />
+            <span className="w-2 h-2 rounded-full bg-[#2BB3A0] absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
           </button>
         </div>
 
-        {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
-        <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-2 pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 transition-all">
-          {/* Section 1 Item 3: Bulan dan Tahun Aktual di pojok kanan atas tepat di atas calendar strip */}
-          <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
-              Kalender Mingguan
-            </span>
-            <span className="text-[11px] font-bold text-teal-800 bg-white px-2.5 py-0.5 rounded-full border border-teal-200/80 shadow-xs flex items-center gap-1.5">
-              <CalendarDays className="w-3.5 h-3.5 text-teal-600" />
-              <span>{currentMonthYear}</span>
-            </span>
-          </div>
+        {/* Section 1 Item 3: Bulan dan Tahun Aktual di pojok kanan atas tepat di atas calendar strip */}
+        <div className="flex items-center justify-between mb-1.5 px-1">
+          <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
+            Kalender Mingguan
+          </span>
+          <span className="text-[11px] font-bold text-teal-800 bg-white/90 backdrop-blur-sm px-2.5 py-0.5 rounded-full border border-teal-200/80 shadow-xs flex items-center gap-1.5">
+            <CalendarDays className="w-3.5 h-3.5 text-teal-600" />
+            <span>{currentMonthYear}</span>
+          </span>
+        </div>
 
-          {/* Section 1 Item 2: Horizontal Calendar Strip (Senin s/d Minggu Actual Dates) */}
-          <div className="mb-3">
-            <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} />
-          </div>
+        {/* Section 1 Item 2: Horizontal Calendar Strip (Senin s/d Minggu Actual Dates) */}
+        <div className="mb-2">
+          <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} />
+        </div>
 
-          {/* Sub section: Period Filter Tabs (Today / Week / Month) & Scope Switcher */}
-          <div className="flex flex-col gap-2 px-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-5">
-                {(['Today', 'Week', 'Month'] as const).map((period) => {
-                  const isActive = selectedPeriod === period;
-                  return (
-                    <button
-                      key={period}
-                      onClick={() => setSelectedPeriod(period)}
-                      className="relative pb-1 transition-colors"
+        {/* Sub section: Period Filter Tabs (Today / Week / Month) & Scope Switcher */}
+        <div className="flex flex-col gap-1.5 px-1">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-5">
+              {(['Today', 'Week', 'Month'] as const).map((period) => {
+                const isActive = selectedPeriod === period;
+                return (
+                  <button
+                    key={period}
+                    onClick={() => setSelectedPeriod(period)}
+                    className="relative pb-1 transition-colors"
+                  >
+                    <span
+                      className={`text-xs sm:text-sm font-bold transition-colors ${
+                        isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
+                      }`}
                     >
-                      <span
-                        className={`text-xs sm:text-sm font-bold transition-colors ${
-                          isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
-                        }`}
-                      >
-                        {period === 'Today' ? 'Hari Ini' : period === 'Week' ? 'Minggu Ini' : 'Bulan Ini'}
-                      </span>
-                      {isActive && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#4E80EE] rounded-full" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Scope Switcher: Jadwal Saya vs Semua Tim */}
-              <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg text-[10px] font-bold">
-                <button
-                  type="button"
-                  onClick={() => setScopeFilter('my')}
-                  className={`px-2 py-0.5 rounded-md transition-all ${
-                    scopeFilter === 'my'
-                      ? 'bg-white text-teal-700 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Jadwal Saya
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScopeFilter('all')}
-                  className={`px-2 py-0.5 rounded-md transition-all ${
-                    scopeFilter === 'all'
-                      ? 'bg-white text-teal-700 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Semua Tim
-                </button>
-              </div>
+                      {period === 'Today' ? 'Hari Ini' : period === 'Week' ? 'Minggu Ini' : 'Bulan Ini'}
+                    </span>
+                    {isActive && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#4E80EE] rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
-              <span className="truncate pr-2">
-                {scopeFilter === 'my' ? `Jadwal untuk: ${fullName}` : 'Menampilkan jadwal seluruh tim'}
-              </span>
-              <span className="font-bold text-slate-500 flex-shrink-0">
-                {displayedAgendas.length} agenda
-              </span>
+            {/* Scope Switcher: Jadwal Saya vs Semua Tim */}
+            <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => setScopeFilter('my')}
+                className={`px-2 py-0.5 rounded-md transition-all ${
+                  scopeFilter === 'my'
+                    ? 'bg-white text-teal-700 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Jadwal Saya
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter('all')}
+                className={`px-2 py-0.5 rounded-md transition-all ${
+                  scopeFilter === 'all'
+                    ? 'bg-white text-teal-700 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Semua Tim
+              </button>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+            <span className="truncate pr-2">
+              {scopeFilter === 'my' ? `Jadwal untuk: ${fullName}` : 'Menampilkan jadwal seluruh tim'}
+            </span>
+            <span className="font-bold text-slate-500 flex-shrink-0">
+              {displayedAgendas.length} agenda
+            </span>
           </div>
         </div>
+      </div>
 
         {/* Section 1 Item 3 & 5: List Schedule Agenda (dengan font title yang lebih kecil) */}
         <div className="space-y-3">
