@@ -160,7 +160,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={onBack}
-          className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-700 shadow-soft-sm active:scale-95 transition-transform"
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-700 active:scale-95 transition-transform"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>

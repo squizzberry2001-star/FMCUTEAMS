@@ -85,47 +85,52 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const upscaleLockedRef = useRef(false);
   const lastScrollTopRef = useRef(0);
 
+  const getScrollTop = () => {
+    const cTop = scrollContainerRef.current ? scrollContainerRef.current.scrollTop : 0;
+    const wTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    return Math.max(cTop, wTop);
+  };
+
   const handleResetScale = () => {
     setIsScrolled(false);
     upscaleLockedRef.current = true;
-    lastScrollTopRef.current = scrollContainerRef.current?.scrollTop || 0;
+    lastScrollTopRef.current = getScrollTop();
   };
 
-  const handleScroll = () => {
-    if (!scrollContainerRef.current) return;
-    const top = scrollContainerRef.current.scrollTop;
+  const checkScroll = () => {
+    const top = getScrollTop();
 
     if (upscaleLockedRef.current) {
-      if (Math.abs(top - lastScrollTopRef.current) > 45) {
+      if (Math.abs(top - lastScrollTopRef.current) > 12) {
         upscaleLockedRef.current = false;
       } else {
         return;
       }
     }
 
-    setIsScrolled(top > 55);
+    setIsScrolled(top > 15);
   };
 
   useEffect(() => {
-    const handleWindowScroll = () => {
-      const top = window.scrollY || document.documentElement.scrollTop;
-      if (upscaleLockedRef.current) {
-        if (Math.abs(top - lastScrollTopRef.current) > 45) {
-          upscaleLockedRef.current = false;
-        } else {
-          return;
-        }
+    const container = scrollContainerRef.current;
+    window.addEventListener('scroll', checkScroll, { passive: true });
+    document.addEventListener('scroll', checkScroll, { passive: true });
+    if (container) {
+      container.addEventListener('scroll', checkScroll, { passive: true });
+    }
+    return () => {
+      window.removeEventListener('scroll', checkScroll);
+      document.removeEventListener('scroll', checkScroll);
+      if (container) {
+        container.removeEventListener('scroll', checkScroll);
       }
-      setIsScrolled(top > 55);
     };
-    window.addEventListener('scroll', handleWindowScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleWindowScroll);
   }, []);
 
   return (
     <div
       ref={scrollContainerRef}
-      onScroll={handleScroll}
+      onScroll={checkScroll}
       className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-0 pb-28 max-w-xl mx-auto w-full relative select-none"
     >
       {/* ============================================================
@@ -152,11 +157,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           <button
             onClick={() => alert(`Notifikasi: Ada ${displayedAgendas.length} agenda terjadwal untuk tanggal ${selectedDate}.`)}
-            className="w-9 h-9 rounded-full bg-[#EAF8F2] flex items-center justify-center text-[#2BB3A0] shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative flex-shrink-0"
+            className="w-9 h-9 rounded-full iphone-glass-icon-btn flex items-center justify-center text-[#2BB3A0] hover:scale-105 active:scale-95 transition-all relative flex-shrink-0 cursor-pointer group"
             title="Notifikasi Agenda"
           >
-            <Bell className="w-4 h-4" />
-            <span className="w-2 h-2 rounded-full bg-[#2BB3A0] absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
+            <Bell className="w-4 h-4 stroke-[2.2] group-hover:scale-110 transition-transform" />
+            <span className="w-2 h-2 rounded-full bg-[#2BB3A0] absolute top-1.5 right-1.5 border-2 border-white ring-1 ring-teal-200" />
           </button>
         </div>
 
@@ -278,8 +283,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         activeTab={activeNavTab as NavTabType}
         onSelectTab={(tab) => {
           handleResetScale();
-          if (tab === activeNavTab && scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+          if (tab === activeNavTab) {
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
           }
           if (setActiveNavTab) setActiveNavTab(tab);
           if (tab === 'calendar' && onOpenCalendar) onOpenCalendar();

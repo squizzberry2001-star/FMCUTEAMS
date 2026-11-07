@@ -70,7 +70,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-100 px-5 pt-[max(0.75rem,env(safe-area-inset-top,16px))] pb-3.5 flex items-center justify-between">
         <button
           onClick={onBack}
-          className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 transition-colors active:scale-95"
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-700 active:scale-95 transition-transform"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -86,7 +86,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
               alert('Informasi agenda disalin ke clipboard!');
             }
           }}
-          className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors"
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-600 active:scale-95 transition-transform"
         >
           <Share2 className="w-4 h-4" />
         </button>

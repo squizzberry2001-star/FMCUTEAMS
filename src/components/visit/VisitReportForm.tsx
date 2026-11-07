@@ -198,31 +198,39 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // GPS Refresh state
   const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
 
-  // Scroll Detection & Auto Navbar Scale with Upscale Lock on Press
+  // Scroll Detection & Auto Navbar Scale with Responsive Scroll Threshold
   const [isScrolled, setIsScrolled] = useState(false);
   const upscaleLockedRef = useRef(false);
   const lastScrollTopRef = useRef(0);
 
+  const getScrollTop = () => {
+    return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  };
+
   const handleResetScale = () => {
     setIsScrolled(false);
     upscaleLockedRef.current = true;
-    lastScrollTopRef.current = window.scrollY || document.documentElement.scrollTop;
+    lastScrollTopRef.current = getScrollTop();
   };
 
   useEffect(() => {
     const handleScroll = () => {
-      const top = window.scrollY || document.documentElement.scrollTop;
+      const top = getScrollTop();
       if (upscaleLockedRef.current) {
-        if (Math.abs(top - lastScrollTopRef.current) > 45) {
+        if (Math.abs(top - lastScrollTopRef.current) > 12) {
           upscaleLockedRef.current = false;
         } else {
           return;
         }
       }
-      setIsScrolled(top > 55);
+      setIsScrolled(top > 15);
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    document.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   // File Input References
@@ -688,7 +696,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           type="button"
           onClick={onBack}
           title="Kembali ke Home / Jadwal Toko"
-          className="w-11 h-11 rounded-full iphone-glass-dock pointer-events-auto flex items-center justify-center text-slate-700 hover:text-teal-700 active:scale-90 transition-all duration-200 cursor-pointer hover:bg-white/95 group"
+          className="w-11 h-11 rounded-full iphone-glass-icon-btn pointer-events-auto flex items-center justify-center text-slate-700 hover:text-teal-700 active:scale-90 transition-all duration-200 cursor-pointer group"
         >
           <Home className="w-5 h-5 stroke-[2.2] group-hover:scale-110 transition-transform" />
         </button>
@@ -698,7 +706,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           type="button"
           onClick={() => setShowPreview(true)}
           title="Pratinjau & Cetak Laporan PDF 16:9"
-          className="w-11 h-11 rounded-full iphone-glass-dock pointer-events-auto flex items-center justify-center text-rose-600 hover:text-rose-700 active:scale-90 transition-all duration-200 cursor-pointer hover:bg-white/95 relative group"
+          className="w-11 h-11 rounded-full iphone-glass-icon-btn pointer-events-auto flex items-center justify-center text-rose-600 hover:text-rose-700 active:scale-90 transition-all duration-200 cursor-pointer relative group"
         >
           <FileText className="w-5 h-5 stroke-[2.2] group-hover:scale-110 transition-transform" />
           <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-rose-600 text-white px-1 py-0.2 rounded-full leading-tight shadow-xs">
@@ -1773,9 +1781,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         <div
           onClick={handleResetScale}
           className={`flex items-center pointer-events-auto transform-gpu dock-transition origin-center relative overflow-hidden select-none ${
-            isScrolled
-              ? 'iphone-glass-dock-scrolled scale-[0.91] w-[300px] p-1 rounded-[30px] shadow-xl'
-              : 'iphone-glass-dock scale-100 w-full max-w-md p-1.5 rounded-[36px] shadow-2xl'
+            isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
           }`}
         >
           {/* Top Specular Hairline Reflection */}
