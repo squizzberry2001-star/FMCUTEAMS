@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from './types';
-import { initialAgendas } from './data/mockData';
+import { initialAgendas, initialUsers } from './data/mockData';
 import { HomeScreen } from './components/HomeScreen';
 import { CalendarScheduleView } from './components/CalendarScheduleView';
 import { HistoryView } from './components/HistoryView';
@@ -11,22 +11,53 @@ import { NewAgendaModal } from './components/NewAgendaModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
 import { VisitReportForm } from './components/visit/VisitReportForm';
 import { LoginPage } from './components/LoginPage';
-import { Smartphone, Monitor } from 'lucide-react';
+import { AdminPortal } from './components/admin/AdminPortal';
+import { Smartphone, Monitor, Shield, ArrowLeft } from 'lucide-react';
 
 export const App: React.FC = () => {
-  // 1. Data State for Agendas (Hapus seluruh dummy data lawas di browser)
-  const [agendas, setAgendas] = useState<ScheduleAgenda[]>(() => {
-    localStorage.removeItem('fmcu_agendas_schedule');
-    const saved = localStorage.getItem('fmcu_agendas_schedule_v2');
+  // 1. Master State for Users (Admin + 36 User dari Excel dengan password 0000)
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('fmcu_users_v2');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {
         console.error(e);
       }
     }
-    return initialAgendas; // Array kosong []
+    return initialUsers;
   });
+
+  // 2. Master State for Agendas (582 Jadwal dari 3 Sheet Excel)
+  const [agendas, setAgendas] = useState<ScheduleAgenda[]>(() => {
+    const saved = localStorage.getItem('fmcu_agendas_master_v3');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return initialAgendas;
+  });
+
+  // 3. User Session State
+  const [user, setUser] = useState<User | null>(() => {
+    const savedUser = localStorage.getItem('fmcu_user_session_v3');
+    if (savedUser) {
+      try {
+        return JSON.parse(savedUser);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return null; // Tampilkan halaman Login terlebih dahulu
+  });
+
+  // Admin Preview Mode: Ketika admin ingin melihat pratinjau tampilan sisi user
+  const [adminPreviewMode, setAdminPreviewMode] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
@@ -37,22 +68,6 @@ export const App: React.FC = () => {
   });
 
   const [selectedAgenda, setSelectedAgenda] = useState<ScheduleAgenda | null>(null);
-
-  const [user, setUser] = useState<User | null>(() => {
-    const savedUser = localStorage.getItem('fmcu_user');
-    if (savedUser) {
-      try {
-        return JSON.parse(savedUser);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return {
-      name: 'Sarah Jenkins',
-      email: 'sarah.j@fmcuteams.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    };
-  });
 
   // Mobile navigation active tab
   const [mobileTab, setMobileTab] = useState<'home' | 'calendar' | 'history' | 'profile'>('home');
@@ -80,23 +95,57 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Save changes to localStorage
+  // Save master users to localStorage
   useEffect(() => {
-    localStorage.setItem('fmcu_agendas_schedule_v2', JSON.stringify(agendas));
+    localStorage.setItem('fmcu_users_v2', JSON.stringify(users));
+  }, [users]);
+
+  // Save master agendas to localStorage
+  useEffect(() => {
+    localStorage.setItem('fmcu_agendas_master_v3', JSON.stringify(agendas));
   }, [agendas]);
 
+  // Save logged-in session
   useEffect(() => {
     if (user) {
-      localStorage.setItem('fmcu_user', JSON.stringify(user));
+      localStorage.setItem('fmcu_user_session_v3', JSON.stringify(user));
     } else {
-      localStorage.removeItem('fmcu_user');
+      localStorage.removeItem('fmcu_user_session_v3');
     }
   }, [user]);
 
-  // Handlers
+  // Handlers for User & Profile Management
+  const handleLogin = (loggedInUser: User) => {
+    setUser(loggedInUser);
+    setAdminPreviewMode(false);
+    setMobileTab('home');
+    setMobileScreen('main');
+
+    confetti({
+      particleCount: 40,
+      spread: 50,
+      origin: { y: 0.5 },
+      colors: ['#2BB3A0', '#4E80EE', '#F59E0B'],
+    });
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setSelectedAgenda(null);
+    setAdminPreviewMode(false);
+  };
+
+  const handleUpdateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    setUsers((prev) =>
+      prev.map((u) => (u.name.toLowerCase() === updatedUser.name.toLowerCase() ? updatedUser : u))
+    );
+  };
+
+  // Handlers for Agenda Management
   const handleSelectAgenda = (agenda: ScheduleAgenda) => {
     setSelectedAgenda(agenda);
-    setMobileScreen('detail'); // Navigasi ke Halaman Detail Agenda
+    setMobileScreen('detail');
   };
 
   const handleAddNewAgenda = (newAgenda: ScheduleAgenda) => {
@@ -113,38 +162,102 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleLogout = () => {
-    setUser(null);
+  const handleUpdateAgenda = (updated: ScheduleAgenda) => {
+    setAgendas((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+    if (selectedAgenda && selectedAgenda.id === updated.id) {
+      setSelectedAgenda(updated);
+    }
+  };
+
+  const handleDeleteAgenda = (id: string) => {
+    setAgendas((prev) => prev.filter((a) => a.id !== id));
+    if (selectedAgenda && selectedAgenda.id === id) {
+      setSelectedAgenda(null);
+    }
+  };
+
+  // Handlers for Admin Excel Import & Sync
+  const handleImportExcel = (importedUsers: User[], importedAgendas: ScheduleAgenda[]) => {
+    // Merge users
+    const existingMap = new Map(users.map((u) => [u.name.toLowerCase(), u]));
+    importedUsers.forEach((u) => {
+      if (!existingMap.has(u.name.toLowerCase())) {
+        existingMap.set(u.name.toLowerCase(), u);
+      }
+    });
+
+    setUsers(Array.from(existingMap.values()));
+    setAgendas(importedAgendas);
+  };
+
+  const handleAddUser = (newUser: User) => {
+    setUsers((prev) => [newUser, ...prev]);
+  };
+
+  const handleResetUserPassword = (userName: string) => {
+    setUsers((prev) =>
+      prev.map((u) => (u.name.toLowerCase() === userName.toLowerCase() ? { ...u, password: '0000' } : u))
+    );
   };
 
   // Determine effective display layout: mobile or desktop
   const isMobileLayout =
     layoutMode === 'mobile' || (layoutMode === 'auto' && isMobileViewport);
 
-  // If user is not authenticated, show real Login page
+  // 1. If not authenticated, render Login Page
   if (!user) {
     return (
       <LoginPage
-        onLogin={(loggedInUser) => {
-          setUser(loggedInUser);
-          setMobileTab('home'); // Otomatis langsung masuk di section 1 (Weekly Schedule)
-          setMobileScreen('main');
-        }}
-        onContinueAsGuest={() => {
-          setUser({
-            name: 'Sarah Jenkins',
-            email: 'sarah.j@fmcuteams.com',
-            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          });
-          setMobileTab('home'); // Otomatis langsung masuk di section 1 (Weekly Schedule)
-          setMobileScreen('main');
-        }}
+        users={users}
+        onLogin={handleLogin}
       />
     );
   }
 
+  // 2. If logged in as ADMIN and not in preview mode, render dedicated Admin Portal
+  if (user.isAdmin && !adminPreviewMode) {
+    return (
+      <AdminPortal
+        adminUser={user}
+        agendas={agendas}
+        users={users}
+        onAddAgenda={handleAddNewAgenda}
+        onUpdateAgenda={handleUpdateAgenda}
+        onDeleteAgenda={handleDeleteAgenda}
+        onImportExcel={handleImportExcel}
+        onSwitchToUserView={() => setAdminPreviewMode(true)}
+        onLogout={handleLogout}
+        onAddUser={handleAddUser}
+        onResetUserPassword={handleResetUserPassword}
+      />
+    );
+  }
+
+  // 3. User View (Field Staff View or Admin in Preview Mode)
   return (
     <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
+      {/* Admin Preview Floating Header */}
+      {user.isAdmin && adminPreviewMode && (
+        <div className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between text-xs sticky top-0 z-50 shadow-md">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <Shield className="w-4 h-4 text-teal-400" />
+            <span className="font-bold">Mode Pratinjau Tampilan User (Super Admin)</span>
+            <span className="hidden sm:inline text-slate-400">
+              — Anda sedang melihat aplikasi dari sudut pandang karyawan lapangan.
+            </span>
+          </div>
+
+          <button
+            onClick={() => setAdminPreviewMode(false)}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold transition-all shadow-sm active:scale-95"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Kembali ke Portal Admin</span>
+          </button>
+        </div>
+      )}
+
       {/* Real Web Header / Control Banner for Desktop Viewers (Hidden when printing PDF) */}
       <div className="hidden lg:flex items-center justify-between px-6 py-2 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40 print:hidden">
         <div className="flex items-center gap-2">
@@ -152,6 +265,9 @@ export const App: React.FC = () => {
           <span className="text-xs font-bold text-slate-800">FMCU TEAMS Live Web Application</span>
           <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
             Real Web Mode
+          </span>
+          <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+            User: {user.name}
           </span>
         </div>
 
@@ -248,9 +364,10 @@ export const App: React.FC = () => {
               {mobileTab === 'profile' && (
                 <ProfileView
                   user={user}
-                  medicinesCount={agendas.length}
+                  medicinesCount={agendas.filter((a) => a.pic?.toLowerCase().includes(user.name.toLowerCase())).length}
                   onBack={() => setMobileTab('home')}
                   onLogout={handleLogout}
+                  onUpdateUser={handleUpdateUser}
                 />
               )}
             </>
@@ -271,6 +388,7 @@ export const App: React.FC = () => {
             setMobileScreen('visit-form');
           }}
           onLogout={handleLogout}
+          onOpenAdminPortal={user.isAdmin ? () => setAdminPreviewMode(false) : undefined}
         />
       )}
 

@@ -17,7 +17,9 @@ import {
   ClipboardList,
   MapPin,
   Camera,
-  User as UserIcon
+  User as UserIcon,
+  Shield,
+  ArrowRight
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
 import { CalendarStrip } from './CalendarStrip';
@@ -34,6 +36,7 @@ interface DesktopDashboardProps {
   onOpenVisitForm?: (agenda: ScheduleAgenda) => void;
   onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
+  onOpenAdminPortal?: () => void;
 }
 
 export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
@@ -46,6 +49,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   onOpenNewAgenda,
   onOpenVisitForm,
   onLogout,
+  onOpenAdminPortal,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'Month'>('Today');
   const [searchQuery, setSearchQuery] = useState('');
@@ -133,6 +137,23 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 </button>
               );
             })}
+
+            {/* Admin Return Shortcut */}
+            {user.isAdmin && onOpenAdminPortal && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={onOpenAdminPortal}
+                  className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-sm hover:brightness-105 active:scale-95 transition-all text-xs font-bold"
+                >
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4" />
+                    <span>Portal Admin FMCU</span>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </nav>
 
           {/* Coverage Summary Box */}

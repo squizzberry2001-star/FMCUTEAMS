@@ -1,7 +1,26 @@
-import { Medicine, ScheduleAgenda } from '../types';
+import excelSeed from './excelScheduleSeed.json';
+import { Medicine, ScheduleAgenda, User } from '../types';
 
-// Seluruh dummy schedule telah dihapus sesuai instruksi
-export const initialAgendas: ScheduleAgenda[] = [];
+export const ADMIN_PASSWORD = '607090';
+
+export const ADMIN_USER: User = {
+  id: 'admin-001',
+  name: 'Admin FMCU (Super Admin)',
+  email: 'admin@fmcuteams.com',
+  role: 'Master Admin & Scheduler',
+  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  password: ADMIN_PASSWORD,
+  isAdmin: true,
+};
+
+// 36 User Asli dari kolom Nama pada file "TEMPLET EXCEL JADWAL.xlsx"
+export const initialUsers: User[] = [
+  ADMIN_USER,
+  ...(excelSeed.users as User[]),
+];
+
+// 582 Agenda Asli dari 3 Sheet Excel
+export const initialAgendas: ScheduleAgenda[] = excelSeed.agendas as ScheduleAgenda[];
 
 export const initialMedicines: Medicine[] = [
   {
@@ -15,38 +34,6 @@ export const initialMedicines: Medicine[] = [
     amount: '2 pill/Day',
     thisMonthProgress: '22/31 taken',
     cause: 'Pain Relief',
-    capSize: '150 mg',
-    duration: '1 Month',
-    frequency: 'Daily',
-    takenToday: false,
-  },
-  {
-    id: 'med-2',
-    name: 'DPP-4 inhibitors',
-    strength: '150mg',
-    dosageForm: '1 capsule',
-    type: 'bottle',
-    description: 'Dipeptidyl peptidase-4 inhibitors for glycemic control in adult patients with type 2 diabetes mellitus.',
-    times: ['After Lunch', 'After Dinner'],
-    amount: '1 pill/Day',
-    thisMonthProgress: '16/31 taken',
-    cause: 'Blood Sugar',
-    capSize: '150 mg',
-    duration: '3 Months',
-    frequency: 'Daily',
-    takenToday: true,
-  },
-  {
-    id: 'med-3',
-    name: 'Meglitinides',
-    strength: '150mg',
-    dosageForm: '1 capsule',
-    type: 'capsule',
-    description: 'They bind to an ATP-dependent (KATP) channel on the cell membrane of pancreatic beta cells move manner to sulfonylureas but have a weaker affinity and faster dissociation from the SUR1 binding site.',
-    times: ['Before Breakfast', 'Before Dinner'],
-    amount: '2 pill/Day',
-    thisMonthProgress: '3/31 taken',
-    cause: 'Diabetes',
     capSize: '150 mg',
     duration: '1 Month',
     frequency: 'Daily',

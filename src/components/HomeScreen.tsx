@@ -58,8 +58,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const now = new Date();
   const currentMonthYear = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
 
-  // Filter agenda berdasarkan tanggal atau tab periode
-  const displayedAgendas = agendas.filter((item) => {
+  // Filter lingkup: 'my' (Jadwal Saya) atau 'all' (Semua Tim)
+  const [scopeFilter, setScopeFilter] = useState<'my' | 'all'>(user?.isAdmin ? 'all' : 'my');
+
+  // Filter agenda berdasarkan tanggal / tab periode dan pemilik agenda
+  const filteredByScope = agendas.filter((item) => {
+    if (scopeFilter === 'all') return true;
+    if (!item.pic) return true;
+    return (
+      item.pic.toLowerCase().includes(fullName.toLowerCase()) ||
+      fullName.toLowerCase().includes(item.pic.toLowerCase())
+    );
+  });
+
+  const displayedAgendas = filteredByScope.filter((item) => {
     if (selectedPeriod === 'Today') {
       return item.date === selectedDate;
     }
@@ -132,48 +144,91 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} />
           </div>
 
-          {/* Sub section: Period Filter Tabs (Today / Week / Month) & count */}
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-6">
-              {(['Today', 'Week', 'Month'] as const).map((period) => {
-                const isActive = selectedPeriod === period;
-                return (
-                  <button
-                    key={period}
-                    onClick={() => setSelectedPeriod(period)}
-                    className="relative pb-1.5 transition-colors"
-                  >
-                    <span
-                      className={`text-sm font-bold transition-colors ${
-                        isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
-                      }`}
+          {/* Sub section: Period Filter Tabs (Today / Week / Month) & Scope Switcher */}
+          <div className="flex flex-col gap-2 px-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-5">
+                {(['Today', 'Week', 'Month'] as const).map((period) => {
+                  const isActive = selectedPeriod === period;
+                  return (
+                    <button
+                      key={period}
+                      onClick={() => setSelectedPeriod(period)}
+                      className="relative pb-1 transition-colors"
                     >
-                      {period === 'Today' ? 'Hari Ini' : period === 'Week' ? 'Minggu Ini' : 'Bulan Ini'}
-                    </span>
-                    {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-1 bg-[#4E80EE] rounded-full" />
-                    )}
-                  </button>
-                );
-              })}
+                      <span
+                        className={`text-xs sm:text-sm font-bold transition-colors ${
+                          isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        {period === 'Today' ? 'Hari Ini' : period === 'Week' ? 'Minggu Ini' : 'Bulan Ini'}
+                      </span>
+                      {isActive && (
+                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#4E80EE] rounded-full" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Scope Switcher: Jadwal Saya vs Semua Tim */}
+              <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter('my')}
+                  className={`px-2 py-0.5 rounded-md transition-all ${
+                    scopeFilter === 'my'
+                      ? 'bg-white text-teal-700 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Jadwal Saya
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter('all')}
+                  className={`px-2 py-0.5 rounded-md transition-all ${
+                    scopeFilter === 'all'
+                      ? 'bg-white text-teal-700 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Semua Tim
+                </button>
+              </div>
             </div>
 
-            <span className="text-[11px] font-bold text-slate-400">
-              {displayedAgendas.length} agenda
-            </span>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+              <span className="truncate pr-2">
+                {scopeFilter === 'my' ? `Jadwal untuk: ${fullName}` : 'Menampilkan jadwal seluruh tim'}
+              </span>
+              <span className="font-bold text-slate-500 flex-shrink-0">
+                {displayedAgendas.length} agenda
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Section 1 Item 3 & 5: List Schedule Agenda (dengan font title yang lebih kecil) */}
         <div className="space-y-3">
           {displayedAgendas.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
-              <p className="text-slate-400 text-xs font-medium">
-                Belum ada schedule agenda yang dibuat admin untuk tanggal ini ({selectedDate}).
+            <div className="text-center py-10 bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
+              <p className="text-slate-500 text-xs font-semibold">
+                {scopeFilter === 'my'
+                  ? `Tidak ada agenda yang ditugaskan kepada Anda pada tanggal ini (${selectedDate}).`
+                  : `Belum ada schedule agenda pada tanggal ini (${selectedDate}).`}
               </p>
-              <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-semibold border border-slate-200/60">
-                <span>Agenda diterbitkan & dikelola oleh Admin FMCU</span>
-              </div>
+              {scopeFilter === 'my' && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setScopeFilter('all')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 text-xs font-bold border border-teal-200/60 hover:bg-teal-100 transition-colors"
+                  >
+                    <span>Tampilkan Semua Agenda Tim ({agendas.filter(a => a.date === selectedDate).length})</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             displayedAgendas.map((agenda) => (

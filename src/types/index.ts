@@ -2,7 +2,15 @@ export type MedicineType = 'capsule' | 'bottle' | 'syringe' | 'tablet';
 
 export type TimeSchedule = 'Before Breakfast' | 'After Breakfast' | 'Before Lunch' | 'After Lunch' | 'Before Dinner' | 'After Dinner' | 'Bedtime';
 
-export type ScheduleCategory = 'VISIT' | 'NSO' | 'MEETING' | 'AUDIT' | 'TRAINING';
+export type ScheduleCategory =
+  | 'VISIT'
+  | 'NSO'
+  | 'MEETING'
+  | 'AUDIT'
+  | 'TRAINING'
+  | 'WORK_PLAN'
+  | 'OPERATION'
+  | 'CUTI';
 
 export interface ScheduleAgenda {
   id: string;
@@ -20,10 +28,13 @@ export interface ScheduleAgenda {
 }
 
 export interface User {
+  id?: string;
   name: string;
   email: string;
   avatar?: string;
   role?: string;
+  password?: string;
+  isAdmin?: boolean;
 }
 
 export interface Medicine {
