@@ -34,36 +34,40 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
   const activeIndex = Math.max(0, navItems.findIndex((item) => item.id === activeTab));
 
   return (
-    <div
-      className={`fixed left-0 right-0 mx-auto pointer-events-none z-40 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-        isScrolled
-          ? 'bottom-2 max-w-[325px] px-2'
-          : 'bottom-3.5 sm:bottom-4 max-w-md px-4'
-      }`}
-    >
+    <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
       {/* 
-        Floating iPhone Glass Dock
-        Menciut atas-bawah kanan-kiri (scale 0.91 & compact padding/width) saat scroll
+        Floating iPhone Glass Dock with Optical Refraction & Visual Distortion
+        Menyudut tetap center (origin-center, tidak menyusut ke bawah)
+        Super smooth transition & auto-upscale on press
       */}
       <div
-        className={`w-full flex items-center pointer-events-auto transform-gpu transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] origin-bottom relative overflow-hidden select-none ${
+        onClick={onResetScale}
+        className={`flex items-center pointer-events-auto transform-gpu transition-all duration-550 ease-[cubic-bezier(0.16,1,0.3,1)] origin-center relative overflow-hidden select-none will-change-transform ${
           isScrolled
-            ? 'iphone-glass-dock-scrolled scale-[0.91] p-1 rounded-[30px] shadow-lg'
-            : 'iphone-glass-dock scale-100 p-1.5 rounded-[36px] shadow-2xl'
+            ? 'iphone-glass-dock-scrolled scale-[0.91] w-[320px] p-1 rounded-[30px] shadow-xl'
+            : 'iphone-glass-dock scale-100 w-full max-w-md p-1.5 rounded-[36px] shadow-2xl'
         }`}
       >
+        {/* Optical Glass Refraction & Distortion Simulation Layer */}
+        <div className="pointer-events-none absolute inset-0 rounded-[inherit] overflow-hidden z-0">
+          {/* Prismatic Chromatic Dispersion Fringe */}
+          <div className="absolute inset-0 bg-gradient-to-r from-teal-400/12 via-white/10 to-rose-400/12 mix-blend-overlay opacity-75" />
+          {/* Subtle Convex Lens Distortion Glare */}
+          <div className="absolute -top-1/2 left-1/4 right-1/4 h-full bg-gradient-to-b from-white/60 to-transparent blur-sm rounded-full opacity-60" />
+        </div>
+
         {/* Top Prismatic Hairline Reflection (Apple iPhone Glass Specular) */}
-        <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
+        <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95 z-0" />
 
         {/* Ambient bottom light refraction rim */}
-        <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80" />
+        <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80 z-0" />
 
         {/* 
           SLIDING ACTIVE GLASS LENS PILL (100% Mirip Glass iPhone)
           Lens kaca meluncur dengan spring physics overshoot khas Apple
         */}
         <div
-          className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] z-0 ${
+          className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none transition-all duration-550 ease-[cubic-bezier(0.16,1,0.3,1)] z-0 ${
             isScrolled ? 'top-1 bottom-1' : 'top-1.5 bottom-1.5'
           }`}
           style={{
@@ -72,9 +76,10 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
             left: isScrolled ? '4px' : '6px',
           }}
         >
-          {/* Inner specular gloss highlight inside the moving pill */}
+          {/* Prismatic Refraction inside the Lens Pill */}
+          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-tr from-teal-300/15 via-white/40 to-pink-300/15 mix-blend-overlay" />
           <div className="pointer-events-none absolute inset-x-3 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/45 via-transparent to-white/15" />
         </div>
 
         {/* Tab Items Buttons */}
@@ -85,8 +90,11 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
             <button
               key={item.id}
               type="button"
+              onPointerDown={() => {
+                if (onResetScale) onResetScale();
+              }}
               onClick={() => handleTabClick(item.id)}
-              className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-500 active:scale-90 group cursor-pointer focus:outline-none ${
+              className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-550 active:scale-90 group cursor-pointer focus:outline-none ${
                 isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
               }`}
             >

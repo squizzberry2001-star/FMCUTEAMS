@@ -198,12 +198,27 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // GPS Refresh state
   const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
 
-  // Scroll Detection for Navbar Auto-Scale (Shrink 4% on Scroll)
+  // Scroll Detection & Auto Navbar Scale with Upscale Lock on Press
   const [isScrolled, setIsScrolled] = useState(false);
+  const upscaleLockedRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+
+  const handleResetScale = () => {
+    setIsScrolled(false);
+    upscaleLockedRef.current = true;
+    lastScrollTopRef.current = window.scrollY || document.documentElement.scrollTop;
+  };
 
   useEffect(() => {
     const handleScroll = () => {
       const top = window.scrollY || document.documentElement.scrollTop;
+      if (upscaleLockedRef.current) {
+        if (Math.abs(top - lastScrollTopRef.current) > 35) {
+          upscaleLockedRef.current = false;
+        } else {
+          return;
+        }
+      }
       setIsScrolled(top > 25);
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -1751,34 +1766,38 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       {/* ============================================================
           BOTTOM NAVBAR FORM VISIT (3 SECTION: INFO, OBSERVASI, BUKTI)
           Ala Glass iPhone dengan Smooth Sliding Lens Pill
-          Auto Menciut Atas-Bawah Kanan-Kiri (Scale 0.91) saat Scroll
+          Menyudut tetap center (origin-center, tidak menyusut ke bawah)
+          Super smooth transition & auto-upscale on press
           ============================================================ */}
-      <div
-        className={`fixed left-0 right-0 mx-auto pointer-events-none z-40 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] select-none ${
-          isScrolled
-            ? 'bottom-2 max-w-[300px] px-2'
-            : 'bottom-3.5 sm:bottom-4 max-w-md px-4'
-        }`}
-      >
+      <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
         <div
-          className={`w-full flex items-center pointer-events-auto transform-gpu transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] origin-bottom relative overflow-hidden ${
+          onClick={handleResetScale}
+          className={`flex items-center pointer-events-auto transform-gpu transition-all duration-550 ease-[cubic-bezier(0.16,1,0.3,1)] origin-center relative overflow-hidden select-none will-change-transform ${
             isScrolled
-              ? 'iphone-glass-dock-scrolled scale-[0.91] p-1 rounded-[30px] shadow-lg'
-              : 'iphone-glass-dock scale-100 p-1.5 rounded-[36px] shadow-2xl'
+              ? 'iphone-glass-dock-scrolled scale-[0.91] w-[300px] p-1 rounded-[30px] shadow-xl'
+              : 'iphone-glass-dock scale-100 w-full max-w-md p-1.5 rounded-[36px] shadow-2xl'
           }`}
         >
+          {/* Optical Glass Refraction & Distortion Simulation Layer */}
+          <div className="pointer-events-none absolute inset-0 rounded-[inherit] overflow-hidden z-0">
+            {/* Prismatic Chromatic Dispersion Fringe */}
+            <div className="absolute inset-0 bg-gradient-to-r from-teal-400/12 via-white/10 to-rose-400/12 mix-blend-overlay opacity-75" />
+            {/* Subtle Convex Lens Distortion Glare */}
+            <div className="absolute -top-1/2 left-1/4 right-1/4 h-full bg-gradient-to-b from-white/60 to-transparent blur-sm rounded-full opacity-60" />
+          </div>
+
           {/* Top Specular Hairline Reflection */}
-          <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
+          <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95 z-0" />
 
           {/* Ambient Bottom Refraction Rim */}
-          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80" />
+          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80 z-0" />
 
           {/* 
             Sliding Glass Lens Pill (Smooth Like Glass iPhone)
             Lens kaca meluncur dengan spring physics overshoot khas Apple
           */}
           <div
-            className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] z-0 ${
+            className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none transition-all duration-550 ease-[cubic-bezier(0.16,1,0.3,1)] z-0 ${
               isScrolled ? 'top-1 bottom-1' : 'top-1.5 bottom-1.5'
             }`}
             style={{
@@ -1787,19 +1806,22 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               left: isScrolled ? '4px' : '6px',
             }}
           >
+            {/* Prismatic Refraction inside the Lens Pill */}
+            <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-tr from-teal-300/15 via-white/40 to-pink-300/15 mix-blend-overlay" />
             <div className="pointer-events-none absolute inset-x-3 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
-            <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+            <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/45 via-transparent to-white/15" />
           </div>
 
           {/* Section 1 = INFO */}
           <button
             type="button"
+            onPointerDown={handleResetScale}
             onClick={() => {
               setActiveSection(1);
-              setIsScrolled(false);
+              handleResetScale();
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-500 active:scale-90 group cursor-pointer focus:outline-none ${
+            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-550 active:scale-90 group cursor-pointer focus:outline-none ${
               isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
             }`}
           >
@@ -1830,12 +1852,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           {/* Section 2 = Observasi */}
           <button
             type="button"
+            onPointerDown={handleResetScale}
             onClick={() => {
               setActiveSection(2);
-              setIsScrolled(false);
+              handleResetScale();
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-500 active:scale-90 group cursor-pointer focus:outline-none ${
+            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-550 active:scale-90 group cursor-pointer focus:outline-none ${
               isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
             }`}
           >
@@ -1873,12 +1896,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           {/* Section 3 = BUKTI */}
           <button
             type="button"
+            onPointerDown={handleResetScale}
             onClick={() => {
               setActiveSection(3);
-              setIsScrolled(false);
+              handleResetScale();
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-500 active:scale-90 group cursor-pointer focus:outline-none ${
+            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-550 active:scale-90 group cursor-pointer focus:outline-none ${
               isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
             }`}
           >

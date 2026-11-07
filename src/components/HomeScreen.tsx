@@ -81,17 +81,41 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return true; // Bulan ini
   });
 
-  // Handle scroll detection for auto navbar shrink 4%
+  // Scroll detection & auto navbar scale with upscale lock on icon press
+  const upscaleLockedRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+
+  const handleResetScale = () => {
+    setIsScrolled(false);
+    upscaleLockedRef.current = true;
+    lastScrollTopRef.current = scrollContainerRef.current?.scrollTop || 0;
+  };
+
   const handleScroll = () => {
-    if (scrollContainerRef.current) {
-      const top = scrollContainerRef.current.scrollTop;
-      setIsScrolled(top > 25);
+    if (!scrollContainerRef.current) return;
+    const top = scrollContainerRef.current.scrollTop;
+
+    if (upscaleLockedRef.current) {
+      if (Math.abs(top - lastScrollTopRef.current) > 35) {
+        upscaleLockedRef.current = false;
+      } else {
+        return;
+      }
     }
+
+    setIsScrolled(top > 25);
   };
 
   useEffect(() => {
     const handleWindowScroll = () => {
       const top = window.scrollY || document.documentElement.scrollTop;
+      if (upscaleLockedRef.current) {
+        if (Math.abs(top - lastScrollTopRef.current) > 35) {
+          upscaleLockedRef.current = false;
+        } else {
+          return;
+        }
+      }
       setIsScrolled(top > 25);
     };
     window.addEventListener('scroll', handleWindowScroll, { passive: true });
@@ -243,14 +267,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       <BottomNavbar
         activeTab={activeNavTab as NavTabType}
         onSelectTab={(tab) => {
-          setIsScrolled(false);
+          handleResetScale();
+          if (tab === activeNavTab && scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+          }
           if (setActiveNavTab) setActiveNavTab(tab);
           if (tab === 'calendar' && onOpenCalendar) onOpenCalendar();
           if (tab === 'history' && onOpenHistory) onOpenHistory();
           if (tab === 'profile' && onOpenProfile) onOpenProfile();
         }}
         isScrolled={isScrolled}
-        onResetScale={() => setIsScrolled(false)}
+        onResetScale={handleResetScale}
       />
     </div>
   );
