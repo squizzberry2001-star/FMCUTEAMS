@@ -64,8 +64,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
       metaTheme.setAttribute('name', 'theme-color');
       document.head.appendChild(metaTheme);
     }
-    // Set to #F8F9FD when login form is open, #070B14 during dark splash
-    metaTheme.setAttribute('content', splashStage === 'ready' ? '#F8F9FD' : '#070B14');
+    let metaApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (!metaApple) {
+      metaApple = document.createElement('meta');
+      metaApple.setAttribute('name', 'apple-mobile-web-app-status-bar-style');
+      document.head.appendChild(metaApple);
+    }
+
+    if (splashStage === 'ready') {
+      metaTheme.setAttribute('content', '#F8F9FD');
+      metaApple.setAttribute('content', 'default');
+      document.documentElement.style.backgroundColor = '#F8F9FD';
+      document.body.style.backgroundColor = '#F8F9FD';
+    } else {
+      metaTheme.setAttribute('content', '#070B14');
+      metaApple.setAttribute('content', 'black-translucent');
+      document.documentElement.style.backgroundColor = '#070B14';
+      document.body.style.backgroundColor = '#070B14';
+    }
   }, [splashStage]);
 
   // Trigger Dot Expansion and Dissolve into Login Form
@@ -146,12 +162,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
         } else {
           clearInterval(interval);
           // Dot has arrived right after 'S' and stops there!
-          // Pauses for 600ms so the user can enjoy the completed glowing title
+          // Pauses for 5 seconds (5000ms) as requested by user
           const t1 = setTimeout(() => {
             if (isMounted) {
               triggerDissolve();
             }
-          }, 600);
+          }, 5000);
           timerIds.push(t1);
         }
       }, 160); // 160ms per character for an elegant, majestic glide
@@ -232,9 +248,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
           ========================================================================= */}
       {splashStage !== 'ready' && (
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center bg-[#070B14] transition-opacity duration-700 ${
+          onClick={triggerDissolve}
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-[#070B14] cursor-pointer transition-opacity duration-700 ${
             splashStage === 'dissolving' ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
+          title="Ketuk untuk langsung membuka portal"
         >
           {/* Subtle Ambient Cosmic Glows */}
           <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-teal-500/15 rounded-full blur-[130px] pointer-events-none" />

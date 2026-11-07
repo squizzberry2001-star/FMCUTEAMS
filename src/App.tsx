@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from './types';
 import { initialAgendas, initialUsers } from './data/mockData';
@@ -6,13 +6,21 @@ import { HomeScreen } from './components/HomeScreen';
 import { CalendarScheduleView } from './components/CalendarScheduleView';
 import { HistoryView } from './components/HistoryView';
 import { ProfileView } from './components/ProfileView';
-import { DesktopDashboard } from './components/DesktopDashboard';
 import { NewAgendaModal } from './components/NewAgendaModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
-import { VisitReportForm } from './components/visit/VisitReportForm';
 import { LoginPage } from './components/LoginPage';
-import { AdminPortal } from './components/admin/AdminPortal';
 import { Smartphone, Monitor, Shield, ArrowLeft } from 'lucide-react';
+
+// Code-split heavy components to make initial splash & login load instantly on mobile
+const AdminPortal = lazy(() =>
+  import('./components/admin/AdminPortal').then((m) => ({ default: m.AdminPortal }))
+);
+const DesktopDashboard = lazy(() =>
+  import('./components/DesktopDashboard').then((m) => ({ default: m.DesktopDashboard }))
+);
+const VisitReportForm = lazy(() =>
+  import('./components/visit/VisitReportForm').then((m) => ({ default: m.VisitReportForm }))
+);
 
 export const App: React.FC = () => {
   // 1. Master State for Users (Admin + 36 User dari Excel dengan password 0000)
@@ -217,19 +225,21 @@ export const App: React.FC = () => {
   // 2. If logged in as ADMIN and not in preview mode, render dedicated Admin Portal
   if (user.isAdmin && !adminPreviewMode) {
     return (
-      <AdminPortal
-        adminUser={user}
-        agendas={agendas}
-        users={users}
-        onAddAgenda={handleAddNewAgenda}
-        onUpdateAgenda={handleUpdateAgenda}
-        onDeleteAgenda={handleDeleteAgenda}
-        onImportExcel={handleImportExcel}
-        onSwitchToUserView={() => setAdminPreviewMode(true)}
-        onLogout={handleLogout}
-        onAddUser={handleAddUser}
-        onResetUserPassword={handleResetUserPassword}
-      />
+      <Suspense fallback={<div className="min-h-screen w-full bg-[#F8F9FD] flex items-center justify-center" />}>
+        <AdminPortal
+          adminUser={user}
+          agendas={agendas}
+          users={users}
+          onAddAgenda={handleAddNewAgenda}
+          onUpdateAgenda={handleUpdateAgenda}
+          onDeleteAgenda={handleDeleteAgenda}
+          onImportExcel={handleImportExcel}
+          onSwitchToUserView={() => setAdminPreviewMode(true)}
+          onLogout={handleLogout}
+          onAddUser={handleAddUser}
+          onResetUserPassword={handleResetUserPassword}
+        />
+      </Suspense>
     );
   }
 
@@ -311,11 +321,13 @@ export const App: React.FC = () => {
       {/* Main Content: Responsive Desktop or Native Mobile */}
       {mobileScreen === 'visit-form' && selectedAgenda ? (
         /* Full UI/UX FORM VISIT (KHUSUS AGENDA VISIT) */
-        <VisitReportForm
-          agenda={selectedAgenda}
-          user={user}
-          onBack={() => setMobileScreen('detail')}
-        />
+        <Suspense fallback={<div className="min-h-screen w-full bg-[#F8F9FD] flex items-center justify-center" />}>
+          <VisitReportForm
+            agenda={selectedAgenda}
+            user={user}
+            onBack={() => setMobileScreen('detail')}
+          />
+        </Suspense>
       ) : isMobileLayout ? (
         /* Mobile Full-Screen Web App */
         <div className="flex-1 w-full max-w-md mx-auto min-h-screen bg-[#F8F9FD] flex flex-col relative">
@@ -375,21 +387,23 @@ export const App: React.FC = () => {
         </div>
       ) : (
         /* Full Desktop Web Dashboard */
-        <DesktopDashboard
-          user={user}
-          agendas={agendas}
-          selectedAgenda={selectedAgenda}
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
-          onSelectAgenda={handleSelectAgenda}
-          onOpenNewAgenda={() => setShowNewAgendaModal(true)}
-          onOpenVisitForm={(agenda) => {
-            setSelectedAgenda(agenda);
-            setMobileScreen('visit-form');
-          }}
-          onLogout={handleLogout}
-          onOpenAdminPortal={user.isAdmin ? () => setAdminPreviewMode(false) : undefined}
-        />
+        <Suspense fallback={<div className="min-h-screen w-full bg-[#F8F9FD] flex items-center justify-center" />}>
+          <DesktopDashboard
+            user={user}
+            agendas={agendas}
+            selectedAgenda={selectedAgenda}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            onSelectAgenda={handleSelectAgenda}
+            onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+            onOpenVisitForm={(agenda) => {
+              setSelectedAgenda(agenda);
+              setMobileScreen('visit-form');
+            }}
+            onLogout={handleLogout}
+            onOpenAdminPortal={user.isAdmin ? () => setAdminPreviewMode(false) : undefined}
+          />
+        </Suspense>
       )}
 
       {/* New Agenda Creation Modal (Desktop & Mobile) */}
