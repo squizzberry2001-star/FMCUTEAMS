@@ -10,7 +10,8 @@ export type ObservationType = 'OPI' | 'QSC';
 export interface ObservationFinding {
   id: string;
   type: ObservationType;
-  title: string;
+  title?: string;
+  category?: string;
   auditFinding: string;
   operationalImpact: string;
   idealCondition: string;
@@ -18,6 +19,8 @@ export interface ObservationFinding {
   rootCause: string;
   expectedResult: string;
   deadline: string;
+  deadlineFormatted?: string;
+  status?: 'OPEN' | 'CLOSED';
 }
 
 export interface EvidencePhoto {
@@ -26,12 +29,21 @@ export interface EvidencePhoto {
   caption: string;
   timestamp: string;
   gpsLocation: string;
+  driveFileId?: string;
+  driveUrl?: string;
+  isCa?: boolean;
 }
 
 export interface VisitReportData {
   id: string;
   agendaId: string;
-  // Step 1: Info Toko & Header
+  
+  // Geofence & Check-In
+  actualIn?: string;
+  actualOut?: string;
+  liveGps?: string;
+  
+  // Section 1: General Info & QSC
   storeFrontPhoto: string;
   visitorName: string;
   storeName: string;
@@ -41,21 +53,27 @@ export interface VisitReportData {
   visitDate: string;
   areaManager: string;
   regionalManager: string;
-
-  // Step 2: Lembar QSC / FamiTrack
+  storeEmail?: string;
+  
+  // QSC Sheets (Slide 2)
   qscSheetTop: string;
   qscSheetBottom: string;
 
-  // Step 3: Store Crew on Duty
+  // Store Crew on Duty (Slide 3)
   crews: StoreCrew[];
 
-  // Step 4: Observasi (OPI & QSC)
+  // Section 2: Observasi (QSC & OPI)
+  enableQsc?: boolean;
+  enableOpi?: boolean;
   observations: ObservationFinding[];
 
-  // Step 5: Finding Evidence Photos
+  // Section 3: Evidence (Bukti Temuan & Hasil Perbaikan CA)
+  enableEvidence?: boolean;
+  enableCa?: boolean;
   evidencePhotos: EvidencePhoto[];
+  caPhotos?: EvidencePhoto[];
 
-  // Step 6: Store Assignment & Spreadsheet CA
+  // Store Assignment & Spreadsheet CA
   spreadsheetUrl: string;
   assignmentNotes: string;
   status: 'DRAFT' | 'SUBMITTED';
