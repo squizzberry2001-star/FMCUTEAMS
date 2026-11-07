@@ -52,21 +52,24 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
   };
 
   const getTagStyle = (tag: string, index: number) => {
-    if (index === 0) return 'bg-[#EAF8F2] text-[#2BB3A0]';
-    if (index === 1) return 'bg-[#FFF0E7] text-[#FF9E79]';
-    return 'bg-[#EEF3FF] text-[#5C7CFA]';
+    if (tag.toLowerCase().includes('prioritas') || tag.toLowerCase().includes('urgent')) {
+      return 'bg-rose-50 text-rose-700 border border-rose-200/70';
+    }
+    if (index === 0) return 'bg-[#EAF8F2] text-[#2BB3A0] border border-teal-100';
+    if (index === 1) return 'bg-[#FFF0E7] text-[#FF9E79] border border-orange-100';
+    return 'bg-[#EEF3FF] text-[#5C7CFA] border border-blue-100';
   };
 
   return (
     <div
       onClick={() => onClick && onClick(agenda)}
-      className={`group relative bg-white rounded-[26px] p-3.5 sm:p-4 transition-all duration-300 hover:shadow-soft-md cursor-pointer border border-transparent hover:border-teal-100/60 shadow-soft-card flex items-center justify-between gap-3 ${
+      className={`group relative bg-white rounded-[26px] p-3.5 sm:p-4 transition-all duration-300 hover:shadow-soft-md cursor-pointer border border-transparent hover:border-teal-100/60 shadow-soft-card flex items-start justify-between gap-3 ${
         agenda.completed ? 'opacity-85 bg-slate-50/80' : ''
       }`}
     >
-      <div className="flex items-center gap-3.5 min-w-0">
+      <div className="flex items-start gap-3.5 min-w-0 flex-1">
         {/* Category Icon Container */}
-        <div className="relative flex-shrink-0 group-hover:scale-105 transition-transform">
+        <div className="relative flex-shrink-0 group-hover:scale-105 transition-transform mt-0.5">
           {renderCategoryIcon(agenda.category)}
           {agenda.completed && (
             <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#2BB3A0] text-white flex items-center justify-center shadow-sm">
@@ -76,43 +79,56 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
         </div>
 
         {/* Text Info */}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
+          {/* Time & Location Header */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">
-              {agenda.category}
-            </span>
-            <span className="text-[11px] font-bold text-slate-400">
+            <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 flex-shrink-0">
               {agenda.time} WIB
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium truncate flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
+              <span className="truncate">{agenda.location}</span>
             </span>
           </div>
 
-          <h4 className={`font-bold text-[13px] leading-snug line-clamp-1 mt-0.5 group-hover:text-teal-700 transition-colors ${
-            agenda.completed ? 'text-slate-500 line-through' : 'text-slate-800'
+          {/* Judul Agenda Lengkap (ditampilkan penuh tanpa terpotong) */}
+          <h4 className={`font-bold text-[13px] sm:text-sm leading-snug break-words mt-1 group-hover:text-teal-700 transition-colors ${
+            agenda.completed ? 'text-slate-400 line-through' : 'text-slate-900'
           }`}>
             {agenda.title}
           </h4>
 
-          <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate flex items-center gap-1">
-            <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
-            <span className="truncate">{agenda.location}</span>
-          </p>
+          {/* Badge Kecil Menyamping (Category, Prioritas Tinggi, dan Tags) */}
+          <div className="flex items-center gap-1.5 mt-2 overflow-x-auto no-scrollbar py-0.5">
+            {/* Category Pill */}
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200/60 flex-shrink-0">
+              {agenda.category}
+            </span>
 
-          {/* Time & Category Tags */}
-          <div className="flex flex-wrap items-center gap-1.5 mt-2">
-            {agenda.tags.map((tag, idx) => (
-              <span
-                key={idx}
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide ${getTagStyle(tag, idx)}`}
-              >
-                {tag}
+            {/* Prioritas Tinggi Badge (Menyamping) */}
+            {agenda.priority === 'HIGH' && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200/70 flex-shrink-0">
+                Prioritas Tinggi
               </span>
-            ))}
+            )}
+
+            {/* Tags Lainnya Menyamping */}
+            {agenda.tags
+              .filter((tag) => tag !== agenda.category && tag !== 'Prioritas Tinggi')
+              .map((tag, idx) => (
+                <span
+                  key={idx}
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide flex-shrink-0 ${getTagStyle(tag, idx)}`}
+                >
+                  {tag}
+                </span>
+              ))}
           </div>
         </div>
       </div>
 
       {/* Right Actions: Menu & Complete Check */}
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1 flex-shrink-0 mt-1">
         {onToggleComplete && (
           <button
             title={agenda.completed ? "Tandai belum selesai" : "Tandai selesai"}

@@ -11,7 +11,7 @@ interface HomeScreenProps {
   selectedDate: string;
   onSelectDate: (date: string) => void;
   onSelectAgenda?: (agenda: ScheduleAgenda) => void;
-  onOpenNewAgenda: () => void;
+  onOpenNewAgenda?: () => void;
   onToggleComplete: (id: string, e: React.MouseEvent) => void;
   onOpenProfile?: () => void;
   onOpenCalendar?: () => void;
@@ -105,22 +105,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onOpenNewAgenda}
-              title="Tambah Agenda Baru"
-              className="w-10 h-10 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white flex items-center justify-center shadow-pill-teal hover:scale-105 active:scale-95 transition-all"
-            >
-              <Plus className="w-5 h-5 stroke-[2.5]" />
-            </button>
-            <button
-              onClick={() => alert(`Notifikasi: Ada ${displayedAgendas.length} agenda terjadwal.`)}
-              className="w-10 h-10 rounded-full bg-[#EAF8F2] flex items-center justify-center text-[#2BB3A0] shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative flex-shrink-0"
-            >
-              <Bell className="w-5 h-5" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#2BB3A0] absolute top-2.5 right-2.5 border-2 border-white ring-2 ring-[#EAF8F2]" />
-            </button>
-          </div>
+          <button
+            onClick={() => alert(`Notifikasi: Ada ${displayedAgendas.length} agenda terjadwal untuk tanggal ${selectedDate}.`)}
+            className="w-10 h-10 rounded-full bg-[#EAF8F2] flex items-center justify-center text-[#2BB3A0] shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative flex-shrink-0"
+          >
+            <Bell className="w-5 h-5" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#2BB3A0] absolute top-2.5 right-2.5 border-2 border-white ring-2 ring-[#EAF8F2]" />
+          </button>
         </div>
 
         {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
@@ -180,12 +171,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <p className="text-slate-400 text-xs font-medium">
                 Belum ada schedule agenda yang dibuat admin untuk tanggal ini ({selectedDate}).
               </p>
-              <button
-                onClick={onOpenNewAgenda}
-                className="mt-3 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal hover:brightness-105"
-              >
-                + Tambah Schedule Agenda
-              </button>
+              <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-semibold border border-slate-200/60">
+                <span>Agenda diterbitkan & dikelola oleh Admin FMCU</span>
+              </div>
             </div>
           ) : (
             displayedAgendas.map((agenda) => (

@@ -9,7 +9,6 @@ import { ProfileView } from './components/ProfileView';
 import { DesktopDashboard } from './components/DesktopDashboard';
 import { NewAgendaModal } from './components/NewAgendaModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
-import { BottomNavbar } from './components/BottomNavbar';
 import { LoginPage } from './components/LoginPage';
 import { Smartphone, Monitor } from 'lucide-react';
 
@@ -231,7 +230,7 @@ export const App: React.FC = () => {
             />
           ) : (
             <>
-              {/* Section 1: Your Weekly Schedule */}
+              {/* Section 1: Your Weekly Schedule (Satu-satunya section dengan Navbar) */}
               {mobileTab === 'home' && (
                 <HomeScreen
                   user={user}
@@ -239,7 +238,6 @@ export const App: React.FC = () => {
                   selectedDate={selectedDate}
                   onSelectDate={setSelectedDate}
                   onSelectAgenda={handleSelectAgenda}
-                  onOpenNewAgenda={() => setShowNewAgendaModal(true)}
                   onToggleComplete={handleToggleAgendaComplete}
                   onOpenCalendar={() => setMobileTab('calendar')}
                   onOpenHistory={() => setMobileTab('history')}
@@ -249,50 +247,31 @@ export const App: React.FC = () => {
                 />
               )}
 
-              {/* Section 2: Jadwal Agenda Kerja (Master Calendar) */}
+              {/* Section 2: Jadwal Agenda Kerja (Full halaman tanpa navbar) */}
               {mobileTab === 'calendar' && (
-                <div className="flex-1 flex flex-col pb-20">
-                  <CalendarScheduleView
-                    agendas={agendas}
-                    onBack={() => setMobileTab('home')}
-                    onSelectAgenda={handleSelectAgenda}
-                    onToggleComplete={handleToggleAgendaComplete}
-                    onOpenNewAgenda={() => setShowNewAgendaModal(true)}
-                  />
-                  <BottomNavbar
-                    activeTab={mobileTab}
-                    onSelectTab={(tab) => setMobileTab(tab)}
-                  />
-                </div>
+                <CalendarScheduleView
+                  agendas={agendas}
+                  onBack={() => setMobileTab('home')}
+                  onSelectAgenda={handleSelectAgenda}
+                  onToggleComplete={handleToggleAgendaComplete}
+                />
               )}
 
-              {/* Section 3: Coverage Store & History Aktivitas */}
+              {/* Section 3: Coverage Store & History Aktivitas (Full halaman tanpa navbar) */}
               {mobileTab === 'history' && (
-                <div className="flex-1 flex flex-col pb-20">
-                  <HistoryView
-                    onBack={() => setMobileTab('home')}
-                  />
-                  <BottomNavbar
-                    activeTab={mobileTab}
-                    onSelectTab={(tab) => setMobileTab(tab)}
-                  />
-                </div>
+                <HistoryView
+                  onBack={() => setMobileTab('home')}
+                />
               )}
 
-              {/* Section 4: Akun & Profil */}
+              {/* Section 4: Akun & Profil (Full halaman tanpa navbar) */}
               {mobileTab === 'profile' && (
-                <div className="flex-1 flex flex-col pb-20">
-                  <ProfileView
-                    user={user}
-                    medicinesCount={agendas.length}
-                    onBack={() => setMobileTab('home')}
-                    onLogout={handleLogout}
-                  />
-                  <BottomNavbar
-                    activeTab={mobileTab}
-                    onSelectTab={(tab) => setMobileTab(tab)}
-                  />
-                </div>
+                <ProfileView
+                  user={user}
+                  medicinesCount={agendas.length}
+                  onBack={() => setMobileTab('home')}
+                  onLogout={handleLogout}
+                />
               )}
             </>
           )}
