@@ -80,6 +80,24 @@ export const App: React.FC = () => {
     sessionStorage.setItem('fmcu_session_splash_shown', 'true');
   };
 
+  // Synchronize mobile status bar & theme-color seamless canvas (#F8F9FD) when splash is off
+  useEffect(() => {
+    if (!showSplash) {
+      const themeColor = '#F8F9FD';
+      const mTheme = document.querySelector('meta[name="theme-color"]');
+      if (mTheme) mTheme.setAttribute('content', themeColor);
+      const mApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (mApple) mApple.setAttribute('content', 'default');
+      const mScheme = document.querySelector('meta[name="color-scheme"]');
+      if (mScheme) mScheme.setAttribute('content', 'light');
+
+      document.documentElement.style.setProperty('background-color', themeColor, 'important');
+      document.documentElement.style.setProperty('color-scheme', 'light');
+      document.body.style.setProperty('background-color', themeColor, 'important');
+      document.body.style.setProperty('color-scheme', 'light');
+    }
+  }, [showSplash]);
+
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
     const year = now.getFullYear();

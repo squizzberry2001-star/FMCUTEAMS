@@ -200,7 +200,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   // Scroll Detection & Auto Navbar Scale & Dynamic Top Buttons Visibility (rAF throttled)
   const [isScrolled, setIsScrolled] = useState(false);
-  const [showTopButtons, setShowTopButtons] = useState(true);
   const manualExpandedRef = useRef(false);
   const manualExpandedScrollTopRef = useRef(0);
   const lastScrollTopRef = useRef(0);
@@ -231,16 +230,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           const delta = top - lastScrollTopRef.current;
           lastScrollTopRef.current = top;
 
-          // 1. Dynamic Top Buttons (Home & PDF): Hide on scroll down, show on scroll up
-          if (top <= 20) {
-            setShowTopButtons(true);
-          } else if (delta > 4 && top > 40) {
-            setShowTopButtons(false); // scrolling down -> hide
-          } else if (delta < -4) {
-            setShowTopButtons(true); // scrolling up -> show
-          }
-
-          // 2. Bottom Navbar Scale:
+          // Bottom Navbar Scale:
           if (top <= 10) {
             setIsScrolled(false);
             manualExpandedRef.current = false;
@@ -710,7 +700,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-[#F8F9FD] select-none pb-32">
+    <div className="flex flex-col min-h-screen bg-[#F8F9FD] select-none overflow-y-auto no-scrollbar px-4 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-32 max-w-6xl mx-auto w-full">
       {/* Zoom Photo Modal */}
       {zoomPhotoUrl && (
         <div
@@ -729,44 +719,36 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* 
-        Floating Top Corner Buttons (Kiri Atas: Home circle, Kanan Atas: PDF circle)
-        Menghilang saat scroll ke bawah, muncul kembali saat scroll ke atas
-      */}
-      <div
-        className={`fixed top-[max(1rem,env(safe-area-inset-top,16px))] left-0 right-0 max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between pointer-events-none select-none z-40 transition-all duration-300 ease-out ${
-          showTopButtons ? 'translate-y-0 opacity-100' : '-translate-y-16 opacity-0'
-        }`}
-      >
-        {/* Tombol Home: Circle dengan icon Home hitam di pojok kiri atas */}
+      {/* Header Section: Seamless matching Calendar Schedule View */}
+      <div className="flex items-center justify-between mb-5">
         <button
           type="button"
           onClick={onBack}
-          title="Kembali ke Home / Jadwal Toko"
-          className={`w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:text-black active:scale-90 transition-all duration-200 cursor-pointer group ${
-            showTopButtons ? 'pointer-events-auto' : 'pointer-events-none'
-          }`}
+          title="Kembali ke Beranda"
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform"
         >
-          <Home className="w-5 h-5 stroke-[2.4] text-black group-hover:scale-110 transition-transform" />
+          <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
         </button>
-
-        {/* Tombol PDF: Circle dengan icon PDF hitam di pojok kanan atas */}
+        <div className="text-center">
+          <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
+            FMCU Visit Report
+          </span>
+          <h2 className="text-lg font-black text-slate-800">Audit Toko FMCU</h2>
+        </div>
         <button
           type="button"
           onClick={() => setShowPreview(true)}
-          title="Pratinjau & Cetak Laporan PDF 16:9"
-          className={`w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:text-black active:scale-90 transition-all duration-200 cursor-pointer relative group ${
-            showTopButtons ? 'pointer-events-auto' : 'pointer-events-none'
-          }`}
+          title="Pratinjau & Cetak Laporan PDF"
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform relative"
         >
-          <FileText className="w-5 h-5 stroke-[2.4] text-black group-hover:scale-110 transition-transform" />
-          <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-black text-white px-1.5 py-0.5 rounded-full leading-tight shadow-xs">
+          <FileText className="w-5 h-5 stroke-[2.4]" />
+          <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-black text-white px-1 py-0.2 rounded-full leading-tight shadow-xs">
             PDF
           </span>
         </button>
       </div>
 
-      <div className="max-w-6xl mx-auto p-3.5 sm:p-6 pt-[max(4.5rem,calc(env(safe-area-inset-top,24px)+3.25rem))] space-y-5">
+      <div className="space-y-5">
         {/* ============================================================
             STICKY TOP GEOFENCE & LIVE CHECK-IN BANNER (C:\FMCUVISITREPORT)
             ============================================================ */}

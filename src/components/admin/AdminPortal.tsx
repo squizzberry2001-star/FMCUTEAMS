@@ -325,7 +325,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   return (
     <div className="min-h-screen bg-[#F4F6FB] flex flex-col select-none text-slate-800">
       {/* 1. Master Top Bar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-6 py-3.5 flex items-center justify-between shadow-xs">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-6 pt-[max(0.875rem,env(safe-area-inset-top,14px))] pb-3.5 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#00A389] to-[#00705E] flex items-center justify-center text-white shadow-pill-teal font-black text-sm">
             <ShieldCheck className="w-5 h-5" />

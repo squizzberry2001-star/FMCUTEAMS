@@ -182,7 +182,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
-      <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-2 pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 transition-all">
+      <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top,16px))] pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 transition-all">
         {/* Section 1 Item 3: Bulan dan Tahun Aktual di pojok kanan atas tepat di atas calendar strip */}
         <div className="flex items-center justify-between mb-2 px-1">
           <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">

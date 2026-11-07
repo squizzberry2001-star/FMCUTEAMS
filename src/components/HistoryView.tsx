@@ -52,12 +52,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
   return (
     <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full">
       {/* Header Section 3: Typography Coverage Store */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <button
           onClick={onBack}
-          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-700 active:scale-95 transition-transform"
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform"
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
         </button>
         <div className="text-center">
           <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
@@ -65,8 +65,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
           </span>
           <h2 className="text-lg font-black text-slate-800">Coverage Store</h2>
         </div>
-        <div className="w-10 h-10 rounded-full iphone-glass-icon-btn text-[#2BB3A0] flex items-center justify-center">
-          <Store className="w-5 h-5" />
+        <div className="w-10 h-10 rounded-full iphone-glass-icon-btn text-black flex items-center justify-center">
+          <Store className="w-5 h-5 stroke-[2.2]" />
         </div>
       </div>
 

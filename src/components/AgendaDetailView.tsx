@@ -65,19 +65,22 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full min-h-screen bg-[#F8F9FD] select-none">
-      {/* Top Header */}
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-100 px-5 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-3.5 flex items-center justify-between">
+    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full select-none">
+      {/* Top Header: Seamless matching Calendar view */}
+      <div className="flex items-center justify-between mb-5">
         <button
           onClick={onBack}
-          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-700 active:scale-95 transition-transform"
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform"
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
         </button>
 
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-          Detail Agenda FMCU
-        </span>
+        <div className="text-center">
+          <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
+            FMCU Schedule Detail
+          </span>
+          <h2 className="text-lg font-black text-slate-800">Detail Agenda</h2>
+        </div>
 
         <button
           onClick={() => {
@@ -86,14 +89,15 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
               alert('Informasi agenda disalin ke clipboard!');
             }
           }}
-          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-600 active:scale-95 transition-transform"
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform"
+          title="Salin Info Agenda"
         >
-          <Share2 className="w-4 h-4" />
+          <Share2 className="w-4 h-4 stroke-[2.2]" />
         </button>
       </div>
 
       {/* Content Body */}
-      <div className="flex-1 overflow-y-auto no-scrollbar px-5 sm:px-6 py-6 space-y-5 pb-24">
+      <div className="space-y-5 pb-6">
         {/* Hero Card */}
         <div className="relative bg-white rounded-[32px] p-6 shadow-soft-card border border-slate-100 overflow-hidden">
           {/* Ambient Glow */}
