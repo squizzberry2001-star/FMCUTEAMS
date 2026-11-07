@@ -581,17 +581,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         aria-hidden="true"
         className="fixed inset-0 pointer-events-none opacity-0 flex flex-col px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] max-w-md mx-auto w-full select-none -z-10"
       >
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <div className="text-[26px] font-extrabold leading-[1.15]">
-              Your Weekly
-              <br />
-              Schedule
-            </div>
-            <div className="text-xs font-semibold mt-1">Selamat Pagi!</div>
+        <div className="relative flex items-center justify-center mb-3.5 min-h-[48px]">
+          <div className="text-center px-11">
+            <div className="text-xl sm:text-2xl font-black leading-tight">Hallo, User!</div>
+            <div className="text-[11px] font-light mt-0.5">Today</div>
           </div>
-          <div className="w-10 h-10 rounded-full" />
         </div>
+        <div className="w-full mb-3.5 py-1.5 h-[88px]" />
         <div className="pt-[max(0.5rem,env(safe-area-inset-top,16px))] pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6">
           <div className="flex items-center justify-between mb-2 px-1">
             <span className="text-[11px] font-extrabold">Kalender Mingguan</span>

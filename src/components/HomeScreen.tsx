@@ -4,6 +4,7 @@ import { ScheduleAgenda, User } from '../types';
 import { CalendarStrip } from './CalendarStrip';
 import { ScheduleCard } from './ScheduleCard';
 import { BottomNavbar, NavTabType } from './BottomNavbar';
+import { EmployeeStoriesBar } from './EmployeeStoriesBar';
 
 interface HomeScreenProps {
   user?: User | null;
@@ -50,13 +51,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // Nama lengkap akun yang login
   const fullName = user?.name || 'Sarah Jenkins';
 
-  // Bulan dan tahun aktual untuk pojok kanan atas kalender strip
+  // Live Digital Clock & Tanggal Aktual untuk Header
+  const [liveNow, setLiveNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Bulan dan tahun aktual untuk pojok kanan atas kalender strip & header
   const monthNames = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
-  const now = new Date();
-  const currentMonthYear = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  const currentMonthYear = `${monthNames[liveNow.getMonth()]} ${liveNow.getFullYear()}`;
+  const actualDateNum = liveNow.getDate();
+  const actualMonthName = monthNames[liveNow.getMonth()];
+  const actualYear = liveNow.getFullYear();
+  const digitalClock = `${String(liveNow.getHours()).padStart(2, '0')}:${String(
+    liveNow.getMinutes()
+  ).padStart(2, '0')}:${String(liveNow.getSeconds()).padStart(2, '0')}`;
 
   // Filter lingkup: 'my' (Jadwal Saya) atau 'all' (Semua Tim)
   const [scopeFilter, setScopeFilter] = useState<'my' | 'all'>(user?.isAdmin ? 'all' : 'my');
@@ -160,26 +175,29 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       onScroll={checkScroll}
       className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full relative select-none"
     >
-      {/* Section 1 Item 1: Head Title "Your Weekly Schedule" & Time-based Greeting */}
-      <div className="flex items-start justify-between mb-5">
-        <div>
-          <h1 className="text-[26px] font-extrabold text-slate-900 leading-[1.15] tracking-tight">
-            Your Weekly<br />Schedule
+      {/* Section 1 Item 1: Center Top Header "Hallo, User!" (Bold) & Thin Small "Today {Tanggal} {Bulan} {Jam Digital}" */}
+      <div className="relative flex items-center justify-center mb-3.5 min-h-[48px]">
+        <div className="text-center px-11">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 leading-tight tracking-tight">
+            Hallo, {fullName}!
           </h1>
-          <p className="text-xs text-slate-500 font-semibold mt-1">
-            Selamat {getTimeGreeting()}, {fullName}! 👋
+          <p className="text-[11px] font-light text-slate-500 tracking-wide mt-0.5 tabular-nums">
+            Today {actualDateNum} {actualMonthName} {actualYear} • {digitalClock}
           </p>
         </div>
 
         <button
           onClick={() => alert(`Notifikasi: Ada ${displayedAgendas.length} agenda terjadwal untuk tanggal ${selectedDate}.`)}
-          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all relative flex-shrink-0 cursor-pointer group"
+          className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all flex-shrink-0 cursor-pointer group"
           title="Notifikasi Agenda"
         >
           <Bell className="w-5 h-5 stroke-[2.2] text-black group-hover:scale-110 transition-transform" />
           <span className="w-2.5 h-2.5 rounded-full bg-black absolute top-2.5 right-2.5 border-2 border-white ring-2 ring-[#EAF8F2]" />
         </button>
       </div>
+
+      {/* Section 1 Item 2: Instagram-Style Circle Story Bar Below "Hallo, User!" */}
+      <EmployeeStoriesBar currentUser={user} />
 
       {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
       <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top,16px))] pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 transition-all">
