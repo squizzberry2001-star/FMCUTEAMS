@@ -5,12 +5,7 @@ import {
   Lock,
   Shield,
   ArrowRight,
-  Sparkles,
   AlertCircle,
-  Calendar,
-  ClipboardCheck,
-  Compass,
-  FileText,
   RotateCcw,
   CheckCircle2,
 } from 'lucide-react';
@@ -26,52 +21,9 @@ interface LoginPageProps {
 
 const CHARACTERS = ['F', 'M', 'C', 'U', ' ', 'T', 'E', 'A', 'M', 'S'];
 
-const FMCU_HIGHLIGHTS = [
-  {
-    icon: Calendar,
-    title: 'Master Schedule 582+ Agenda',
-    desc: 'Sinkronisasi agenda kunjungan 36 staf lapangan, multi-kategori jadwal & filter instan.',
-    badge: 'Real-Time Sync',
-    color: 'from-teal-500 to-emerald-600',
-    lightBg: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
-  },
-  {
-    icon: ClipboardCheck,
-    title: 'Audit Lapangan Standar QSC & 6-Box',
-    desc: 'Form inspeksi komprehensif, multi-evidence foto bukti & kalkulasi skor otomatis.',
-    badge: 'Standar Mutu',
-    color: 'from-cyan-500 to-blue-600',
-    lightBg: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
-  },
-  {
-    icon: Compass,
-    title: 'Radar Geofence GPS Presisi 1m–50m',
-    desc: 'Validasi radius kedatangan fisik toko anti-fraud dengan radar visual interaktif.',
-    badge: 'Anti-Fraud GPS',
-    color: 'from-amber-500 to-orange-500',
-    lightBg: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
-  },
-  {
-    icon: FileText,
-    title: 'Laporan PDF Kunjungan Landscape 16:9',
-    desc: 'Generate otomatis Berita Acara, observasi & foto bukti siap cetak serta kirim.',
-    badge: 'Instant 16:9 PDF',
-    color: 'from-rose-500 to-pink-600',
-    lightBg: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
-  },
-  {
-    icon: Sparkles,
-    title: 'AI T.A.R.O Voice Dictation & Root-Cause',
-    desc: 'Dikte suara cepat observasi toko serta diagnosis akar masalah rekomendasi solusi.',
-    badge: 'AI Assistant',
-    color: 'from-purple-500 to-indigo-600',
-    lightBg: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
-  },
-];
-
 export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLogin }) => {
-  // Splash sequence state: 'animating-letters' | 'showing-features' | 'dissolving' | 'ready'
-  const [splashStage, setSplashStage] = useState<'animating-letters' | 'showing-features' | 'dissolving' | 'ready'>(
+  // Splash sequence state: 'animating-letters' | 'dissolving' | 'ready'
+  const [splashStage, setSplashStage] = useState<'animating-letters' | 'dissolving' | 'ready'>(
     'animating-letters'
   );
 
@@ -93,20 +45,37 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
     isExpanding: false,
   });
 
-  // Feature carousel index highlight during feature stage
-  const [activeFeatureIndex, setActiveFeatureIndex] = useState<number>(0);
-
   // Admin Form State
   const [adminPasswordInput, setAdminPasswordInput] = useState('607090');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Refs for tracking character positions
+  // Refs for tracking character positions and after-S anchor
   const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const afterSRef = useRef<HTMLSpanElement>(null);
   const lettersContainerRef = useRef<HTMLDivElement>(null);
 
-  // 1. Splash Animation Logic: Glide dot and reveal letters sequentially
+  // Trigger Dot Expansion and Dissolve into Login Form
+  const triggerDissolve = () => {
+    if (splashStage === 'dissolving' || splashStage === 'ready') return;
+    setSplashStage('dissolving');
+
+    // Smooth massive scale expansion to envelope screen and dissolve
+    setDotPos((prev) => ({
+      ...prev,
+      scale: 90,
+      isExpanding: true,
+    }));
+
+    // Complete dissolve after 650ms for snappy, seamless reveal
+    setTimeout(() => {
+      setSplashStage('ready');
+    }, 650);
+  };
+
+  // 1. Fast & Clean Splash Animation Logic:
+  // Starts quickly (120ms), glides at 90ms/char, stops right after 'S', pauses 380ms, then dissolves
   useEffect(() => {
     if (splashStage !== 'animating-letters') return;
 
@@ -115,8 +84,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
 
     const updateDotToChar = (index: number) => {
       if (!isMounted) return;
-      const charEl = charRefs.current[index];
       const contEl = lettersContainerRef.current;
+      let charEl: HTMLElement | null = null;
+
+      if (index < CHARACTERS.length) {
+        charEl = charRefs.current[index];
+      } else if (index === CHARACTERS.length) {
+        // Target anchor right after letter 'S'
+        charEl = afterSRef.current;
+      }
+
       if (charEl && contEl) {
         const charRect = charEl.getBoundingClientRect();
         const contRect = contEl.getBoundingClientRect();
@@ -130,11 +107,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
           scale: 1,
           isExpanding: false,
         });
-        setRevealedCharIndex(index);
+
+        if (index < CHARACTERS.length) {
+          setRevealedCharIndex(index);
+        }
       }
     };
 
-    // Initial pause before dot appears at letter 'F' (0)
+    // Start snappy sequence after 120ms
     const t0 = setTimeout(() => {
       if (!isMounted) return;
       updateDotToChar(0);
@@ -146,22 +126,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
           return;
         }
         currentIdx++;
-        if (currentIdx < CHARACTERS.length) {
+        if (currentIdx <= CHARACTERS.length) {
           updateDotToChar(currentIdx);
         } else {
           clearInterval(interval);
-          // All letters revealed smoothly! Transition to features showcase
+          // Dot has arrived right after 'S' and stops there!
+          // Brief pause (380ms), then smooth dissolve into login form
           const t1 = setTimeout(() => {
             if (isMounted) {
-              setSplashStage('showing-features');
+              triggerDissolve();
             }
-          }, 600);
+          }, 380);
           timerIds.push(t1);
         }
-      }, 230); // 230ms smooth glide per character
+      }, 90); // 90ms per character for fast and silky glide
 
       return () => clearInterval(interval);
-    }, 450);
+    }, 120);
 
     timerIds.push(t0);
 
@@ -170,49 +151,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
       timerIds.forEach((id) => clearTimeout(id));
     };
   }, [splashStage]);
-
-  // 2. Feature Rotation Timer while in 'showing-features'
-  useEffect(() => {
-    if (splashStage !== 'showing-features') return;
-    const interval = setInterval(() => {
-      setActiveFeatureIndex((prev) => (prev + 1) % FMCU_HIGHLIGHTS.length);
-    }, 2800);
-    return () => clearInterval(interval);
-  }, [splashStage]);
-
-  // 3. Trigger Dot Expansion and Dissolve into Login Form
-  const triggerDissolve = () => {
-    if (splashStage === 'dissolving' || splashStage === 'ready') return;
-    setSplashStage('dissolving');
-
-    // Move dot to the dead center and trigger smooth massive scale expansion
-    if (lettersContainerRef.current) {
-      const rect = lettersContainerRef.current.getBoundingClientRect();
-      setDotPos({
-        x: rect.width / 2,
-        y: rect.height / 2,
-        opacity: 1,
-        scale: 90,
-        isExpanding: true,
-      });
-    } else {
-      setDotPos((prev) => ({
-        ...prev,
-        scale: 90,
-        isExpanding: true,
-      }));
-    }
-
-    // Complete dissolve after 1100ms
-    setTimeout(() => {
-      setSplashStage('ready');
-    }, 1100);
-  };
-
-  // Skip splash completely
-  const handleSkipSplash = () => {
-    setSplashStage('ready');
-  };
 
   // Replay splash from beginning
   const handleReplaySplash = () => {
@@ -258,198 +196,95 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
       <div className="absolute top-1/2 right-1/4 w-64 h-64 bg-[#E8EEFF]/70 rounded-full blur-3xl pointer-events-none -z-0" />
 
       {/* =========================================================================
-          STAGE A: WELCOME SPLASH ANIMATION (CINEMATIC DARK VIEWPORT)
+          STAGE A: CLEAN CINEMATIC SPLASH SCREEN (PERFECTLY CENTERED, NO BUTTONS/TEXT)
+          - No buttons, no top bar, no footer, no subtitles.
+          - Large glowing dot glides and stops right after 'S' on TEAMS.
+          - Pure text-shadow without any boxy drop-shadow filter artifacts.
           ========================================================================= */}
       {splashStage !== 'ready' && (
         <div
-          className={`fixed inset-0 z-50 flex flex-col items-center justify-between p-6 sm:p-10 bg-[#070B14] transition-opacity duration-1000 ${
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-[#070B14] transition-opacity duration-700 ${
             splashStage === 'dissolving' ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
         >
           {/* Subtle Ambient Cosmic Glows */}
-          <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-teal-500/20 rounded-full blur-[120px] pointer-events-none" />
-          <div className="absolute bottom-0 right-10 w-[450px] h-[300px] bg-blue-600/15 rounded-full blur-[140px] pointer-events-none" />
-          <div className="absolute top-1/3 left-10 w-[350px] h-[250px] bg-emerald-500/15 rounded-full blur-[130px] pointer-events-none" />
+          <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-teal-500/15 rounded-full blur-[130px] pointer-events-none" />
+          <div className="absolute bottom-0 right-10 w-[450px] h-[300px] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none" />
+          <div className="absolute top-1/3 left-10 w-[350px] h-[250px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
 
-          {/* Top Bar: Brand Pill & Skip Button */}
-          <div className="w-full max-w-4xl flex items-center justify-between z-20">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-teal-300 text-[11px] font-bold tracking-wider uppercase">
-              <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
-              <span>Sistem Terpadu FMCU Teams</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleSkipSplash}
-              className="px-4 py-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-white text-xs font-semibold backdrop-blur-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <span>Lewati</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Central Area: Large Glowing Dot & "FMCU TEAMS" Letter Reveal */}
-          <div className="w-full max-w-4xl flex flex-col items-center justify-center my-auto z-20 text-center">
-            {/* The Text & Dot Stage */}
+          {/* Perfectly Centered Stage */}
+          <div
+            ref={lettersContainerRef}
+            className="relative inline-flex items-center justify-center px-6 py-8"
+          >
+            {/* LARGE GLOWING WHITE DOT (starts at 'F', glides to 'S', stops after 'S', expands and dissolves) */}
             <div
-              ref={lettersContainerRef}
-              className="relative inline-flex items-center justify-center py-6 px-4"
-            >
-              {/* LARGE GLOWING WHITE DOT (starts at 'F', glides to 'S', expands and dissolves) */}
-              <div
-                className="absolute rounded-full pointer-events-none z-30 transition-all"
-                style={{
-                  left: `${dotPos.x}px`,
-                  top: `${dotPos.y}px`,
-                  width: '28px',
-                  height: '28px',
-                  transform: `translate(-50%, -50%) scale(${dotPos.scale})`,
-                  opacity: dotPos.opacity,
-                  transitionProperty: dotPos.isExpanding
-                    ? 'all'
-                    : 'left, top, opacity, transform',
-                  transitionDuration: dotPos.isExpanding ? '1100ms' : '230ms',
-                  transitionTimingFunction: dotPos.isExpanding
-                    ? 'cubic-bezier(0.4, 0, 0.2, 1)'
-                    : 'cubic-bezier(0.25, 1, 0.35, 1)',
-                  background: '#FFFFFF',
-                  boxShadow: dotPos.isExpanding
-                    ? '0 0 150px 60px #FFFFFF, 0 0 300px 100px rgba(45,212,191,0.9), 0 0 500px 150px rgba(56,189,248,0.7)'
-                    : '0 0 25px 6px #FFFFFF, 0 0 55px 14px rgba(45,212,191,0.8), 0 0 90px 24px rgba(56,189,248,0.5)',
-                }}
-              />
+              className="absolute rounded-full pointer-events-none z-30"
+              style={{
+                left: `${dotPos.x}px`,
+                top: `${dotPos.y}px`,
+                width: '24px',
+                height: '24px',
+                transform: `translate(-50%, -50%) scale(${dotPos.scale})`,
+                opacity: dotPos.opacity,
+                transition: dotPos.isExpanding
+                  ? 'transform 650ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms ease-out'
+                  : 'left 95ms cubic-bezier(0.2, 0.8, 0.4, 1), top 95ms cubic-bezier(0.2, 0.8, 0.4, 1), opacity 150ms ease-out',
+                background: '#FFFFFF',
+                boxShadow: dotPos.isExpanding
+                  ? '0 0 150px 60px #FFFFFF, 0 0 300px 100px rgba(45,212,191,0.9), 0 0 500px 150px rgba(56,189,248,0.7)'
+                  : '0 0 22px 5px #FFFFFF, 0 0 45px 12px rgba(45,212,191,0.85), 0 0 80px 22px rgba(56,189,248,0.5)',
+              }}
+            />
 
-              {/* Characters of "FMCU TEAMS" */}
-              <div className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans">
-                {CHARACTERS.map((char, idx) => {
-                  const isRevealed = idx <= revealedCharIndex;
-                  const isCurrent = idx === revealedCharIndex;
+            {/* Typography "FMCU TEAMS" with Pure Vector Text-Shadow (Zero Boxiness) */}
+            <div className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans">
+              {CHARACTERS.map((char, idx) => {
+                const isRevealed = idx <= revealedCharIndex;
+                const isCurrent = idx === revealedCharIndex;
 
-                  if (char === ' ') {
-                    return (
-                      <span
-                        key={idx}
-                        ref={(el) => (charRefs.current[idx] = el)}
-                        className="w-4 sm:w-8 inline-block select-none"
-                      >
-                        &nbsp;
-                      </span>
-                    );
-                  }
-
+                if (char === ' ') {
                   return (
                     <span
                       key={idx}
                       ref={(el) => (charRefs.current[idx] = el)}
-                      className={`inline-block transition-all duration-500 select-none ${
-                        isRevealed
-                          ? 'opacity-100 translate-y-0 scale-100 blur-0'
-                          : 'opacity-0 translate-y-4 scale-75 blur-sm'
-                      } ${
-                        isCurrent
-                          ? 'text-white brightness-150 drop-shadow-[0_0_30px_rgba(255,255,255,1)]'
-                          : 'text-slate-100 drop-shadow-[0_4px_16px_rgba(255,255,255,0.35)]'
-                      }`}
-                      style={{
-                        textShadow: isCurrent
-                          ? '0 0 35px #FFFFFF, 0 0 65px rgba(45,212,191,0.9)'
-                          : isRevealed
-                          ? '0 0 20px rgba(255,255,255,0.45)'
-                          : 'none',
-                      }}
+                      className="w-3 sm:w-6 inline-block select-none"
                     >
-                      {char}
+                      &nbsp;
                     </span>
                   );
-                })}
-              </div>
+                }
+
+                return (
+                  <span
+                    key={idx}
+                    ref={(el) => (charRefs.current[idx] = el)}
+                    className="inline-block select-none transition-all duration-300"
+                    style={{
+                      opacity: isRevealed ? 1 : 0,
+                      transform: isRevealed
+                        ? 'translateY(0) scale(1)'
+                        : 'translateY(6px) scale(0.85)',
+                      color: '#FFFFFF',
+                      // Pure text-shadow avoids GPU box-clipping from CSS filter drop-shadow
+                      textShadow: isCurrent
+                        ? '0 0 18px rgba(255, 255, 255, 1), 0 0 35px rgba(45, 212, 191, 0.9), 0 0 65px rgba(45, 212, 191, 0.6)'
+                        : isRevealed
+                        ? '0 0 12px rgba(255, 255, 255, 0.55), 0 0 26px rgba(45, 212, 191, 0.25)'
+                        : 'none',
+                    }}
+                  >
+                    {char}
+                  </span>
+                );
+              })}
+
+              {/* Anchor Slot right AFTER letter 'S' on TEAMS (where the dot stops) */}
+              <span
+                ref={afterSRef}
+                className="w-4 sm:w-6 h-8 inline-flex items-center justify-center select-none"
+              />
             </div>
-
-            {/* Tagline Subtitle */}
-            <p
-              className={`text-xs sm:text-sm text-teal-300 font-semibold tracking-widest uppercase mt-1 transition-all duration-700 ${
-                revealedCharIndex >= CHARACTERS.length - 1
-                  ? 'opacity-100 translate-y-0'
-                  : 'opacity-0 translate-y-2'
-              }`}
-            >
-              Field Monitoring & Control Unit Platform
-            </p>
-
-            {/* Standout Features Showcase (Emerges after text reveal) */}
-            <div
-              className={`mt-6 sm:mt-8 w-full max-w-2xl transition-all duration-700 ${
-                splashStage === 'showing-features'
-                  ? 'opacity-100 translate-y-0 scale-100'
-                  : 'opacity-0 translate-y-6 scale-95 pointer-events-none'
-              }`}
-            >
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center justify-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-                <span>Fitur Unggulan FMCU Teams</span>
-              </div>
-
-              {/* Grid of Highlight Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left mb-6">
-                {FMCU_HIGHLIGHTS.slice(0, 4).map((feat, i) => {
-                  const Icon = feat.icon;
-                  const isActive = i === activeFeatureIndex % 4;
-                  return (
-                    <div
-                      key={feat.title}
-                      onClick={() => setActiveFeatureIndex(i)}
-                      className={`p-3 rounded-2xl border backdrop-blur-md transition-all duration-300 cursor-pointer ${
-                        isActive
-                          ? 'bg-white/15 border-teal-400/50 shadow-lg shadow-teal-500/10 scale-[1.02]'
-                          : 'bg-white/5 border-white/10 hover:bg-white/10'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <div
-                          className={`w-8 h-8 rounded-xl bg-gradient-to-br ${feat.color} flex items-center justify-center text-white flex-shrink-0 shadow-sm`}
-                        >
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-1 mb-0.5">
-                            <h4 className="text-xs font-bold text-white truncate">
-                              {feat.title}
-                            </h4>
-                            <span
-                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${feat.lightBg}`}
-                            >
-                              {feat.badge}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-slate-300 leading-snug line-clamp-2">
-                            {feat.desc}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Primary Action to Dissolve & Enter Portal */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={triggerDissolve}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-gradient-to-r from-teal-400 via-teal-500 to-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-teal-500/25 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>Buka Portal Login Admin</span>
-                  <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Footer on Splash */}
-          <div className="w-full text-center z-20">
-            <span className="text-[11px] text-slate-500 font-medium">
-              FMCU TEAMS • Sistem Audit & Operasional Lapangan 2026
-            </span>
           </div>
         </div>
       )}
@@ -457,15 +292,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
       {/* Expanding Dissolve Flash Barrier */}
       {splashStage === 'dissolving' && (
         <div
-          className="fixed inset-0 pointer-events-none z-45 bg-white transition-opacity duration-1000 ease-out"
+          className="fixed inset-0 pointer-events-none z-45 bg-white transition-opacity duration-700 ease-out"
           style={{ opacity: 0.95 }}
         />
       )}
 
       {/* =========================================================================
           STAGE B: FIXED VIEWPORT LOGIN FORM (EXCLUSIVELY ADMIN FMCU)
-          "form login dibuat fix tidak bisa ditarik atas bawah,
-           kemudain hanya ada satu tombol admin FMCU tombol karyawan dihilangakn"
+          - Form login is completely fixed: cannot be dragged up or down.
+          - Only ONE button: "Masuk sebagai Admin FMCU" (employee buttons removed).
           ========================================================================= */}
       <div
         className={`relative z-10 w-full max-w-[420px] bg-white/95 backdrop-blur-2xl rounded-[36px] p-6 sm:p-8 shadow-soft-card border border-white/80 transition-all duration-700 ${
@@ -573,7 +408,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
           </div>
         </form>
 
-        {/* Replay Splash & Feature Tour Action */}
+        {/* Replay Splash Action */}
         <div className="mt-5 pt-3.5 border-t border-slate-100/90 flex flex-col items-center justify-center gap-1.5">
           <button
             type="button"
@@ -581,7 +416,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
             className="text-xs text-slate-400 hover:text-teal-700 font-semibold transition-colors flex items-center justify-center gap-1.5 py-1 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5 text-teal-600" />
-            <span>✨ Putar Ulang Animasi & Fitur Unggulan</span>
+            <span>✨ Putar Ulang Animasi Splash</span>
           </button>
 
           <span className="text-[10px] text-slate-400 font-medium">
