@@ -413,30 +413,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             />
           </div>
         </div>
-
-        {/* Elegant User Welcome Badge when User is Already Logged In */}
-        {user && (
-          <div
-            className={`mt-7 flex flex-col items-center select-none transition-all duration-600 ${
-              dotPos.isFloating && !isDissolving
-                ? 'opacity-100 translate-y-0'
-                : 'opacity-0 translate-y-2 pointer-events-none'
-            }`}
-          >
-            <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white shadow-lg">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-semibold text-slate-100">
-                {user.isAdmin ? 'Administrator FMCU' : user.name}
-              </span>
-              <span className="text-[10px] font-bold text-teal-300 bg-teal-500/25 px-2 py-0.5 rounded-full border border-teal-400/30">
-                {user.isAdmin ? 'Super Admin' : 'Terhubung'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-2 font-medium tracking-wide">
-              Membuka {user.isAdmin ? 'Portal Admin FMCU' : 'Jadwal Operasional'}...
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );
