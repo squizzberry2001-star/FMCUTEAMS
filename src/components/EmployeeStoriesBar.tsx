@@ -396,9 +396,25 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     isDown: false,
   });
 
-  // Floating emoji burst animation in viewer
+  // Smooth Instagram-style floating emoji burst animation in viewer
   const [floatingBursts, setFloatingBursts] = useState<
-    { id: number; emoji: string; left: number }[]
+    {
+      id: string;
+      emoji: string;
+      left: number;
+      delayMs: number;
+      durationMs: number;
+      sway1: number;
+      sway2: number;
+      sway3: number;
+      riseY: number;
+      peakScale: number;
+      rotStart: number;
+      rotMid: number;
+      rotEnd: number;
+      sizePx: number;
+      isCenterPop?: boolean;
+    }[]
   >([]);
 
   // Full-Screen Camera & Edit Caption Modal State
@@ -748,12 +764,53 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   const handleSelectReaction = (emoji: string) => {
     if (!currentSlide) return;
 
-    const burstId = Date.now() + Math.random();
-    const randomLeft = 22 + Math.floor(Math.random() * 56);
-    setFloatingBursts((prev) => [...prev, { id: burstId, emoji, left: randomLeft }]);
+    const batchKey = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const basePositions = [18, 29, 40, 50, 61, 72, 82];
+    const newParticles = basePositions.map((baseLeft, idx) => {
+      const jitter = (Math.random() - 0.5) * 8;
+      const sign = idx % 2 === 0 ? 1 : -1;
+      return {
+        id: `${batchKey}-p-${idx}`,
+        emoji,
+        left: Math.min(88, Math.max(12, baseLeft + jitter)),
+        delayMs: idx * 42 + Math.floor(Math.random() * 28),
+        durationMs: 1550 + Math.floor(Math.random() * 450),
+        sway1: sign * (10 + Math.floor(Math.random() * 14)),
+        sway2: -sign * (12 + Math.floor(Math.random() * 16)),
+        sway3: sign * (8 + Math.floor(Math.random() * 12)),
+        riseY: -(270 + Math.floor(Math.random() * 130)),
+        peakScale: Number((0.92 + Math.random() * 0.36).toFixed(2)),
+        rotStart: -sign * (8 + Math.floor(Math.random() * 8)),
+        rotMid: sign * (6 + Math.floor(Math.random() * 10)),
+        rotEnd: -sign * (6 + Math.floor(Math.random() * 10)),
+        sizePx: 28 + Math.floor(Math.random() * 12),
+        isCenterPop: false,
+      };
+    });
+
+    const centerPop = {
+      id: `${batchKey}-center`,
+      emoji,
+      left: 50,
+      delayMs: 0,
+      durationMs: 1150,
+      sway1: 0,
+      sway2: 0,
+      sway3: 0,
+      riseY: -160,
+      peakScale: 1.24,
+      rotStart: -6,
+      rotMid: 4,
+      rotEnd: 0,
+      sizePx: 54,
+      isCenterPop: true,
+    };
+
+    const batchIds = new Set([centerPop.id, ...newParticles.map((p) => p.id)]);
+    setFloatingBursts((prev) => [...prev.slice(-24), centerPop, ...newParticles]);
     setTimeout(() => {
-      setFloatingBursts((prev) => prev.filter((b) => b.id !== burstId));
-    }, 1200);
+      setFloatingBursts((prev) => prev.filter((b) => !batchIds.has(b.id)));
+    }, 2350);
 
     setStories((prev) =>
       prev.map((slide) => {
@@ -1242,20 +1299,44 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 </div>
               )}
 
-              {/* Floating Emoji Bursts */}
+              {/* Smooth Instagram-Style Floating Emoji Bursts */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
-                {floatingBursts.map((b) => (
-                  <div
-                    key={b.id}
-                    className="absolute bottom-8 text-4xl animate-bounce"
-                    style={{
-                      left: `${b.left}%`,
-                      animation: 'ballFloating 1.1s ease-out forwards',
-                    }}
-                  >
-                    {b.emoji}
-                  </div>
-                ))}
+                {floatingBursts.map((b) =>
+                  b.isCenterPop ? (
+                    <div
+                      key={b.id}
+                      className="story-emoji-center-pop absolute left-1/2 top-1/2 select-none leading-none"
+                      style={{
+                        fontSize: `${b.sizePx}px`,
+                      }}
+                    >
+                      {b.emoji}
+                    </div>
+                  ) : (
+                    <div
+                      key={b.id}
+                      className="story-emoji-particle absolute bottom-6 select-none leading-none"
+                      style={
+                        {
+                          left: `${b.left}%`,
+                          fontSize: `${b.sizePx}px`,
+                          animationDuration: `${b.durationMs}ms`,
+                          animationDelay: `${b.delayMs}ms`,
+                          '--sway-1': `${b.sway1}px`,
+                          '--sway-2': `${b.sway2}px`,
+                          '--sway-3': `${b.sway3}px`,
+                          '--rise-y': `${b.riseY}px`,
+                          '--peak-scale': b.peakScale,
+                          '--rot-start': `${b.rotStart}deg`,
+                          '--rot-mid': `${b.rotMid}deg`,
+                          '--rot-end': `${b.rotEnd}deg`,
+                        } as React.CSSProperties
+                      }
+                    >
+                      {b.emoji}
+                    </div>
+                  )
+                )}
               </div>
 
               {/* Requirement 2: Caption without background, positioned bottom-left, left-aligned, thin small text */}
