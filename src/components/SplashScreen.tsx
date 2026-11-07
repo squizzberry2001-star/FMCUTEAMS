@@ -21,6 +21,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     scale: number;
     isExpanding: boolean;
     isBouncing: boolean;
+    isFloating: boolean;
   }>({
     x: 0,
     y: 0,
@@ -28,6 +29,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     scale: 1,
     isExpanding: false,
     isBouncing: true,
+    isFloating: false,
   });
 
   const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
@@ -74,6 +76,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       scale: 90,
       isExpanding: true,
       isBouncing: false,
+      isFloating: false,
     }));
 
     // Complete dissolve after 850ms, then notify parent
@@ -181,6 +184,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         scale: 1,
         isExpanding: false,
         isBouncing: true,
+        isFloating: false,
       });
 
       // Phase 2: After bouncing settles (1050ms), dash directly into letter 'F'
@@ -194,6 +198,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
           scale: 1,
           isExpanding: false,
           isBouncing: false,
+          isFloating: false,
         });
 
         // Phase 3: Arrive at 'F' after dash (240ms) and illuminate 'F'
@@ -217,6 +222,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
                 scale: 1,
                 isExpanding: false,
                 isBouncing: false,
+                isFloating: false,
               });
 
               if (currentIdx < CHARACTERS.length) {
@@ -226,12 +232,18 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
               if (intervalId) clearInterval(intervalId);
 
               // Dot has arrived right after 'S' and stops there!
-              // Pause for 3 seconds (3000ms) as requested by user
+              // Activate weightless organic floating levitation!
+              setDotPos((prev) => ({
+                ...prev,
+                isFloating: true,
+              }));
+
+              // Pause for 2 seconds (2000ms) as requested by user
               const tHold = setTimeout(() => {
                 if (isMounted) {
                   triggerDissolve();
                 }
-              }, 3000);
+              }, 2000);
               timerIds.push(tHold);
             }
           }, 230); // 230ms per character
@@ -298,15 +310,22 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             opacity: dotPos.opacity,
           }}
         >
-          {/* INNER BALL (Handles bouncing animation, bloom, and dissolve expansion) */}
+          {/* INNER BALL (Handles bouncing animation, floating levitation, bloom, and dissolve expansion) */}
           <div
-            className={`rounded-full ${dotPos.isBouncing ? 'animate-ball-drop-bounce' : ''}`}
+            className={`rounded-full ${
+              dotPos.isBouncing
+                ? 'animate-ball-drop-bounce'
+                : dotPos.isFloating
+                ? 'animate-ball-floating'
+                : ''
+            }`}
             style={{
               width: '26px',
               height: '26px',
-              transform: dotPos.isBouncing
-                ? undefined
-                : `translate(-50%, -50%) scale(${dotPos.scale})`,
+              transform:
+                dotPos.isBouncing || dotPos.isFloating
+                  ? undefined
+                  : `translate(-50%, -50%) scale(${dotPos.scale})`,
               transition: dotPos.isExpanding
                 ? 'transform 850ms cubic-bezier(0.4, 0, 0.2, 1)'
                 : 'none',
