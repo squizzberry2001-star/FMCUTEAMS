@@ -81,7 +81,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return true; // Bulan ini
   });
 
-  // Scroll detection & auto navbar scale (Responsive & Lock-Free)
+  // Scroll detection & auto navbar scale with rAF throttling & icon click restore
+  const manualExpandedRef = useRef(false);
+  const manualExpandedScrollTopRef = useRef(0);
+  const lastScrollTopRef = useRef(0);
+
   const getScrollTop = () => {
     const targets = [
       window.scrollY,
@@ -95,32 +99,58 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const handleResetScale = () => {
     setIsScrolled(false);
+    manualExpandedRef.current = true;
+    manualExpandedScrollTopRef.current = getScrollTop();
   };
 
   const checkScroll = () => {
     const top = getScrollTop();
-    setIsScrolled(top > 10);
+    setIsScrolled(top > 15);
   };
 
   useEffect(() => {
-    const handleScroll = () => {
-      const top = getScrollTop();
-      setIsScrolled(top > 10);
+    let ticking = false;
+
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const top = getScrollTop();
+          const delta = top - lastScrollTopRef.current;
+          lastScrollTopRef.current = top;
+
+          if (top <= 10) {
+            setIsScrolled(false);
+            manualExpandedRef.current = false;
+          } else if (manualExpandedRef.current) {
+            // If user clicked icon while shrunken, stay expanded until scrolling DOWN again
+            if (top > manualExpandedScrollTopRef.current + 8 || delta > 3) {
+              manualExpandedRef.current = false;
+              setIsScrolled(true);
+            }
+          } else {
+            // Normal scroll down -> shrink
+            setIsScrolled(top > 15);
+          }
+
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
 
     // Capture phase catches scroll events from any child or container in the document
-    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    window.addEventListener('touchmove', handleScroll, { passive: true });
-    window.addEventListener('wheel', handleScroll, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    window.addEventListener('touchmove', onScroll, { passive: true });
+    window.addEventListener('wheel', onScroll, { passive: true });
 
-    handleScroll();
+    onScroll();
 
     return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      document.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('touchmove', handleScroll);
-      window.removeEventListener('wheel', handleScroll);
+      window.removeEventListener('scroll', onScroll, true);
+      document.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('touchmove', onScroll);
+      window.removeEventListener('wheel', onScroll);
     };
   }, []);
 
@@ -269,12 +299,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         activeTab={activeNavTab as NavTabType}
         onSelectTab={(tab) => {
           handleResetScale();
-          if (tab === activeNavTab) {
-            if (scrollContainerRef.current) {
-              scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }
           if (setActiveNavTab) setActiveNavTab(tab);
           if (tab === 'calendar' && onOpenCalendar) onOpenCalendar();
           if (tab === 'history' && onOpenHistory) onOpenHistory();

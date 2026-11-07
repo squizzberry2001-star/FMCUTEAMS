@@ -43,11 +43,10 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
       <div
         onClick={onResetScale}
         style={{
-          transform: isScrolled ? 'scale(0.88)' : 'scale(1)',
-          maxWidth: isScrolled ? '300px' : '440px',
+          transform: isScrolled ? 'scale(0.86)' : 'scale(1)',
         }}
-        className={`flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none ${
-          isScrolled ? 'iphone-glass-dock-scrolled shadow-xl py-1 px-1' : 'iphone-glass-dock shadow-2xl py-1.5 px-2'
+        className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] ${
+          isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
         }`}
       >
         {/* Top Prismatic Hairline Reflection (Apple iPhone Glass Specular) */}
@@ -61,13 +60,11 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
           Lens kaca putih meluncur anggun tanpa border
         */}
         <div
-          className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0 ${
-            isScrolled ? 'top-1 bottom-1' : 'top-1.5 bottom-1.5'
-          }`}
+          className="absolute top-1.5 bottom-1.5 rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0"
           style={{
-            width: `calc((100% - ${isScrolled ? '8px' : '12px'}) / 4)`,
+            width: 'calc((100% - 12px) / 4)',
             transform: `translateX(calc(${activeIndex} * 100%))`,
-            left: isScrolled ? '4px' : '6px',
+            left: '6px',
           }}
         >
           {/* Top specular hairline inside the pill */}
@@ -87,16 +84,12 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
                 if (onResetScale) onResetScale();
               }}
               onClick={() => handleTabClick(item.id)}
-              className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none ${
-                isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
-              }`}
+              className="relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none py-2 sm:py-2.5 px-1.5 gap-1"
             >
               {/* Icon Container dengan Micro-Spring Damping */}
               <div className="relative flex items-center justify-center">
                 <Icon
-                  className={`transition-all duration-500 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                    isScrolled ? 'w-4 h-4' : 'w-5 h-5'
-                  } ${
+                  className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                     isActive
                       ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
                       : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
@@ -106,9 +99,7 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
 
               {/* Label Typography */}
               <span
-                className={`tracking-tight leading-none transition-all duration-300 ${
-                  isScrolled ? 'text-[9px]' : 'text-[10px]'
-                } ${
+                className={`text-[10px] tracking-tight leading-none transition-all duration-300 ${
                   isActive
                     ? 'text-slate-900 font-black scale-[1.03]'
                     : 'text-slate-400 font-semibold group-hover:text-slate-600'

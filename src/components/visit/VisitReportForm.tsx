@@ -198,8 +198,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // GPS Refresh state
   const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
 
-  // Scroll Detection & Auto Navbar Scale (Responsive & Lock-Free)
+  // Scroll Detection & Auto Navbar Scale & Dynamic Top Buttons Visibility (rAF throttled)
   const [isScrolled, setIsScrolled] = useState(false);
+  const [showTopButtons, setShowTopButtons] = useState(true);
+  const manualExpandedRef = useRef(false);
+  const manualExpandedScrollTopRef = useRef(0);
+  const lastScrollTopRef = useRef(0);
 
   const getScrollTop = () => {
     const targets = [
@@ -213,26 +217,62 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleResetScale = () => {
     setIsScrolled(false);
+    manualExpandedRef.current = true;
+    manualExpandedScrollTopRef.current = getScrollTop();
   };
 
   useEffect(() => {
-    const handleScroll = () => {
-      const top = getScrollTop();
-      setIsScrolled(top > 10);
+    let ticking = false;
+
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const top = getScrollTop();
+          const delta = top - lastScrollTopRef.current;
+          lastScrollTopRef.current = top;
+
+          // 1. Dynamic Top Buttons (Home & PDF): Hide on scroll down, show on scroll up
+          if (top <= 20) {
+            setShowTopButtons(true);
+          } else if (delta > 4 && top > 40) {
+            setShowTopButtons(false); // scrolling down -> hide
+          } else if (delta < -4) {
+            setShowTopButtons(true); // scrolling up -> show
+          }
+
+          // 2. Bottom Navbar Scale:
+          if (top <= 10) {
+            setIsScrolled(false);
+            manualExpandedRef.current = false;
+          } else if (manualExpandedRef.current) {
+            // If user clicked icon while shrunken, stay expanded until scrolling DOWN again
+            if (top > manualExpandedScrollTopRef.current + 8 || delta > 3) {
+              manualExpandedRef.current = false;
+              setIsScrolled(true);
+            }
+          } else {
+            // Normal scroll down -> shrink
+            setIsScrolled(top > 15);
+          }
+
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    window.addEventListener('touchmove', handleScroll, { passive: true });
-    window.addEventListener('wheel', handleScroll, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    window.addEventListener('touchmove', onScroll, { passive: true });
+    window.addEventListener('wheel', onScroll, { passive: true });
 
-    handleScroll();
+    onScroll();
 
     return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      document.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('touchmove', handleScroll);
-      window.removeEventListener('wheel', handleScroll);
+      window.removeEventListener('scroll', onScroll, true);
+      document.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('touchmove', onScroll);
+      window.removeEventListener('wheel', onScroll);
     };
   }, []);
 
@@ -691,15 +731,21 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {/* 
         Floating Top Corner Buttons (Kiri Atas: Home circle, Kanan Atas: PDF circle)
-        Top Navbar lama yang horizontal dihapuskan sepenuhnya!
+        Menghilang saat scroll ke bawah, muncul kembali saat scroll ke atas
       */}
-      <div className="fixed top-3.5 left-0 right-0 max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between pointer-events-none z-40 select-none">
+      <div
+        className={`fixed top-3.5 left-0 right-0 max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between pointer-events-none select-none z-40 transition-all duration-300 ease-out ${
+          showTopButtons ? 'translate-y-0 opacity-100' : '-translate-y-16 opacity-0'
+        }`}
+      >
         {/* Tombol Home: Circle dengan icon Home di pojok kiri atas */}
         <button
           type="button"
           onClick={onBack}
           title="Kembali ke Home / Jadwal Toko"
-          className="w-11 h-11 rounded-full iphone-glass-icon-btn pointer-events-auto flex items-center justify-center text-slate-700 hover:text-teal-700 active:scale-90 transition-all duration-200 cursor-pointer group"
+          className={`w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-700 hover:text-teal-700 active:scale-90 transition-all duration-200 cursor-pointer group ${
+            showTopButtons ? 'pointer-events-auto' : 'pointer-events-none'
+          }`}
         >
           <Home className="w-5 h-5 stroke-[2.2] group-hover:scale-110 transition-transform" />
         </button>
@@ -709,7 +755,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           type="button"
           onClick={() => setShowPreview(true)}
           title="Pratinjau & Cetak Laporan PDF 16:9"
-          className="w-11 h-11 rounded-full iphone-glass-icon-btn pointer-events-auto flex items-center justify-center text-rose-600 hover:text-rose-700 active:scale-90 transition-all duration-200 cursor-pointer relative group"
+          className={`w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-rose-600 hover:text-rose-700 active:scale-90 transition-all duration-200 cursor-pointer relative group ${
+            showTopButtons ? 'pointer-events-auto' : 'pointer-events-none'
+          }`}
         >
           <FileText className="w-5 h-5 stroke-[2.2] group-hover:scale-110 transition-transform" />
           <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-rose-600 text-white px-1 py-0.2 rounded-full leading-tight shadow-xs">
@@ -1784,11 +1832,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         <div
           onClick={handleResetScale}
           style={{
-            transform: isScrolled ? 'scale(0.88)' : 'scale(1)',
-            maxWidth: isScrolled ? '290px' : '440px',
+            transform: isScrolled ? 'scale(0.86)' : 'scale(1)',
           }}
-          className={`flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none ${
-            isScrolled ? 'iphone-glass-dock-scrolled shadow-xl py-1 px-1' : 'iphone-glass-dock shadow-2xl py-1.5 px-2'
+          className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] ${
+            isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
           }`}
         >
           {/* Top Specular Hairline Reflection */}
@@ -1802,13 +1849,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             Lens kaca putih meluncur anggun tanpa border
           */}
           <div
-            className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0 ${
-              isScrolled ? 'top-1 bottom-1' : 'top-1.5 bottom-1.5'
-            }`}
+            className="absolute top-1.5 bottom-1.5 rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0"
             style={{
-              width: `calc((100% - ${isScrolled ? '8px' : '12px'}) / 3)`,
+              width: 'calc((100% - 12px) / 3)',
               transform: `translateX(calc(${activeSection - 1} * 100%))`,
-              left: isScrolled ? '4px' : '6px',
+              left: '6px',
             }}
           >
             {/* Top specular hairline inside the pill */}
@@ -1823,17 +1868,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             onClick={() => {
               setActiveSection(1);
               handleResetScale();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none ${
-              isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
-            }`}
+            className="relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none py-2 sm:py-2.5 px-1.5 gap-1"
           >
             <div className="relative flex items-center justify-center">
               <Store
-                className={`transition-all duration-500 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                  isScrolled ? 'w-4 h-4' : 'w-5 h-5'
-                } ${
+                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 1
                     ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
                     : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
@@ -1841,9 +1881,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               />
             </div>
             <span
-              className={`tracking-tight leading-none uppercase transition-all duration-300 ${
-                isScrolled ? 'text-[9px]' : 'text-[10px]'
-              } ${
+              className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
                 activeSection === 1
                   ? 'text-slate-900 font-black scale-[1.03]'
                   : 'text-slate-400 font-bold group-hover:text-slate-600'
@@ -1860,17 +1898,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             onClick={() => {
               setActiveSection(2);
               handleResetScale();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none ${
-              isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
-            }`}
+            className="relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none py-2 sm:py-2.5 px-1.5 gap-1"
           >
             <div className="relative flex items-center justify-center">
               <ClipboardCheck
-                className={`transition-all duration-500 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                  isScrolled ? 'w-4 h-4' : 'w-5 h-5'
-                } ${
+                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 2
                     ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
                     : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
@@ -1885,9 +1918,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               )}
             </div>
             <span
-              className={`tracking-tight leading-none transition-all duration-300 ${
-                isScrolled ? 'text-[9px]' : 'text-[10px]'
-              } ${
+              className={`tracking-tight leading-none text-[10px] transition-all duration-300 ${
                 activeSection === 2
                   ? 'text-slate-900 font-black scale-[1.03]'
                   : 'text-slate-400 font-bold group-hover:text-slate-600'
@@ -1904,17 +1935,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             onClick={() => {
               setActiveSection(3);
               handleResetScale();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none ${
-              isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
-            }`}
+            className="relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none py-2 sm:py-2.5 px-1.5 gap-1"
           >
             <div className="relative flex items-center justify-center">
               <Camera
-                className={`transition-all duration-500 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                  isScrolled ? 'w-4 h-4' : 'w-5 h-5'
-                } ${
+                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 3
                     ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
                     : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
@@ -1929,9 +1955,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               )}
             </div>
             <span
-              className={`tracking-tight leading-none uppercase transition-all duration-300 ${
-                isScrolled ? 'text-[9px]' : 'text-[10px]'
-              } ${
+              className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
                 activeSection === 3
                   ? 'text-slate-900 font-black scale-[1.03]'
                   : 'text-slate-400 font-bold group-hover:text-slate-600'

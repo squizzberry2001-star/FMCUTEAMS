@@ -132,20 +132,19 @@
     inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.14);
 }
 
-/* Auto-Shrinking Scrolled State (scale 0.88 and max-width 300px) */
+/* Auto-Shrinking Scrolled State (scale 0.88 with smooth GPU transform) */
 .iphone-glass-dock-scrolled {
   width: 100% !important;
-  max-width: 300px !important;
-  padding: 4px !important;
-  border-radius: 30px !important;
-  transform: scale(0.88) translateZ(0) !important;
+  max-width: 440px !important;
+  padding: 6px !important;
+  border-radius: 36px !important;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.35) 0%,
-    rgba(255, 255, 255, 0.18) 100%
+    rgba(255, 255, 255, 0.32) 0%,
+    rgba(255, 255, 255, 0.16) 100%
   ) !important;
-  backdrop-filter: blur(32px) saturate(200%) brightness(1.08);
-  -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.08);
+  backdrop-filter: blur(28px) saturate(190%) contrast(102%) brightness(1.06);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(102%) brightness(1.06);
   /* Super fine hairline: Top white reflection | Bottom subtle white | Left & right black silhouette */
   border-top: 0.75px solid rgba(255, 255, 255, 0.90) !important;
   border-bottom: 0.5px solid rgba(255, 255, 255, 0.40) !important;
@@ -213,15 +212,12 @@
     inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.12);
 }
 
-/* Super Smooth Responsive Transition Classes (400ms Snappy Apple Motion) */
+/* Super Smooth Hardware-Accelerated Apple Spring Transition (Pure GPU Transform) */
 .dock-transition {
-  transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1),
-              width 450ms cubic-bezier(0.22, 1, 0.36, 1),
-              max-width 450ms cubic-bezier(0.22, 1, 0.36, 1),
-              padding 400ms cubic-bezier(0.22, 1, 0.36, 1),
-              border-radius 400ms cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 400ms cubic-bezier(0.22, 1, 0.36, 1) !important;
-  will-change: transform, width, max-width, padding, border-radius;
+  transition: transform 380ms cubic-bezier(0.32, 0.72, 0, 1),
+              box-shadow 380ms ease-out !important;
+  will-change: transform;
+  transform-origin: center center;
 }
 
 .dock-pill-transition {
