@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronLeft, Store, CheckCircle2, TrendingUp, MapPin, Building2, Clock } from 'lucide-react';
+import { DeveloperFooter } from './DeveloperFooter';
 
 interface HistoryViewProps {
   onBack: () => void;
@@ -137,11 +138,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
       </div>
 
       {/* Minimalist Page Footer */}
-      <footer className="mt-auto pt-8 pb-4 text-center">
-        <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
-          Pengembang Web
-        </span>
-      </footer>
+      <DeveloperFooter />
     </div>
   );
 };

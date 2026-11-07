@@ -5,6 +5,7 @@ import { CalendarStrip } from './CalendarStrip';
 import { ScheduleCard } from './ScheduleCard';
 import { BottomNavbar, NavTabType } from './BottomNavbar';
 import { EmployeeStoriesBar } from './EmployeeStoriesBar';
+import { DeveloperFooter } from './DeveloperFooter';
 
 interface HomeScreenProps {
   user?: User | null;
@@ -313,11 +314,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
       {/* Minimalist Page Footer */}
-      <footer className="mt-auto pt-8 pb-4 text-center">
-        <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
-          Pengembang Web
-        </span>
-      </footer>
+      <DeveloperFooter />
 
       {/* Navbar: Hapus tombol +, auto mengecil scale 0.91 saat scroll, auto reset saat section ditekan */}
       <BottomNavbar

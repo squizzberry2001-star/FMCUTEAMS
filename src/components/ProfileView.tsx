@@ -21,6 +21,7 @@ import confetti from 'canvas-confetti';
 import { User } from '../types';
 import { uploadProfilePhotoToGasGDrive } from '../utils/gdriveGasSync';
 import { PageTransitionLoader } from './PageTransitionLoader';
+import { DeveloperFooter } from './DeveloperFooter';
 
 // Compress and center-crop avatar photo to 360x360 JPEG so it never exceeds localStorage quota
 const compressAvatarImage = (file: File): Promise<string> => {
@@ -486,11 +487,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </button>
 
       {/* Minimalist Page Footer */}
-      <footer className="mt-auto pt-8 pb-4 text-center">
-        <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
-          Pengembang Web
-        </span>
-      </footer>
+      <DeveloperFooter />
     </div>
   );
 };

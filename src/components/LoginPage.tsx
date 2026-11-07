@@ -17,6 +17,7 @@ import { User } from '../types';
 import { ADMIN_PASSWORD, ADMIN_USER, initialUsers } from '../data/mockData';
 import { ParacetamolHero3D } from './3d-icons/Illustrations';
 import { PageTransitionLoader } from './PageTransitionLoader';
+import { DeveloperFooter } from './DeveloperFooter';
 
 interface LoginPageProps {
   users?: User[];
@@ -472,9 +473,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </button>
           )}
 
-          <span className="text-[10px] font-light text-slate-400/90 tracking-widest mt-0.5">
-            Pengembang Web
-          </span>
+          <DeveloperFooter className="mt-0.5 text-center" />
         </div>
       </div>
     </div>

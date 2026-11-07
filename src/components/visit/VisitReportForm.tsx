@@ -53,6 +53,7 @@ import {
 } from '../../types/visitReport';
 import { VisitPdfPreview } from './VisitPdfPreview';
 import { PageTransitionLoader } from '../PageTransitionLoader';
+import { DeveloperFooter } from '../DeveloperFooter';
 
 interface VisitReportFormProps {
   agenda: ScheduleAgenda;
@@ -2892,11 +2893,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         )}
 
         {/* Minimalist Page Footer */}
-        <footer className="pt-8 pb-6 text-center">
-          <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
-            Pengembang Web
-          </span>
-        </footer>
+        <DeveloperFooter className="pt-8 pb-6 text-center" />
       </div>
 
       {/* =====================================================================

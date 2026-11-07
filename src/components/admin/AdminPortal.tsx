@@ -33,6 +33,7 @@ import * as XLSX from 'xlsx';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, ScheduleCategory, User } from '../../types';
 import excelSeed from '../../data/excelScheduleSeed.json';
+import { DeveloperFooter } from '../DeveloperFooter';
 
 interface AdminPortalProps {
   adminUser: User;
@@ -978,11 +979,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         )}
 
         {/* Minimalist Page Footer */}
-        <footer className="pt-8 pb-4 text-center">
-          <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
-            Pengembang Web
-          </span>
-        </footer>
+        <DeveloperFooter className="pt-8 pb-4 text-center" />
       </main>
 
       {/* 4. Modal Buat / Edit Agenda */}

@@ -16,6 +16,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory } from '../types';
+import { DeveloperFooter } from './DeveloperFooter';
 
 interface AgendaDetailViewProps {
   agenda: ScheduleAgenda;
@@ -233,11 +234,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
         )}
 
         {/* Minimalist Page Footer */}
-        <footer className="mt-auto pt-8 pb-4 text-center">
-          <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
-            Pengembang Web
-          </span>
-        </footer>
+        <DeveloperFooter />
       </div>
     </div>
   );
