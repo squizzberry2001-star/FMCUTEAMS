@@ -56,26 +56,41 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
   const afterSRef = useRef<HTMLSpanElement>(null);
   const lettersContainerRef = useRef<HTMLDivElement>(null);
 
+  // Synchronize mobile status bar / theme-color with web background
+  useEffect(() => {
+    let metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (!metaTheme) {
+      metaTheme = document.createElement('meta');
+      metaTheme.setAttribute('name', 'theme-color');
+      document.head.appendChild(metaTheme);
+    }
+    // Set to #F8F9FD when login form is open, #070B14 during dark splash
+    metaTheme.setAttribute('content', splashStage === 'ready' ? '#F8F9FD' : '#070B14');
+  }, [splashStage]);
+
   // Trigger Dot Expansion and Dissolve into Login Form
   const triggerDissolve = () => {
     if (splashStage === 'dissolving' || splashStage === 'ready') return;
     setSplashStage('dissolving');
 
-    // Smooth massive scale expansion to envelope screen and dissolve
+    // Smooth massive scale expansion to envelope screen and dissolve gracefully
     setDotPos((prev) => ({
       ...prev,
       scale: 90,
       isExpanding: true,
     }));
 
-    // Complete dissolve after 650ms for snappy, seamless reveal
+    // Complete dissolve after 850ms for a majestic, smooth transition
     setTimeout(() => {
       setSplashStage('ready');
-    }, 650);
+    }, 850);
   };
 
-  // 1. Fast & Clean Splash Animation Logic:
-  // Starts quickly (120ms), glides at 90ms/char, stops right after 'S', pauses 380ms, then dissolves
+  // 1. Splash Animation Logic:
+  // - Starts with a calm breath (280ms)
+  // - Glides at majestic pace (160ms per character)
+  // - Stops right after 'S' on TEAMS for 600ms
+  // - Expands and dissolves into Login Form
   useEffect(() => {
     if (splashStage !== 'animating-letters') return;
 
@@ -114,7 +129,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
       }
     };
 
-    // Start snappy sequence after 120ms
+    // Calm initial pause before gliding begins (280ms)
     const t0 = setTimeout(() => {
       if (!isMounted) return;
       updateDotToChar(0);
@@ -131,18 +146,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
         } else {
           clearInterval(interval);
           // Dot has arrived right after 'S' and stops there!
-          // Brief pause (380ms), then smooth dissolve into login form
+          // Pauses for 600ms so the user can enjoy the completed glowing title
           const t1 = setTimeout(() => {
             if (isMounted) {
               triggerDissolve();
             }
-          }, 380);
+          }, 600);
           timerIds.push(t1);
         }
-      }, 90); // 90ms per character for fast and silky glide
+      }, 160); // 160ms per character for an elegant, majestic glide
 
       return () => clearInterval(interval);
-    }, 120);
+    }, 280);
 
     timerIds.push(t0);
 
@@ -185,11 +200,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
 
   return (
     <div
-      className="fixed inset-0 w-screen h-screen overflow-hidden select-none touch-none overscroll-none flex items-center justify-center p-4 bg-[#F8F9FD]"
-      style={{ height: '100dvh', maxHeight: '100dvh' }}
+      className="fixed inset-0 w-full h-full overflow-hidden select-none touch-none overscroll-none flex items-center justify-center p-4 bg-[#F8F9FD]"
+      style={{
+        height: '100dvh',
+        minHeight: '100vh',
+        backgroundColor: '#F8F9FD',
+        paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
+      }}
       onTouchMove={(e) => e.preventDefault()}
       onWheel={(e) => e.preventDefault()}
     >
+      {/* Full-bleed solid background shield matching web color `#F8F9FD` */}
+      <div
+        className="fixed inset-0 -z-10 bg-[#F8F9FD] pointer-events-none"
+        style={{ backgroundColor: '#F8F9FD' }}
+      />
+
       {/* Decorative ambient background glows */}
       <div className="absolute top-12 left-10 w-72 h-72 bg-[#D4F4E2]/60 rounded-full blur-3xl pointer-events-none -z-0" />
       <div className="absolute bottom-10 right-10 w-80 h-80 bg-[#FFE6D5]/60 rounded-full blur-3xl pointer-events-none -z-0" />
@@ -199,7 +228,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
           STAGE A: CLEAN CINEMATIC SPLASH SCREEN (PERFECTLY CENTERED, NO BUTTONS/TEXT)
           - No buttons, no top bar, no footer, no subtitles.
           - Large glowing dot glides and stops right after 'S' on TEAMS.
-          - Pure text-shadow without any boxy drop-shadow filter artifacts.
+          - Multi-tier progressive Gaussian text-shadow: seamless, radiant, zero boxiness.
           ========================================================================= */}
       {splashStage !== 'ready' && (
         <div
@@ -215,7 +244,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
           {/* Perfectly Centered Stage */}
           <div
             ref={lettersContainerRef}
-            className="relative inline-flex items-center justify-center px-6 py-8"
+            className="relative inline-flex items-center justify-center px-6 py-8 overflow-visible"
           >
             {/* LARGE GLOWING WHITE DOT (starts at 'F', glides to 'S', stops after 'S', expands and dissolves) */}
             <div
@@ -223,22 +252,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
               style={{
                 left: `${dotPos.x}px`,
                 top: `${dotPos.y}px`,
-                width: '24px',
-                height: '24px',
+                width: '26px',
+                height: '26px',
                 transform: `translate(-50%, -50%) scale(${dotPos.scale})`,
                 opacity: dotPos.opacity,
                 transition: dotPos.isExpanding
-                  ? 'transform 650ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms ease-out'
-                  : 'left 95ms cubic-bezier(0.2, 0.8, 0.4, 1), top 95ms cubic-bezier(0.2, 0.8, 0.4, 1), opacity 150ms ease-out',
+                  ? 'transform 850ms cubic-bezier(0.4, 0, 0.2, 1), opacity 650ms ease-out'
+                  : 'left 160ms cubic-bezier(0.25, 1, 0.35, 1), top 160ms cubic-bezier(0.25, 1, 0.35, 1), opacity 200ms ease-out',
                 background: '#FFFFFF',
                 boxShadow: dotPos.isExpanding
-                  ? '0 0 150px 60px #FFFFFF, 0 0 300px 100px rgba(45,212,191,0.9), 0 0 500px 150px rgba(56,189,248,0.7)'
-                  : '0 0 22px 5px #FFFFFF, 0 0 45px 12px rgba(45,212,191,0.85), 0 0 80px 22px rgba(56,189,248,0.5)',
+                  ? '0 0 160px 70px #FFFFFF, 0 0 320px 120px rgba(45,212,191,0.9), 0 0 500px 180px rgba(56,189,248,0.7)'
+                  : '0 0 20px 5px #FFFFFF, 0 0 45px 12px rgba(45,212,191,0.85), 0 0 80px 24px rgba(56,189,248,0.5)',
               }}
             />
 
-            {/* Typography "FMCU TEAMS" with Pure Vector Text-Shadow (Zero Boxiness) */}
-            <div className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans">
+            {/* Typography "FMCU TEAMS" with Seamless Multi-Tier Text-Shadow */}
+            <div className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans overflow-visible">
               {CHARACTERS.map((char, idx) => {
                 const isRevealed = idx <= revealedCharIndex;
                 const isCurrent = idx === revealedCharIndex;
@@ -259,18 +288,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
                   <span
                     key={idx}
                     ref={(el) => (charRefs.current[idx] = el)}
-                    className="inline-block select-none transition-all duration-300"
+                    className="inline-block select-none transition-all duration-300 overflow-visible"
                     style={{
                       opacity: isRevealed ? 1 : 0,
                       transform: isRevealed
                         ? 'translateY(0) scale(1)'
                         : 'translateY(6px) scale(0.85)',
                       color: '#FFFFFF',
-                      // Pure text-shadow avoids GPU box-clipping from CSS filter drop-shadow
+                      // Multi-tiered concentric Gaussian text-shadow: seamless, deep bloom, no boxiness
                       textShadow: isCurrent
-                        ? '0 0 18px rgba(255, 255, 255, 1), 0 0 35px rgba(45, 212, 191, 0.9), 0 0 65px rgba(45, 212, 191, 0.6)'
+                        ? '0 0 8px #FFFFFF, 0 0 18px rgba(255, 255, 255, 0.9), 0 0 32px rgba(45, 212, 191, 0.8), 0 0 55px rgba(45, 212, 191, 0.5), 0 0 85px rgba(56, 189, 248, 0.3)'
                         : isRevealed
-                        ? '0 0 12px rgba(255, 255, 255, 0.55), 0 0 26px rgba(45, 212, 191, 0.25)'
+                        ? '0 0 6px rgba(255, 255, 255, 0.8), 0 0 15px rgba(255, 255, 255, 0.5), 0 0 28px rgba(45, 212, 191, 0.4), 0 0 48px rgba(45, 212, 191, 0.2)'
                         : 'none',
                     }}
                   >

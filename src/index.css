@@ -3,11 +3,17 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    background-color: #F8F9FD !important;
+    color-scheme: light;
+  }
+
   body {
-    background-color: #F8F9FD;
+    background-color: #F8F9FD !important;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     color: #1E293B;
     overflow-x: hidden;
+    color-scheme: light;
   }
 
   /* Prevent automatic iOS/Android zoom on input focus */
