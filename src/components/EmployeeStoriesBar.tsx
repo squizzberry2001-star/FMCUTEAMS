@@ -1034,14 +1034,14 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
       {/* Horizontal Instagram-Style Circle Stories Strip (No Left/Right Padding, Latest Upload First from Left) */}
       <div className="mb-3 -mx-5 sm:-mx-6 px-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-0">
+        <div className="flex items-start gap-2 overflow-x-auto no-scrollbar py-1.5 px-0">
           {/* 1. Leftmost Button: Personal Story Circle (Restored as original without user name) */}
-          <div className="flex flex-col items-center flex-shrink-0 w-[72px]">
+          <div className="flex flex-col items-center flex-shrink-0 w-[74px] pt-[7px]">
             <div className="relative">
               <button
                 type="button"
                 onClick={openOwnStoriesOrUpload}
-                className="w-16 h-16 rounded-full p-[3.5px] transition-transform active:scale-95 cursor-pointer"
+                className="w-[58px] h-[58px] rounded-full p-[3.5px] transition-transform active:scale-95 cursor-pointer"
                 style={
                   myActiveStories.length > 0
                     ? {
@@ -1068,7 +1068,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-slate-100 to-slate-200 flex items-center justify-center relative overflow-hidden">
                       <svg
                         viewBox="0 0 24 24"
-                        className="w-9 h-9 text-slate-400/90 translate-y-1"
+                        className="w-8 h-8 text-slate-400/90 translate-y-1"
                         fill="currentColor"
                       >
                         <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z" />
@@ -1104,12 +1104,12 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               </button>
             </div>
 
-            <span className="text-[10px] font-bold text-slate-700 mt-1.5 truncate w-full text-center leading-tight">
+            <span className="text-[10px] font-bold text-slate-700 mt-2.5 truncate w-full text-center leading-tight">
               Cerita Anda
             </span>
           </div>
 
-          {/* 2. Other Employees' Active Story Circles (Sorted by Latest Upload First from Left + Vivid Colored Circle for New Story + Curved 2-Word Name) */}
+          {/* 2. Other Employees' Active Story Circles (Sorted by Latest Upload First from Left + Vivid Colored Circle for New Story + Spaced Curved 2-Word Name) */}
           {otherUserGroups.map((group, idx) => {
             const hasUnviewed = group.slides.some(
               (s) =>
@@ -1120,7 +1120,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
             );
             const twoWordName = getTwoWordStoryName(group.userName);
             const nameFontSize =
-              twoWordName.length > 14 ? '6.4' : twoWordName.length > 11 ? '7.0' : '7.5';
+              twoWordName.length > 15 ? '6.8' : twoWordName.length > 12 ? '7.3' : '7.8';
             const arcId = `story-arc-user-${idx}`;
             // Requirement 7: Small badge only displays 1 most-reacted emoji
             const topGroupEmoji = getTopReactedEmoji(group.slides);
@@ -1132,22 +1132,23 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 key={group.userId + idx}
                 type="button"
                 onClick={() => openEmployeeStoryGroup(idx)}
-                className="relative flex-shrink-0 w-[80px] h-[84px] flex items-center justify-center group cursor-pointer"
+                className="relative flex-shrink-0 w-[90px] h-[92px] flex items-center justify-center group cursor-pointer"
                 title={group.userName}
               >
-                {/* Curved Circular Name SVG Hugging the Story Circle */}
+                {/* Curved Circular Name SVG with Clear 9px Outer Spacing from Story Circle */}
                 <svg
-                  viewBox="0 0 84 88"
+                  viewBox="0 0 96 98"
                   className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-visible"
                 >
                   <defs>
-                    <path id={arcId} d="M 5.5,37 A 36.5,36.5 0 0,0 78.5,37" fill="none" />
+                    {/* Circle center is (48, 36) with radius 29px; arc radius 44.5px leaves a clean ~9.5px gap between ring and text */}
+                    <path id={arcId} d="M 3.5,36 A 44.5,44.5 0 0,0 92.5,36" fill="none" />
                   </defs>
                   <text
                     fill={hasUnviewed ? '#0f172a' : '#64748b'}
                     fontSize={nameFontSize}
                     fontWeight={hasUnviewed ? '800' : '600'}
-                    letterSpacing="0.35px"
+                    letterSpacing="0.55px"
                   >
                     <textPath href={`#${arcId}`} startOffset="50%" textAnchor="middle">
                       {twoWordName.toUpperCase()}
@@ -1155,10 +1156,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                   </text>
                 </svg>
 
-                <div className="absolute top-[6px] left-1/2 -translate-x-1/2">
+                <div className="absolute top-[7px] left-1/2 -translate-x-1/2">
                   {/* Outer Story Ring: Vivid Multi-Color Conic Circle Ring when Story is New (hasUnviewed), Gray when already viewed */}
                   <div
-                    className="w-[62px] h-[62px] rounded-full p-[3.5px] transition-all duration-300 group-hover:scale-105 group-active:scale-95"
+                    className="w-[58px] h-[58px] rounded-full p-[3.5px] transition-all duration-300 group-hover:scale-105 group-active:scale-95"
                     style={
                       hasUnviewed
                         ? {
