@@ -29,7 +29,10 @@ import {
   ArrowRight,
   ShieldAlert,
   Sliders,
-  CheckCheck
+  CheckCheck,
+  Home,
+  ClipboardCheck,
+  Info
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from '../../types';
@@ -629,7 +632,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-[#F8F9FD] select-none pb-24">
+    <div className="min-h-screen bg-[#F8F9FD] select-none pb-32">
       {/* Zoom Photo Modal */}
       {zoomPhotoUrl && (
         <div
@@ -648,56 +651,36 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* Top Header / Sticky Nav Controls */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-xs">
+      {/* 
+        Floating Top Corner Buttons (Kiri Atas: Home circle, Kanan Atas: PDF circle)
+        Top Navbar lama yang horizontal dihapuskan sepenuhnya!
+      */}
+      <div className="fixed top-3.5 left-0 right-0 max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between pointer-events-none z-40 select-none">
+        {/* Tombol Home: Circle dengan icon Home di pojok kiri atas */}
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all active:scale-95"
+          title="Kembali ke Home / Jadwal Toko"
+          className="w-11 h-11 rounded-full iphone-glass-dock pointer-events-auto flex items-center justify-center text-slate-700 hover:text-teal-700 shadow-lg border border-white/90 active:scale-90 transition-all duration-200 cursor-pointer hover:bg-white/90 group"
         >
-          <ChevronLeft className="w-4 h-4" />
-          <span>Kembali ke Jadwal</span>
+          <Home className="w-5 h-5 stroke-[2.2] group-hover:scale-110 transition-transform" />
         </button>
 
-        {/* Section Steps Navigation Tabs (1, 2, 3) */}
-        <div className="flex items-center gap-1 sm:gap-2">
-          {[
-            { num: 1, label: 'Section 1: General & QSC' },
-            { num: 2, label: 'Section 2: Observation' },
-            { num: 3, label: 'Section 3: Evidence' },
-          ].map((sec) => (
-            <button
-              key={sec.num}
-              type="button"
-              onClick={() => setActiveSection(sec.num)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
-                activeSection === sec.num
-                  ? 'bg-teal-600 text-white shadow-sm'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
-                {sec.num}
-              </span>
-              <span className="hidden sm:inline">{sec.label}</span>
-              <span className="sm:hidden">Sec {sec.num}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Preview PDF Trigger */}
+        {/* Tombol PDF: Circle dengan icon PDF di pojok kanan atas */}
         <button
           type="button"
           onClick={() => setShowPreview(true)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-extrabold shadow-sm active:scale-95 transition-all"
+          title="Pratinjau & Cetak Laporan PDF 16:9"
+          className="w-11 h-11 rounded-full iphone-glass-dock pointer-events-auto flex items-center justify-center text-rose-600 hover:text-rose-700 shadow-lg border border-white/90 active:scale-90 transition-all duration-200 cursor-pointer hover:bg-white/90 relative group"
         >
-          <FileText className="w-3.5 h-3.5 text-teal-400" />
-          <span className="hidden sm:inline">Preview PDF 16:9</span>
-          <span className="sm:hidden">PDF</span>
+          <FileText className="w-5 h-5 stroke-[2.2] group-hover:scale-110 transition-transform" />
+          <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-rose-600 text-white px-1 py-0.2 rounded-full leading-tight shadow-xs">
+            PDF
+          </span>
         </button>
       </div>
 
-      <div className="max-w-6xl mx-auto p-3.5 sm:p-6 space-y-5">
+      <div className="max-w-6xl mx-auto p-3.5 sm:p-6 pt-16 sm:pt-14 space-y-5">
         {/* ============================================================
             STICKY TOP GEOFENCE & LIVE CHECK-IN BANNER (C:\FMCUVISITREPORT)
             ============================================================ */}
@@ -1751,6 +1734,151 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* ============================================================
+          BOTTOM NAVBAR FORM VISIT (3 SECTION: INFO, OBSERVASI, BUKTI)
+          Ala Glass iPhone dengan Smooth Sliding Lens Pill
+          ============================================================ */}
+      <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 max-w-md mx-auto px-4 pointer-events-none z-40 transition-all duration-300 select-none">
+        <div className="w-full rounded-[36px] flex items-center p-1.5 pointer-events-auto iphone-glass-dock shadow-2xl relative overflow-hidden">
+          {/* Top Specular Hairline Reflection */}
+          <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
+
+          {/* Ambient Bottom Refraction Rim */}
+          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80" />
+
+          {/* Sliding Glass Lens Pill (Smooth Like Glass iPhone) */}
+          <div
+            className="absolute top-1.5 bottom-1.5 rounded-[26px] iphone-glass-pill pointer-events-none transition-transform duration-400 ease-[cubic-bezier(0.175,0.885,0.32,1.14)] z-0"
+            style={{
+              width: 'calc((100% - 12px) / 3)',
+              transform: `translateX(calc(${activeSection - 1} * 100%))`,
+              left: '6px',
+            }}
+          >
+            <div className="pointer-events-none absolute inset-x-3 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
+            <div className="pointer-events-none absolute inset-0 rounded-[26px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+          </div>
+
+          {/* Section 1 = INFO */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSection(1);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="relative z-10 flex-1 py-2 sm:py-2.5 px-1.5 rounded-[26px] flex flex-col items-center justify-center gap-1 transition-all duration-300 active:scale-90 group cursor-pointer focus:outline-none"
+          >
+            <div className="relative flex items-center justify-center">
+              <Store
+                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                  activeSection === 1
+                    ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
+                    : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
+                }`}
+              />
+            </div>
+            <span
+              className={`text-[10px] tracking-tight leading-none uppercase transition-all duration-200 ${
+                activeSection === 1
+                  ? 'text-slate-900 font-black scale-[1.03]'
+                  : 'text-slate-400 font-bold group-hover:text-slate-600'
+              }`}
+            >
+              INFO
+            </span>
+            {activeSection === 1 && (
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 absolute bottom-1 shadow-[0_0_8px_rgba(20,184,166,0.9)] animate-in fade-in zoom-in-75 duration-200" />
+            )}
+          </button>
+
+          {/* Section 2 = Observasi */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSection(2);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="relative z-10 flex-1 py-2 sm:py-2.5 px-1.5 rounded-[26px] flex flex-col items-center justify-center gap-1 transition-all duration-300 active:scale-90 group cursor-pointer focus:outline-none"
+          >
+            <div className="relative flex items-center justify-center">
+              <ClipboardCheck
+                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                  activeSection === 2
+                    ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
+                    : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
+                }`}
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <span
+                className={`text-[10px] tracking-tight leading-none transition-all duration-200 ${
+                  activeSection === 2
+                    ? 'text-slate-900 font-black scale-[1.03]'
+                    : 'text-slate-400 font-bold group-hover:text-slate-600'
+                }`}
+              >
+                Observasi
+              </span>
+              <span
+                className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full leading-none ${
+                  activeSection === 2
+                    ? 'bg-teal-100 text-teal-800'
+                    : 'bg-slate-200/70 text-slate-500'
+                }`}
+              >
+                {formData.observations.length}
+              </span>
+            </div>
+            {activeSection === 2 && (
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 absolute bottom-1 shadow-[0_0_8px_rgba(20,184,166,0.9)] animate-in fade-in zoom-in-75 duration-200" />
+            )}
+          </button>
+
+          {/* Section 3 = BUKTI */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSection(3);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="relative z-10 flex-1 py-2 sm:py-2.5 px-1.5 rounded-[26px] flex flex-col items-center justify-center gap-1 transition-all duration-300 active:scale-90 group cursor-pointer focus:outline-none"
+          >
+            <div className="relative flex items-center justify-center">
+              <Camera
+                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                  activeSection === 3
+                    ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
+                    : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
+                }`}
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <span
+                className={`text-[10px] tracking-tight leading-none uppercase transition-all duration-200 ${
+                  activeSection === 3
+                    ? 'text-slate-900 font-black scale-[1.03]'
+                    : 'text-slate-400 font-bold group-hover:text-slate-600'
+                }`}
+              >
+                BUKTI
+              </span>
+              <span
+                className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full leading-none ${
+                  activeSection === 3
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-slate-200/70 text-slate-500'
+                }`}
+              >
+                {formData.evidencePhotos.length + (formData.caPhotos?.length || 0)}
+              </span>
+            </div>
+            {activeSection === 3 && (
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 absolute bottom-1 shadow-[0_0_8px_rgba(20,184,166,0.9)] animate-in fade-in zoom-in-75 duration-200" />
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
