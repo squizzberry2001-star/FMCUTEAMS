@@ -213,15 +213,26 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     return [];
   });
 
+  const userViewedStorageKey = `${VIEWED_STORAGE_KEY}_${currentUserId}`;
+
   const [viewedStoryIds, setViewedStoryIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem(VIEWED_STORAGE_KEY);
+      const saved = localStorage.getItem(userViewedStorageKey);
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn(e);
     }
     return [];
   });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(userViewedStorageKey);
+      setViewedStoryIds(saved ? JSON.parse(saved) : []);
+    } catch {
+      setViewedStoryIds([]);
+    }
+  }, [userViewedStorageKey]);
 
   // Load high-res stories from IndexedDB & Google Drive GAS on mount + periodic 24h prune
   useEffect(() => {
@@ -283,11 +294,11 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
   useEffect(() => {
     try {
-      localStorage.setItem(VIEWED_STORAGE_KEY, JSON.stringify(viewedStoryIds));
+      localStorage.setItem(userViewedStorageKey, JSON.stringify(viewedStoryIds));
     } catch (e) {
       console.warn(e);
     }
-  }, [viewedStoryIds]);
+  }, [viewedStoryIds, userViewedStorageKey]);
 
   // Active stories (within 24h)
   const activeStories = React.useMemo(() => {
@@ -582,15 +593,15 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   useEffect(() => {
     if (!currentSlide) return;
 
-    if (!viewedStoryIds.includes(currentSlide.id)) {
-      setViewedStoryIds((prev) => [...prev, currentSlide.id]);
-    }
-
     const isOwnSlide =
       currentSlide.userId === currentUserId ||
       currentSlide.userName.toLowerCase() === currentUserName.toLowerCase();
 
     if (!isOwnSlide) {
+      if (!viewedStoryIds.includes(currentSlide.id)) {
+        setViewedStoryIds((prev) => [...prev, currentSlide.id]);
+      }
+
       const existingViews = currentSlide.views || [];
       const alreadyRecorded = existingViews.some(
         (v) => v.toLowerCase() === currentUserName.toLowerCase()
@@ -1021,105 +1032,84 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         className="hidden"
       />
 
-      {/* Horizontal Instagram-Style Circle Stories Strip (No Left/Right Padding, Latest Upload First from Left, Curved 2-Word Name on Circle) */}
+      {/* Horizontal Instagram-Style Circle Stories Strip (No Left/Right Padding, Latest Upload First from Left) */}
       <div className="mb-3 -mx-5 sm:-mx-6 px-0">
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 px-0">
-          {/* 1. Leftmost Button: User Story Silhouette + '+' Badge + Curved Name along Circle */}
-          {(() => {
-            const myDisplayName = getTwoWordStoryName(currentUserName);
-            const myFontSize =
-              myDisplayName.length > 14 ? '6.4' : myDisplayName.length > 11 ? '7.0' : '7.5';
-            const myLatestThumb =
-              myActiveStories.length > 0
-                ? myActiveStories[myActiveStories.length - 1].imageUrl
-                : '';
-
-            return (
-              <div className="relative flex-shrink-0 w-[80px] h-[84px] flex items-center justify-center">
-                {/* Curved Circular Name SVG Hugging the Story Circle */}
-                <svg
-                  viewBox="0 0 84 88"
-                  className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-visible"
-                >
-                  <defs>
-                    <path id="story-arc-self" d="M 5.5,37 A 36.5,36.5 0 0,0 78.5,37" fill="none" />
-                  </defs>
-                  <text
-                    fill="#1e293b"
-                    fontSize={myFontSize}
-                    fontWeight="800"
-                    letterSpacing="0.35px"
-                  >
-                    <textPath href="#story-arc-self" startOffset="50%" textAnchor="middle">
-                      {myDisplayName.toUpperCase()}
-                    </textPath>
-                  </text>
-                </svg>
-
-                {/* Main Story Circle Avatar centered at (42, 37) */}
-                <div className="absolute top-[6px] left-1/2 -translate-x-1/2">
-                  <button
-                    type="button"
-                    onClick={openOwnStoriesOrUpload}
-                    className={`w-[60px] h-[60px] rounded-full p-[3px] transition-transform active:scale-95 cursor-pointer ${
-                      myActiveStories.length > 0
-                        ? 'bg-gradient-to-tr from-[#FEDA77] via-[#FF2E93] to-[#8134AF] shadow-[0_0_12px_rgba(221,42,123,0.38)]'
-                        : 'bg-gradient-to-tr from-slate-200 via-slate-300 to-slate-200'
-                    }`}
-                    title={`${currentUserName} (Maks 3x / 24 Jam)`}
-                  >
-                    <div className="w-full h-full rounded-full bg-white p-[2px] flex items-center justify-center overflow-hidden relative">
-                      {myLatestThumb ? (
-                        <img
-                          src={myLatestThumb}
-                          alt={currentUserName}
-                          className="w-full h-full rounded-full object-cover"
-                        />
-                      ) : (
-                        /* Silhouette Profile Picture User when no story uploaded yet */
-                        <div className="w-full h-full rounded-full bg-gradient-to-b from-slate-100 to-slate-200 flex items-center justify-center relative overflow-hidden">
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="w-8 h-8 text-slate-400/90 translate-y-1"
-                            fill="currentColor"
-                          >
-                            <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z" />
-                          </svg>
-                        </div>
-                      )}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-0">
+          {/* 1. Leftmost Button: Personal Story Circle (Restored as original without user name) */}
+          <div className="flex flex-col items-center flex-shrink-0 w-[72px]">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={openOwnStoriesOrUpload}
+                className="w-16 h-16 rounded-full p-[3.5px] transition-transform active:scale-95 cursor-pointer"
+                style={
+                  myActiveStories.length > 0
+                    ? {
+                        background:
+                          'conic-gradient(from 180deg, #FEDA77, #F58529, #FF2E93, #8134AF, #515BD4, #FEDA77)',
+                        boxShadow:
+                          '0 0 0 1.5px rgba(255, 46, 147, 0.32), 0 4px 12px rgba(221, 42, 123, 0.32)',
+                      }
+                    : {
+                        background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)',
+                      }
+                }
+                title="Cerita Anda (Maks 3x / 24 Jam)"
+              >
+                <div className="w-full h-full rounded-full bg-white p-[2px] flex items-center justify-center overflow-hidden relative">
+                  {myActiveStories.length > 0 ? (
+                    <img
+                      src={myActiveStories[myActiveStories.length - 1].imageUrl}
+                      alt="Cerita Anda"
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    /* Silhouette Profile Picture User when no story uploaded yet */
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-slate-100 to-slate-200 flex items-center justify-center relative overflow-hidden">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-9 h-9 text-slate-400/90 translate-y-1"
+                        fill="currentColor"
+                      >
+                        <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z" />
+                      </svg>
                     </div>
-                  </button>
-
-                  {/* Small Top-Reacted Single Emoji Badge at Top-Left (if own story has reactions) */}
-                  {myTopEmoji && (
-                    <span className="absolute -top-0.5 -left-1 w-5 h-5 rounded-full bg-white border border-slate-200 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
-                      {myTopEmoji}
-                    </span>
                   )}
-
-                  {/* Instagram '+' Badge at Bottom-Right of Circle -> Auto Open Camera */}
-                  <button
-                    type="button"
-                    onClick={handleOpenCameraAndCaptionModal}
-                    className={`absolute bottom-0 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#F8F9FD] shadow-md transition-transform active:scale-90 cursor-pointer ${
-                      remainingQuota > 0
-                        ? 'bg-gradient-to-tr from-[#0095F6] to-[#2563EB] text-white'
-                        : 'bg-slate-400 text-white'
-                    }`}
-                    title={
-                      remainingQuota > 0
-                        ? `Buka Kamera & Buat Story (${remainingQuota} kuota tersisa)`
-                        : 'Kuota Story Hari Ini Penuh (3/3)'
-                    }
-                  >
-                    <Plus className="w-3 h-3 stroke-[3]" />
-                  </button>
                 </div>
-              </div>
-            );
-          })()}
+              </button>
 
-          {/* 2. Other Employees' Active Story Circles (Sorted by Latest Upload First from Left + Colored Circle for New Story + Curved 2-Word Name) */}
+              {/* Small Top-Reacted Single Emoji Badge at Bottom-Left (if own story has reactions) */}
+              {myTopEmoji && (
+                <span className="absolute -bottom-1 left-0 w-5 h-5 rounded-full bg-white border border-slate-200 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
+                  {myTopEmoji}
+                </span>
+              )}
+
+              {/* Instagram '+' Badge at Bottom-Right -> Auto Open Camera */}
+              <button
+                type="button"
+                onClick={handleOpenCameraAndCaptionModal}
+                className={`absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full flex items-center justify-center border-2 border-[#F8F9FD] shadow-md transition-transform active:scale-90 cursor-pointer ${
+                  remainingQuota > 0
+                    ? 'bg-gradient-to-tr from-[#0095F6] to-[#2563EB] text-white'
+                    : 'bg-slate-400 text-white'
+                }`}
+                title={
+                  remainingQuota > 0
+                    ? `Buka Kamera & Buat Story (${remainingQuota} kuota tersisa)`
+                    : 'Kuota Story Hari Ini Penuh (3/3)'
+                }
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              </button>
+            </div>
+
+            <span className="text-[10px] font-bold text-slate-700 mt-1.5 truncate w-full text-center leading-tight">
+              Cerita Anda
+            </span>
+          </div>
+
+          {/* 2. Other Employees' Active Story Circles (Sorted by Latest Upload First from Left + Vivid Colored Circle for New Story + Curved 2-Word Name) */}
           {otherUserGroups.map((group, idx) => {
             const hasUnviewed = group.slides.some(
               (s) =>
@@ -1166,18 +1156,26 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 </svg>
 
                 <div className="absolute top-[6px] left-1/2 -translate-x-1/2">
-                  {/* Outer Story Ring: Vibrant Colored Circle when Story is New (hasUnviewed), Gray when already viewed */}
+                  {/* Outer Story Ring: Vivid Multi-Color Conic Circle Ring when Story is New (hasUnviewed), Gray when already viewed */}
                   <div
-                    className={`w-[60px] h-[60px] rounded-full p-[3px] transition-all duration-300 group-hover:scale-105 group-active:scale-95 ${
+                    className="w-[62px] h-[62px] rounded-full p-[3.5px] transition-all duration-300 group-hover:scale-105 group-active:scale-95"
+                    style={
                       hasUnviewed
-                        ? 'bg-gradient-to-tr from-[#FEDA77] via-[#FF2E93] to-[#8134AF] shadow-[0_0_12px_rgba(221,42,123,0.42)]'
-                        : 'bg-slate-300/80'
-                    }`}
+                        ? {
+                            background:
+                              'conic-gradient(from 180deg, #FEDA77, #F58529, #FF2E93, #8134AF, #515BD4, #FEDA77)',
+                            boxShadow:
+                              '0 0 0 1.5px rgba(255, 46, 147, 0.35), 0 4px 12px rgba(221, 42, 123, 0.35)',
+                          }
+                        : {
+                            background: '#cbd5e1',
+                          }
+                    }
                   >
                     <div className="w-full h-full rounded-full bg-white p-[2px] overflow-hidden flex items-center justify-center">
-                      {group.userAvatar || latestSlidePreview ? (
+                      {latestSlidePreview || group.userAvatar ? (
                         <img
-                          src={group.userAvatar || latestSlidePreview}
+                          src={latestSlidePreview || group.userAvatar}
                           alt={group.userName}
                           className="w-full h-full rounded-full object-cover"
                         />
