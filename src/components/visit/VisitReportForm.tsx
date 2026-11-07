@@ -198,6 +198,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // GPS Refresh state
   const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
 
+  // Scroll Detection for Navbar Auto-Scale (Shrink 4% on Scroll)
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const top = window.scrollY || document.documentElement.scrollTop;
+      setIsScrolled(top > 25);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   // File Input References
   const qscFullInputRef = useRef<HTMLInputElement>(null);
   const qscTopInputRef = useRef<HTMLInputElement>(null);
@@ -1741,7 +1753,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           Ala Glass iPhone dengan Smooth Sliding Lens Pill
           ============================================================ */}
       <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 max-w-md mx-auto px-4 pointer-events-none z-40 transition-all duration-300 select-none">
-        <div className="w-full rounded-[36px] flex items-center p-1.5 pointer-events-auto iphone-glass-dock shadow-2xl relative overflow-hidden">
+        <div
+          className={`w-full rounded-[36px] flex items-center p-1.5 pointer-events-auto transform-gpu transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] origin-bottom relative overflow-hidden ${
+            isScrolled ? 'iphone-glass-dock-scrolled scale-[0.96] shadow-xl' : 'iphone-glass-dock scale-100 shadow-2xl'
+          }`}
+        >
           {/* Top Specular Hairline Reflection */}
           <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
 
@@ -1766,6 +1782,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={() => {
               setActiveSection(1);
+              setIsScrolled(false);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             className="relative z-10 flex-1 py-2 sm:py-2.5 px-1.5 rounded-[26px] flex flex-col items-center justify-center gap-1 transition-all duration-300 active:scale-90 group cursor-pointer focus:outline-none"
@@ -1798,6 +1815,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={() => {
               setActiveSection(2);
+              setIsScrolled(false);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             className="relative z-10 flex-1 py-2 sm:py-2.5 px-1.5 rounded-[26px] flex flex-col items-center justify-center gap-1 transition-all duration-300 active:scale-90 group cursor-pointer focus:outline-none"
@@ -1810,27 +1828,23 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
                 }`}
               />
+
+              {/* Badge total observasi tepat di sisi kanan icon dengan z-index di atasnya & background putih */}
+              {formData.observations.length > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-white text-teal-800 px-1.5 py-0.2 rounded-full shadow-sm border border-slate-200/90 leading-none">
+                  {formData.observations.length}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-1">
-              <span
-                className={`text-[10px] tracking-tight leading-none transition-all duration-200 ${
-                  activeSection === 2
-                    ? 'text-slate-900 font-black scale-[1.03]'
-                    : 'text-slate-400 font-bold group-hover:text-slate-600'
-                }`}
-              >
-                Observasi
-              </span>
-              <span
-                className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full leading-none ${
-                  activeSection === 2
-                    ? 'bg-teal-100 text-teal-800'
-                    : 'bg-slate-200/70 text-slate-500'
-                }`}
-              >
-                {formData.observations.length}
-              </span>
-            </div>
+            <span
+              className={`text-[10px] tracking-tight leading-none transition-all duration-200 ${
+                activeSection === 2
+                  ? 'text-slate-900 font-black scale-[1.03]'
+                  : 'text-slate-400 font-bold group-hover:text-slate-600'
+              }`}
+            >
+              Observasi
+            </span>
             {activeSection === 2 && (
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 absolute bottom-1 shadow-[0_0_8px_rgba(20,184,166,0.9)] animate-in fade-in zoom-in-75 duration-200" />
             )}
@@ -1841,6 +1855,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={() => {
               setActiveSection(3);
+              setIsScrolled(false);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             className="relative z-10 flex-1 py-2 sm:py-2.5 px-1.5 rounded-[26px] flex flex-col items-center justify-center gap-1 transition-all duration-300 active:scale-90 group cursor-pointer focus:outline-none"
@@ -1853,27 +1868,23 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
                 }`}
               />
+
+              {/* Badge total bukti tepat di sisi kanan icon dengan z-index di atasnya & background putih */}
+              {formData.evidencePhotos.length + (formData.caPhotos?.length || 0) > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-white text-amber-700 px-1.5 py-0.2 rounded-full shadow-sm border border-slate-200/90 leading-none">
+                  {formData.evidencePhotos.length + (formData.caPhotos?.length || 0)}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-1">
-              <span
-                className={`text-[10px] tracking-tight leading-none uppercase transition-all duration-200 ${
-                  activeSection === 3
-                    ? 'text-slate-900 font-black scale-[1.03]'
-                    : 'text-slate-400 font-bold group-hover:text-slate-600'
-                }`}
-              >
-                BUKTI
-              </span>
-              <span
-                className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full leading-none ${
-                  activeSection === 3
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-slate-200/70 text-slate-500'
-                }`}
-              >
-                {formData.evidencePhotos.length + (formData.caPhotos?.length || 0)}
-              </span>
-            </div>
+            <span
+              className={`text-[10px] tracking-tight leading-none uppercase transition-all duration-200 ${
+                activeSection === 3
+                  ? 'text-slate-900 font-black scale-[1.03]'
+                  : 'text-slate-400 font-bold group-hover:text-slate-600'
+              }`}
+            >
+              BUKTI
+            </span>
             {activeSection === 3 && (
               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 absolute bottom-1 shadow-[0_0_8px_rgba(20,184,166,0.9)] animate-in fade-in zoom-in-75 duration-200" />
             )}
