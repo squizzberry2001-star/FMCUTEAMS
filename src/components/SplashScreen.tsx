@@ -42,7 +42,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   const lettersContainerRef = useRef<HTMLDivElement>(null);
   const isDissolvingRef = useRef(false);
 
-  // Synchronize mobile status bar / theme-color during splash
+  // Synchronize mobile status bar / theme-color / AMOLED pitch black during splash
   useEffect(() => {
     let metaTheme = document.querySelector('meta[name="theme-color"]');
     if (!metaTheme) {
@@ -57,23 +57,25 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       document.head.appendChild(metaApple);
     }
 
-    if (splashStage === 'animating' || splashStage === 'holding') {
-      metaTheme.setAttribute('content', '#000000');
-      metaApple.setAttribute('content', 'black-translucent');
-      document.documentElement.style.backgroundColor = '#000000';
-      document.body.style.backgroundColor = '#000000';
-    }
+    metaTheme.setAttribute('content', '#000000');
+    metaApple.setAttribute('content', 'black-translucent');
+    document.documentElement.style.setProperty('background-color', '#000000', 'important');
+    document.documentElement.style.setProperty('color-scheme', 'dark');
+    document.body.style.setProperty('background-color', '#000000', 'important');
+    document.body.style.setProperty('color-scheme', 'dark');
 
     return () => {
-      // Ensure on unmount status bar matches the active app theme
+      // Ensure on unmount status bar & document background match the active app theme
       const mTheme = document.querySelector('meta[name="theme-color"]');
       if (mTheme) mTheme.setAttribute('content', targetThemeColor);
       const mApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
       if (mApple) mApple.setAttribute('content', 'default');
-      document.documentElement.style.backgroundColor = targetThemeColor;
-      document.body.style.backgroundColor = targetThemeColor;
+      document.documentElement.style.setProperty('background-color', targetThemeColor, 'important');
+      document.documentElement.style.setProperty('color-scheme', 'light');
+      document.body.style.setProperty('background-color', targetThemeColor, 'important');
+      document.body.style.setProperty('color-scheme', 'light');
     };
-  }, [splashStage, targetThemeColor]);
+  }, [targetThemeColor]);
 
   // Silky-Smooth Organic Cross-Dissolve:
   // Instead of an artificial harsh white flash, the AMOLED black canvas smoothly cross-fades
@@ -85,14 +87,16 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
     setSplashStage('dissolving');
 
-    // At the midpoint of the dissolve (380ms), seamlessly blend the mobile status bar theme-color
+    // At the midpoint of the dissolve (380ms), seamlessly blend the mobile status bar & body background
     setTimeout(() => {
       const metaTheme = document.querySelector('meta[name="theme-color"]');
       if (metaTheme) metaTheme.setAttribute('content', targetThemeColor);
       const metaApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
       if (metaApple) metaApple.setAttribute('content', 'default');
-      document.documentElement.style.backgroundColor = targetThemeColor;
-      document.body.style.backgroundColor = targetThemeColor;
+      document.documentElement.style.setProperty('background-color', targetThemeColor, 'important');
+      document.documentElement.style.setProperty('color-scheme', 'light');
+      document.body.style.setProperty('background-color', targetThemeColor, 'important');
+      document.body.style.setProperty('color-scheme', 'light');
     }, 380);
 
     // Complete dissolve at 850ms, then unmount splash
@@ -284,10 +288,15 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   return (
     <div
       onClick={triggerDissolve}
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#000000] cursor-pointer select-none touch-none overscroll-none"
+      className="fixed z-[9999] flex items-center justify-center bg-[#000000] cursor-pointer select-none touch-none overscroll-none"
       style={{
-        height: '100dvh',
-        minHeight: '100vh',
+        position: 'fixed',
+        top: '-20vh',
+        bottom: '-20vh',
+        left: '-15vw',
+        right: '-15vw',
+        width: '130vw',
+        height: '140vh',
         backgroundColor: '#000000',
         opacity: isDissolving ? 0 : 1,
         transition: 'opacity 850ms cubic-bezier(0.22, 1, 0.36, 1)',
