@@ -37,12 +37,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
     opacity: number;
     scale: number;
     isExpanding: boolean;
+    isBouncing: boolean;
   }>({
     x: 0,
     y: 0,
     opacity: 0,
     scale: 1,
     isExpanding: false,
+    isBouncing: true,
   });
 
   // Admin Form State
@@ -94,6 +96,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
       ...prev,
       scale: 90,
       isExpanding: true,
+      isBouncing: false,
     }));
 
     // Complete dissolve after 850ms for a majestic, smooth transition
@@ -103,9 +106,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
   };
 
   // 1. Splash Animation Logic:
-  // - Starts with a calm breath (280ms)
-  // - Glides at majestic pace (160ms per character)
-  // - Stops right after 'S' on TEAMS for 600ms
+  // - Starts with the ball dropping from above outside the screen, bouncing twice like a ball
+  // - Dashes immediately to the first letter 'F'
+  // - Glides through each letter at slower majestic cadence (230ms per character)
+  // - Stops right after 'S' on TEAMS for exactly 3 seconds (3000ms)
   // - Expands and dissolves into Login Form
   useEffect(() => {
     if (splashStage !== 'animating-letters') return;
@@ -137,6 +141,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
           opacity: 1,
           scale: 1,
           isExpanding: false,
+          isBouncing: false,
         });
 
         if (index < CHARACTERS.length) {
@@ -145,35 +150,79 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
       }
     };
 
-    // Calm initial pause before gliding begins (280ms)
+    // Initial measurement after 80ms
     const t0 = setTimeout(() => {
       if (!isMounted) return;
-      updateDotToChar(0);
 
-      let currentIdx = 0;
-      const interval = setInterval(() => {
-        if (!isMounted) {
-          clearInterval(interval);
-          return;
-        }
-        currentIdx++;
-        if (currentIdx <= CHARACTERS.length) {
-          updateDotToChar(currentIdx);
-        } else {
-          clearInterval(interval);
-          // Dot has arrived right after 'S' and stops there!
-          // Pauses for 5 seconds (5000ms) as requested by user
-          const t1 = setTimeout(() => {
-            if (isMounted) {
-              triggerDissolve();
+      const char0El = charRefs.current[0];
+      const contEl = lettersContainerRef.current;
+      if (!char0El || !contEl) return;
+
+      const fRect = char0El.getBoundingClientRect();
+      const contRect = contEl.getBoundingClientRect();
+      const fX = fRect.left - contRect.left + fRect.width / 2;
+      const fY = fRect.top - contRect.top + fRect.height / 2;
+      // Start bounce slightly to the left of 'F'
+      const startX = Math.max(12, fX - 75);
+
+      // Phase 1: Ball drops from above outside viewport and bounces like a ball (1050ms)
+      setDotPos({
+        x: startX,
+        y: fY,
+        opacity: 1,
+        scale: 1,
+        isExpanding: false,
+        isBouncing: true,
+      });
+
+      // Phase 2: After bouncing settles (1050ms), dash directly into letter 'F'
+      const tBounce = setTimeout(() => {
+        if (!isMounted) return;
+
+        setDotPos({
+          x: fX,
+          y: fY,
+          opacity: 1,
+          scale: 1,
+          isExpanding: false,
+          isBouncing: false,
+        });
+
+        // Phase 3: Arrive at 'F' after dash (240ms) and illuminate 'F'
+        const tDash = setTimeout(() => {
+          if (!isMounted) return;
+          setRevealedCharIndex(0);
+
+          // Phase 4: Reveal remaining letters sequentially at slower pace (230ms per char)
+          let currentIdx = 0;
+          const letterInterval = setInterval(() => {
+            if (!isMounted) {
+              clearInterval(letterInterval);
+              return;
             }
-          }, 5000);
-          timerIds.push(t1);
-        }
-      }, 160); // 160ms per character for an elegant, majestic glide
+            currentIdx++;
+            if (currentIdx <= CHARACTERS.length) {
+              updateDotToChar(currentIdx);
+            } else {
+              clearInterval(letterInterval);
+              // Dot has arrived right after 'S' and stops there!
+              // Pause for 3 seconds (3000ms) as requested by user
+              const tHold = setTimeout(() => {
+                if (isMounted) {
+                  triggerDissolve();
+                }
+              }, 3000);
+              timerIds.push(tHold);
+            }
+          }, 230); // 230ms per character for slower, majestic letter revelation
 
-      return () => clearInterval(interval);
-    }, 280);
+        }, 240); // 240ms dash from bounce spot to 'F'
+        timerIds.push(tDash);
+
+      }, 1050); // 1050ms bounce duration
+      timerIds.push(tBounce);
+
+    }, 80);
 
     timerIds.push(t0);
 
@@ -192,6 +241,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
       opacity: 0,
       scale: 1,
       isExpanding: false,
+      isBouncing: true,
     });
     setSplashStage('animating-letters');
   };
@@ -242,9 +292,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
 
       {/* =========================================================================
           STAGE A: CLEAN CINEMATIC SPLASH SCREEN (PERFECTLY CENTERED, NO BUTTONS/TEXT)
-          - No buttons, no top bar, no footer, no subtitles.
-          - Large glowing dot glides and stops right after 'S' on TEAMS.
-          - Multi-tier progressive Gaussian text-shadow: seamless, radiant, zero boxiness.
+          - Bouncing ball drops from outside the top of the viewport.
+          - Dashes immediately into letter 'F'.
+          - Slower, majestic revelation of FMCU TEAMS.
+          - Stops right after 'S' for exactly 3 seconds.
+          - Seamless multi-tier Gaussian text-shadow: radiant, zero boxiness.
           ========================================================================= */}
       {splashStage !== 'ready' && (
         <div
@@ -264,19 +316,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
             ref={lettersContainerRef}
             className="relative inline-flex items-center justify-center px-6 py-8 overflow-visible"
           >
-            {/* LARGE GLOWING WHITE DOT (starts at 'F', glides to 'S', stops after 'S', expands and dissolves) */}
+            {/* LARGE GLOWING WHITE DOT (Bounces down from above, dashes to 'F', reveals letters, stops after 'S' for 3s) */}
             <div
-              className="absolute rounded-full pointer-events-none z-30"
+              className={`absolute rounded-full pointer-events-none z-30 ${
+                dotPos.isBouncing ? 'animate-ball-drop-bounce' : ''
+              }`}
               style={{
                 left: `${dotPos.x}px`,
                 top: `${dotPos.y}px`,
                 width: '26px',
                 height: '26px',
-                transform: `translate(-50%, -50%) scale(${dotPos.scale})`,
+                transform: dotPos.isBouncing
+                  ? undefined
+                  : `translate(-50%, -50%) scale(${dotPos.scale})`,
                 opacity: dotPos.opacity,
                 transition: dotPos.isExpanding
                   ? 'transform 850ms cubic-bezier(0.4, 0, 0.2, 1), opacity 650ms ease-out'
-                  : 'left 160ms cubic-bezier(0.25, 1, 0.35, 1), top 160ms cubic-bezier(0.25, 1, 0.35, 1), opacity 200ms ease-out',
+                  : dotPos.isBouncing
+                  ? 'none'
+                  : 'left 230ms cubic-bezier(0.22, 1, 0.36, 1), top 230ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out',
                 background: '#FFFFFF',
                 boxShadow: dotPos.isExpanding
                   ? '0 0 160px 70px #FFFFFF, 0 0 320px 120px rgba(45,212,191,0.9), 0 0 500px 180px rgba(56,189,248,0.7)'
@@ -313,7 +371,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users = initialUsers, onLo
                         ? 'translateY(0) scale(1)'
                         : 'translateY(6px) scale(0.85)',
                       color: '#FFFFFF',
-                      // Multi-tiered concentric Gaussian text-shadow: seamless, deep bloom, no boxiness
+                      // Multi-tiered concentric Gaussian text-shadow: seamless, deep bloom, zero boxiness
                       textShadow: isCurrent
                         ? '0 0 8px #FFFFFF, 0 0 18px rgba(255, 255, 255, 0.9), 0 0 32px rgba(45, 212, 191, 0.8), 0 0 55px rgba(45, 212, 191, 0.5), 0 0 85px rgba(56, 189, 248, 0.3)'
                         : isRevealed
