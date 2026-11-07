@@ -515,10 +515,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                 return next;
               });
             } else {
-              // All letters of FMCU TEAMS have been revealed at their random dot positions!
+              // All letters of FMCU TEAMS have been revealed!
               if (intervalId) clearInterval(intervalId);
+              setCurrentActiveChar(-1);
 
-              const tImmediateJump = setTimeout(() => {
+              // Hold pause (1250ms) so the full "FMCU TEAMS" text is clearly readable before jumping to Actual Date Pill
+              const tReadableHold = setTimeout(() => {
                 if (!isMounted) return;
 
                 // Measure exact position & size of the Actual Date Pill
@@ -567,8 +569,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                   timerIds.push(tDissolve);
                 }, 340);
                 timerIds.push(tLandAndMorph);
-              }, 160);
-              timerIds.push(tImmediateJump);
+              }, 1250);
+              timerIds.push(tReadableHold);
             }
           }, 230); // 230ms per random letter jump
         }, 210);
@@ -662,11 +664,11 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       />
 
       {/* Typography & Dot Stage (z-20, sits above the portal canvas; ZERO parent transform distortion so pill coordinates are 100% exact) */}
-      <div className="relative z-20 flex flex-col items-center justify-center px-6 py-8 overflow-visible select-none">
+      <div className="relative z-20 w-full flex flex-col items-center justify-center px-3 sm:px-6 py-8 overflow-visible select-none">
         {/* Typography & Ball Coordinate Grid */}
         <div
           ref={lettersContainerRef}
-          className="relative inline-flex items-center justify-center overflow-visible"
+          className="relative inline-flex items-center justify-center overflow-visible max-w-full"
         >
           {/* HARDWARE-ACCELERATED OUTER WRAPPER (Translates trajectory via GPU translate3d) */}
           <div
@@ -736,9 +738,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             </div>
           </div>
 
-          {/* Typography "FMCU TEAMS" with GPU-Optimized Seamless Text-Shadow */}
+          {/* Typography "FMCU TEAMS" with GPU-Optimized Seamless Text-Shadow (Fitted to Mobile Viewport Width) */}
           <div
-            className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans overflow-visible"
+            className="flex items-center justify-center text-[clamp(2.65rem,11.2vw,4.75rem)] sm:text-6xl md:text-7xl font-black tracking-[0.07em] sm:tracking-[0.20em] font-sans overflow-visible whitespace-nowrap"
             style={{
               opacity: isJumpingOrLater ? 0 : 1,
               filter: isJumpingOrLater ? 'blur(5px)' : 'none',
@@ -757,7 +759,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                   <span
                     key={idx}
                     ref={(el) => (charRefs.current[idx] = el)}
-                    className="w-3 sm:w-6 inline-block select-none"
+                    className="w-3.5 sm:w-6 inline-block select-none"
                   >
                     &nbsp;
                   </span>
@@ -791,7 +793,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             {/* Anchor Slot right AFTER letter 'S' on TEAMS */}
             <span
               ref={afterSRef}
-              className="w-4 sm:w-6 h-8 inline-flex items-center justify-center select-none"
+              className="absolute right-0 w-0 h-8 inline-flex items-center justify-center select-none pointer-events-none"
             />
           </div>
         </div>
