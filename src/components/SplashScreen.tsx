@@ -398,15 +398,21 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         }
       }
 
-      // Slot 10: anchor slot right after 'S'
-      if (afterSRef.current) {
+      // Slot 10: clear parking slot strictly to the right of letter 'S' (never covering any letter)
+      const sEl = charRefs.current[CHARACTERS.length - 1];
+      if (sEl) {
+        positions.push({
+          x: sEl.offsetLeft + sEl.offsetWidth + 20,
+          y: sEl.offsetTop + sEl.offsetHeight / 2,
+        });
+      } else if (afterSRef.current) {
         positions.push({
           x: afterSRef.current.offsetLeft + afterSRef.current.offsetWidth / 2,
           y: afterSRef.current.offsetTop + afterSRef.current.offsetHeight / 2,
         });
       } else {
         const last = positions[positions.length - 1];
-        positions.push({ x: last ? last.x + 32 : 260, y: last ? last.y : 35 });
+        positions.push({ x: last ? last.x + 34 : 260, y: last ? last.y : 35 });
       }
 
       return positions;
@@ -518,6 +524,24 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
               // All letters of FMCU TEAMS have been revealed!
               if (intervalId) clearInterval(intervalId);
               setCurrentActiveChar(-1);
+
+              // Park the ball in the clear slot strictly after 'S' so it NEVER covers any letter while reading
+              const afterSTarget =
+                validPositions[CHARACTERS.length] || {
+                  x: (validPositions[CHARACTERS.length - 1]?.x || 250) + 34,
+                  y: validPositions[CHARACTERS.length - 1]?.y || 35,
+                };
+              setDotPos({
+                x: afterSTarget.x,
+                y: afterSTarget.y,
+                width: 26,
+                height: 26,
+                opacity: 1,
+                scale: 1,
+                isBouncing: false,
+                isJumping: false,
+                isMorphingPill: false,
+              });
 
               // Hold pause (1250ms) so the full "FMCU TEAMS" text is clearly readable before jumping to Actual Date Pill
               const tReadableHold = setTimeout(() => {
@@ -740,7 +764,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
           {/* Typography "FMCU TEAMS" with GPU-Optimized Seamless Text-Shadow (Fitted to Mobile Viewport Width) */}
           <div
-            className="flex items-center justify-center text-[clamp(2.65rem,11.2vw,4.75rem)] sm:text-6xl md:text-7xl font-black tracking-[0.07em] sm:tracking-[0.20em] font-sans overflow-visible whitespace-nowrap"
+            className="flex items-center justify-center text-[clamp(2.25rem,9.3vw,4.5rem)] sm:text-6xl md:text-7xl font-black tracking-[0.05em] sm:tracking-[0.18em] font-sans overflow-visible whitespace-nowrap"
             style={{
               opacity: isJumpingOrLater ? 0 : 1,
               filter: isJumpingOrLater ? 'blur(5px)' : 'none',
@@ -759,7 +783,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                   <span
                     key={idx}
                     ref={(el) => (charRefs.current[idx] = el)}
-                    className="w-3.5 sm:w-6 inline-block select-none"
+                    className="w-3 sm:w-6 inline-block select-none"
                   >
                     &nbsp;
                   </span>
@@ -790,10 +814,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
               );
             })}
 
-            {/* Anchor Slot right AFTER letter 'S' on TEAMS */}
+            {/* Clear Anchor Slot strictly AFTER letter 'S' on TEAMS so parked ball never covers any letter */}
             <span
               ref={afterSRef}
-              className="absolute right-0 w-0 h-8 inline-flex items-center justify-center select-none pointer-events-none"
+              className="w-7 sm:w-9 h-8 ml-1 inline-flex items-center justify-center select-none shrink-0 pointer-events-none"
             />
           </div>
         </div>
