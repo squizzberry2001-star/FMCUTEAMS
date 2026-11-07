@@ -48,14 +48,6 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
             : 'iphone-glass-dock scale-100 w-full max-w-md p-1.5 rounded-[36px] shadow-2xl'
         }`}
       >
-        {/* Optical Glass Refraction & Distortion Simulation Layer */}
-        <div className="pointer-events-none absolute inset-0 rounded-[inherit] overflow-hidden z-0">
-          {/* Prismatic Chromatic Dispersion Fringe */}
-          <div className="absolute inset-0 bg-gradient-to-r from-teal-400/12 via-white/10 to-rose-400/12 mix-blend-overlay opacity-75" />
-          {/* Subtle Convex Lens Distortion Glare */}
-          <div className="absolute -top-1/2 left-1/4 right-1/4 h-full bg-gradient-to-b from-white/60 to-transparent blur-sm rounded-full opacity-60" />
-        </div>
-
         {/* Top Prismatic Hairline Reflection (Apple iPhone Glass Specular) */}
         <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95 z-0" />
 
