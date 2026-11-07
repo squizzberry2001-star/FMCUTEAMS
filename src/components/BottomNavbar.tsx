@@ -91,8 +91,8 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
                 <Icon
                   className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                     isActive
-                      ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
-                      : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
+                      ? 'scale-115 text-black stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
+                      : 'scale-100 stroke-[2] text-black/70 group-hover:text-black group-hover:scale-105'
                   }`}
                 />
               </div>
@@ -101,8 +101,8 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
               <span
                 className={`text-[10px] tracking-tight leading-none transition-all duration-300 ${
                   isActive
-                    ? 'text-slate-900 font-black scale-[1.03]'
-                    : 'text-slate-400 font-semibold group-hover:text-slate-600'
+                    ? 'text-black font-black scale-[1.03]'
+                    : 'text-black/70 font-bold group-hover:text-black'
                 }`}
               >
                 {item.label}
