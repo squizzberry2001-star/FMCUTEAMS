@@ -52,6 +52,7 @@ import {
   EvidencePhoto
 } from '../../types/visitReport';
 import { VisitPdfPreview } from './VisitPdfPreview';
+import { PageTransitionLoader } from '../PageTransitionLoader';
 
 interface VisitReportFormProps {
   agenda: ScheduleAgenda;
@@ -378,6 +379,23 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   // Preview Mode
   const [showPreview, setShowPreview] = useState(false);
+
+  // Smooth Blur + Silhouette + Mini "FMCU....." Transition Loader on Section / SubTab changes
+  const [isSectionTransitioning, setIsSectionTransitioning] = useState(false);
+  const hasMountedSectionRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasMountedSectionRef.current) {
+      hasMountedSectionRef.current = true;
+      return;
+    }
+    setIsSectionTransitioning(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const timer = setTimeout(() => {
+      setIsSectionTransitioning(false);
+    }, 320);
+    return () => clearTimeout(timer);
+  }, [activeSection, obsSubTab, evidenceSubTab, showPreview]);
 
   // Modal zoom photo
   const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
@@ -1212,7 +1230,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   // If in PDF Preview mode, render VisitPdfPreview
   if (showPreview) {
-    return <VisitPdfPreview data={formData} onBack={() => setShowPreview(false)} />;
+    return (
+      <>
+        <PageTransitionLoader visible={isSectionTransitioning} />
+        <VisitPdfPreview data={formData} onBack={() => setShowPreview(false)} />
+      </>
+    );
   }
 
   // Filter observations for current active sub-tab (QSC or OPI)
@@ -1224,6 +1247,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F8F9FD] select-none overflow-y-auto no-scrollbar px-4 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-36 max-w-6xl mx-auto w-full">
+      {/* Section / Sub-Tab Blur + Silhouette + Mini "FMCU....." Bouncing Loader */}
+      <PageTransitionLoader visible={isSectionTransitioning} />
       {/* =====================================================================
           MANDATORY POP-UP SUBMIT ACTUAL IN / OUT (BEFORE FILLING FORM / OFFLINE)
           ===================================================================== */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from './types';
 import { initialAgendas, initialUsers } from './data/mockData';
@@ -10,6 +10,7 @@ import { NewAgendaModal } from './components/NewAgendaModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
 import { LoginPage } from './components/LoginPage';
 import { SplashScreen } from './components/SplashScreen';
+import { PageTransitionLoader } from './components/PageTransitionLoader';
 import { Smartphone, Monitor, Shield, ArrowLeft, MapPin, Navigation, WifiOff, RotateCw } from 'lucide-react';
 
 // Code-split heavy components to make initial splash & login load instantly on mobile
@@ -193,6 +194,22 @@ export const App: React.FC = () => {
 
   // Forced layout override (auto / desktop / mobile) for testing on PC
   const [layoutMode, setLayoutMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
+
+  // Smooth Blur + Silhouette + Mini "FMCU....." Transition Loader on Page / Tab changes
+  const [isPageTransitioning, setIsPageTransitioning] = useState(false);
+  const hasMountedNavRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasMountedNavRef.current) {
+      hasMountedNavRef.current = true;
+      return;
+    }
+    setIsPageTransitioning(true);
+    const timer = setTimeout(() => {
+      setIsPageTransitioning(false);
+    }, 340);
+    return () => clearTimeout(timer);
+  }, [mobileTab, mobileScreen, adminPreviewMode, layoutMode]);
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth < 1024;
@@ -409,7 +426,8 @@ export const App: React.FC = () => {
             targetThemeColor="#FFFFFF"
           />
         )}
-        <Suspense fallback={<div className="min-h-screen w-full bg-[#F4F6FB] flex items-center justify-center" />}>
+        <PageTransitionLoader visible={isPageTransitioning} />
+        <Suspense fallback={<PageTransitionLoader visible={true} />}>
           <AdminPortal
             adminUser={user}
             agendas={agendas}
@@ -440,6 +458,7 @@ export const App: React.FC = () => {
         />
       )}
       {gpsMandatoryModal}
+      <PageTransitionLoader visible={isPageTransitioning} />
       <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
       {/* Admin Preview Floating Header */}
       {user.isAdmin && adminPreviewMode && (
@@ -516,7 +535,7 @@ export const App: React.FC = () => {
       {/* Main Content: Responsive Desktop or Native Mobile */}
       {mobileScreen === 'visit-form' && selectedAgenda ? (
         /* Full UI/UX FORM VISIT (KHUSUS AGENDA VISIT) */
-        <Suspense fallback={<div className="min-h-screen w-full bg-[#F8F9FD] flex items-center justify-center" />}>
+        <Suspense fallback={<PageTransitionLoader visible={true} />}>
           <VisitReportForm
             agenda={selectedAgenda}
             user={user}
@@ -583,7 +602,7 @@ export const App: React.FC = () => {
         </div>
       ) : (
         /* Full Desktop Web Dashboard */
-        <Suspense fallback={<div className="min-h-screen w-full bg-[#F8F9FD] flex items-center justify-center" />}>
+        <Suspense fallback={<PageTransitionLoader visible={true} />}>
           <DesktopDashboard
             user={user}
             agendas={agendas}
