@@ -103,7 +103,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       setTimeout(() => {
         setSplashStage('completed');
         onComplete();
-      }, 850);
+      }, 400);
       return;
     }
 
@@ -118,7 +118,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       setTimeout(() => {
         setSplashStage('completed');
         onComplete();
-      }, 850);
+      }, 400);
       return;
     }
 
@@ -131,7 +131,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     ];
     const maxRadius = Math.max(...cornerDistances) + 120;
     const initialRadius = 14; // exact radius of 26px dot
-    const duration = 950;
+    const duration = 400; // Fast & snappy aperture dissolve (400ms)
     const startTime = performance.now();
     let themeSwitched = false;
 
@@ -155,12 +155,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / duration);
 
-      // Smooth cubic-bezier ease-out curve: gentle start from dot, seamless dissolve into page
-      const ease = 1 - Math.pow(1 - progress, 3.2);
+      // Smooth cubic-bezier ease-out curve: rapid aperture opening into page
+      const ease = 1 - Math.pow(1 - progress, 2.5);
       const currentRadius = initialRadius + ease * (maxRadius - initialRadius);
 
       // Midpoint theme-color switch for mobile status bar (Dynamic Island / notch)
-      if (progress >= 0.35 && !themeSwitched) {
+      if (progress >= 0.20 && !themeSwitched) {
         themeSwitched = true;
         const metaTheme = document.querySelector('meta[name="theme-color"]');
         if (metaTheme) metaTheme.setAttribute('content', targetThemeColor);
@@ -375,12 +375,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                 isFloating: true,
               }));
 
-              // Pause for 2 seconds (2000ms) with floating motion before optical aperture reveal
+              // Pause briefly (950ms) with floating motion before fast optical aperture reveal
               const tHold = setTimeout(() => {
                 if (isMounted) {
                   triggerDissolve();
                 }
-              }, 2000);
+              }, 950);
               timerIds.push(tHold);
             }
           }, 230); // 230ms per character
@@ -444,9 +444,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         className="relative z-20 flex flex-col items-center justify-center px-6 py-8 overflow-visible select-none"
         style={{
           opacity: isDissolving ? 0 : 1,
-          transform: isDissolving ? 'scale(1.05) translate3d(0, -6px, 0)' : 'scale(1) translate3d(0, 0, 0)',
-          filter: isDissolving ? 'blur(6px)' : 'none',
-          transition: 'opacity 650ms cubic-bezier(0.25, 1, 0.5, 1), transform 750ms cubic-bezier(0.25, 1, 0.5, 1), filter 600ms ease-out',
+          transform: isDissolving ? 'scale(1.04) translate3d(0, -4px, 0)' : 'scale(1) translate3d(0, 0, 0)',
+          filter: isDissolving ? 'blur(5px)' : 'none',
+          transition: 'opacity 280ms cubic-bezier(0.25, 1, 0.5, 1), transform 350ms cubic-bezier(0.25, 1, 0.5, 1), filter 250ms ease-out',
           willChange: 'opacity, transform, filter',
         }}
       >
