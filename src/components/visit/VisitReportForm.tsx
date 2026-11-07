@@ -170,7 +170,7 @@ const FMCU_GDRIVE_FOLDER_ID = '1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
 const FMCU_GDRIVE_FOLDER_URL =
   'https://drive.google.com/drive/u/3/folders/1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
 const DEFAULT_GAS_GDRIVE_URL =
-  'https://script.google.com/macros/s/AKfycbzFMCU_VisitReport_GDrive_AutoStorage/exec';
+  'https://script.google.com/macros/s/AKfycbxSL7hmNr0oGgAR19o3KYR3AMSHD2b9tY3uZ196AS_XTzTA9Wv3OGxE_NZ6ZGUnDe_EeQ/exec';
 
 const uploadPhotoToGasGDrive = async (params: {
   base64Data: string;
@@ -181,7 +181,7 @@ const uploadPhotoToGasGDrive = async (params: {
   visitDate: string;
   section: string;
 }): Promise<{ driveFileId: string; driveUrl: string; synced: boolean }> => {
-  const gasUrl = localStorage.getItem('fmcu_gas_webapp_url') || DEFAULT_GAS_GDRIVE_URL;
+  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
   const driveFileId = `GDRIVE_${params.storeCode}_${Date.now()}`;
   const driveUrl = FMCU_GDRIVE_FOLDER_URL;
 

@@ -4,33 +4,16 @@ export const FMCU_GDRIVE_FOLDER_ID = '1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
 export const FMCU_GDRIVE_FOLDER_URL =
   'https://drive.google.com/drive/u/3/folders/1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
 
-export const GAS_WEBAPP_STORAGE_KEY = 'fmcu_gas_webapp_url';
+// Official Deployed Google Apps Script Web App URL (Hardcoded Auto-Sync Backend)
 export const DEFAULT_GAS_GDRIVE_URL =
-  'https://script.google.com/macros/s/AKfycbzFMCU_VisitReport_GDrive_AutoStorage/exec';
+  'https://script.google.com/macros/s/AKfycbxSL7hmNr0oGgAR19o3KYR3AMSHD2b9tY3uZ196AS_XTzTA9Wv3OGxE_NZ6ZGUnDe_EeQ/exec';
 
 const IDB_NAME = 'fmcu_stories_gdrive_db_v1';
 const IDB_STORE = 'stories_store';
 const IDB_KEY = 'active_stories_24h';
 
 export const getGasWebAppUrl = (): string => {
-  try {
-    return localStorage.getItem(GAS_WEBAPP_STORAGE_KEY) || DEFAULT_GAS_GDRIVE_URL;
-  } catch {
-    return DEFAULT_GAS_GDRIVE_URL;
-  }
-};
-
-export const setGasWebAppUrl = (url: string): void => {
-  try {
-    const trimmed = url.trim();
-    if (trimmed) {
-      localStorage.setItem(GAS_WEBAPP_STORAGE_KEY, trimmed);
-    } else {
-      localStorage.removeItem(GAS_WEBAPP_STORAGE_KEY);
-    }
-  } catch (e) {
-    console.warn(e);
-  }
+  return DEFAULT_GAS_GDRIVE_URL;
 };
 
 const openStoriesIdb = (): Promise<IDBDatabase> => {
@@ -76,7 +59,7 @@ export const loadStoriesFromIdb = async (): Promise<StorySlide[] | null> => {
 
 /**
  * Upload a new Story photo + metadata to Google Drive Folder (1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a)
- * via Google Apps Script (GAS).
+ * via Google Apps Script (GAS) automatically.
  */
 export const uploadStoryToGasGDrive = async (
   slide: StorySlide
@@ -87,7 +70,7 @@ export const uploadStoryToGasGDrive = async (
   remoteImageUrl?: string;
   remoteStories?: StorySlide[];
 }> => {
-  const gasUrl = getGasWebAppUrl();
+  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
   const safeName = slide.userName.replace(/[^a-zA-Z0-9_-]/g, '_');
   const filename = `FMCU_STORY_${safeName}_${slide.createdAtMs}.jpg`;
   const fallbackFileId = `GDRIVE_${FMCU_GDRIVE_FOLDER_ID}_${slide.createdAtMs}`;
@@ -122,7 +105,6 @@ export const uploadStoryToGasGDrive = async (
   };
 
   try {
-    // Try standard CORS POST (text/plain avoids preflight OPTIONS in Google Apps Script)
     const response = await fetch(gasUrl, {
       method: 'POST',
       headers: {
@@ -144,7 +126,6 @@ export const uploadStoryToGasGDrive = async (
       }
     }
   } catch {
-    // Fallback to no-cors fire-and-forget if GAS redirect blocks CORS read
     try {
       await fetch(gasUrl, {
         method: 'POST',
@@ -172,15 +153,11 @@ export const uploadStoryToGasGDrive = async (
 };
 
 /**
- * Fetch active (<24h) stories from Google Drive folder via Google Apps Script.
+ * Fetch active (<24h) stories from Google Drive folder via Google Apps Script automatically.
  */
 export const fetchActiveStoriesFromGasGDrive = async (): Promise<StorySlide[] | null> => {
-  const gasUrl = getGasWebAppUrl();
-  if (
-    !gasUrl ||
-    gasUrl === DEFAULT_GAS_GDRIVE_URL ||
-    (typeof navigator !== 'undefined' && !navigator.onLine)
-  ) {
+  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return null;
   }
 
@@ -198,7 +175,7 @@ export const fetchActiveStoriesFromGasGDrive = async (): Promise<StorySlide[] | 
       return data.stories;
     }
   } catch {
-    // Silent fallback when GAS URL is not yet deployed or offline
+    // Silent fallback if offline or CORS redirect
   }
   return null;
 };
@@ -211,7 +188,7 @@ export const syncStoryReactionToGasGDrive = async (params: {
   emoji: string;
   userName: string;
 }): Promise<void> => {
-  const gasUrl = getGasWebAppUrl();
+  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
   try {
@@ -237,7 +214,7 @@ export const syncStoryViewToGasGDrive = async (params: {
   storyId: string;
   viewerName: string;
 }): Promise<void> => {
-  const gasUrl = getGasWebAppUrl();
+  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
   try {
@@ -260,7 +237,7 @@ export const syncStoryViewToGasGDrive = async (params: {
  * Delete story and move its photo file to Trash in Google Drive folder via GAS.
  */
 export const deleteStoryFromGasGDrive = async (storyId: string): Promise<void> => {
-  const gasUrl = getGasWebAppUrl();
+  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
   try {
