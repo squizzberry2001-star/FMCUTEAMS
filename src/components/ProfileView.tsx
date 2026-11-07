@@ -26,6 +26,7 @@ interface ProfileViewProps {
   onBack: () => void;
   onLogout: () => void;
   onUpdateUser?: (updatedUser: User) => void;
+  onReplaySplash?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -34,6 +35,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onBack,
   onLogout,
   onUpdateUser,
+  onReplaySplash,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -396,6 +398,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </span>
         </div>
       </div>
+
+      {/* Putar Ulang Animasi Splash */}
+      {onReplaySplash && (
+        <button
+          type="button"
+          onClick={onReplaySplash}
+          className="w-full py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors flex items-center justify-center gap-2 mb-3 border border-slate-200/80 active:scale-98"
+        >
+          <Sparkles className="w-4 h-4 text-teal-600" />
+          <span>Putar Ulang Animasi Splash</span>
+        </button>
+      )}
 
       {/* Logout Button */}
       <button

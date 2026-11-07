@@ -1,16 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { User } from '../types';
 
 interface SplashScreenProps {
   onComplete: () => void;
+  user?: User | null;
+  targetThemeColor?: string;
 }
 
 const CHARACTERS = ['F', 'M', 'C', 'U', ' ', 'T', 'E', 'A', 'M', 'S'];
 
-export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
-  // Splash stages: 'animating-letters' | 'expanding-dot' | 'dissolving-flash' | 'completed'
+export const SplashScreen: React.FC<SplashScreenProps> = ({
+  onComplete,
+  user = null,
+  targetThemeColor = '#F8F9FD',
+}) => {
+  // Splash stages: 'animating' | 'holding' | 'dissolving' | 'completed'
   const [splashStage, setSplashStage] = useState<
-    'animating-letters' | 'expanding-dot' | 'dissolving-flash' | 'completed'
-  >('animating-letters');
+    'animating' | 'holding' | 'dissolving' | 'completed'
+  >('animating');
 
   const [revealedCharIndex, setRevealedCharIndex] = useState<number>(-1);
 
@@ -19,7 +26,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     y: number;
     opacity: number;
     scale: number;
-    isExpanding: boolean;
     isBouncing: boolean;
     isFloating: boolean;
   }>({
@@ -27,7 +33,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     y: 0,
     opacity: 0,
     scale: 1,
-    isExpanding: false,
     isBouncing: true,
     isFloating: false,
   });
@@ -52,53 +57,49 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       document.head.appendChild(metaApple);
     }
 
-    if (splashStage === 'dissolving-flash' || splashStage === 'completed') {
-      metaTheme.setAttribute('content', '#F8F9FD');
-      metaApple.setAttribute('content', 'default');
-      document.documentElement.style.backgroundColor = '#F8F9FD';
-      document.body.style.backgroundColor = '#F8F9FD';
-    } else {
+    if (splashStage === 'animating' || splashStage === 'holding') {
       metaTheme.setAttribute('content', '#000000');
       metaApple.setAttribute('content', 'black-translucent');
       document.documentElement.style.backgroundColor = '#000000';
       document.body.style.backgroundColor = '#000000';
     }
-  }, [splashStage]);
 
-  // Two-Step Optical Dissolve:
-  // Step 1: Dot visibly expands into a massive radiant white supernova, bathing the screen in pure white light (600ms)
-  // Step 2: The white light veil melts and dissolves smoothly into the login form (750ms)
+    return () => {
+      // Ensure on unmount status bar matches the active app theme
+      const mTheme = document.querySelector('meta[name="theme-color"]');
+      if (mTheme) mTheme.setAttribute('content', targetThemeColor);
+      const mApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (mApple) mApple.setAttribute('content', 'default');
+      document.documentElement.style.backgroundColor = targetThemeColor;
+      document.body.style.backgroundColor = targetThemeColor;
+    };
+  }, [splashStage, targetThemeColor]);
+
+  // Silky-Smooth Organic Cross-Dissolve:
+  // Instead of an artificial harsh white flash, the AMOLED black canvas smoothly cross-fades
+  // (opacity 1 -> 0 over 850ms) while the glowing typography and dot softly blur & melt,
+  // revealing the underlying destination view (dashboard or login form) with absolute seamlessness.
   const triggerDissolve = () => {
     if (isDissolvingRef.current || splashStage === 'completed') return;
     isDissolvingRef.current = true;
 
-    // Phase A: Expanding White Dot Supernova
-    setSplashStage('expanding-dot');
-    setDotPos((prev) => ({
-      ...prev,
-      scale: 120,
-      isExpanding: true,
-      isBouncing: false,
-      isFloating: false,
-    }));
+    setSplashStage('dissolving');
 
-    // Phase B: Once screen is bathed in radiant light, dissolve the white light into the destination page
+    // At the midpoint of the dissolve (380ms), seamlessly blend the mobile status bar theme-color
     setTimeout(() => {
-      setSplashStage('dissolving-flash');
-
       const metaTheme = document.querySelector('meta[name="theme-color"]');
-      if (metaTheme) metaTheme.setAttribute('content', '#F8F9FD');
+      if (metaTheme) metaTheme.setAttribute('content', targetThemeColor);
       const metaApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
       if (metaApple) metaApple.setAttribute('content', 'default');
-      document.documentElement.style.backgroundColor = '#F8F9FD';
-      document.body.style.backgroundColor = '#F8F9FD';
+      document.documentElement.style.backgroundColor = targetThemeColor;
+      document.body.style.backgroundColor = targetThemeColor;
+    }, 380);
 
-      // Phase C: Complete dissolve, unmount splash
-      setTimeout(() => {
-        setSplashStage('completed');
-        onComplete();
-      }, 750);
-    }, 600);
+    // Complete dissolve at 850ms, then unmount splash
+    setTimeout(() => {
+      setSplashStage('completed');
+      onComplete();
+    }, 850);
   };
 
   // 1. Bulletproof Watchdog: If anything stalls on low-end mobile devices, force dissolve after 8.5s!
@@ -193,7 +194,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         y: fPos.y,
         opacity: 1,
         scale: 1,
-        isExpanding: false,
         isBouncing: true,
         isFloating: false,
       });
@@ -207,7 +207,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
           y: fPos.y,
           opacity: 1,
           scale: 1,
-          isExpanding: false,
           isBouncing: false,
           isFloating: false,
         });
@@ -230,7 +229,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
                 y: target.y,
                 opacity: 1,
                 scale: 1,
-                isExpanding: false,
                 isBouncing: false,
                 isFloating: false,
               });
@@ -242,6 +240,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
               if (intervalId) clearInterval(intervalId);
 
               // Dot has arrived right after 'S' and stops there!
+              setSplashStage('holding');
+
               // Activate weightless organic floating levitation!
               setDotPos((prev) => ({
                 ...prev,
@@ -279,126 +279,155 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
 
   if (splashStage === 'completed') return null;
 
+  const isDissolving = splashStage === 'dissolving';
+
   return (
     <div
       onClick={triggerDissolve}
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-[#000000] cursor-pointer select-none touch-none overscroll-none transition-opacity duration-700 ease-out ${
-        splashStage === 'dissolving-flash' ? 'opacity-0 pointer-events-none' : 'opacity-100'
-      }`}
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#000000] cursor-pointer select-none touch-none overscroll-none"
       style={{
         height: '100dvh',
         minHeight: '100vh',
         backgroundColor: '#000000',
+        opacity: isDissolving ? 0 : 1,
+        transition: 'opacity 850ms cubic-bezier(0.22, 1, 0.36, 1)',
+        pointerEvents: isDissolving ? 'none' : 'auto',
       }}
       title="Ketuk untuk langsung membuka portal"
     >
-      {/* Optical White Light Dissolve Veil: Rises as the white dot blooms, bathing screen in pure white light */}
+      {/* Dissolve Content Wrapper: Softly blurs, scales slightly, and fades out in sync */}
       <div
-        className={`fixed inset-0 pointer-events-none z-35 transition-opacity duration-600 ease-in ${
-          splashStage === 'expanding-dot' || splashStage === 'dissolving-flash'
-            ? 'opacity-95'
-            : 'opacity-0'
-        }`}
+        className="relative flex flex-col items-center justify-center px-6 py-8 overflow-visible select-none"
         style={{
-          backgroundColor: '#FFFFFF',
+          transform: isDissolving ? 'scale(1.04)' : 'scale(1)',
+          filter: isDissolving ? 'blur(10px)' : 'blur(0px)',
+          opacity: isDissolving ? 0 : 1,
+          transition:
+            'transform 850ms cubic-bezier(0.22, 1, 0.36, 1), filter 850ms cubic-bezier(0.22, 1, 0.36, 1), opacity 850ms cubic-bezier(0.22, 1, 0.36, 1)',
+          willChange: 'transform, filter, opacity',
         }}
-      />
-
-      {/* Perfectly Centered Stage */}
-      <div
-        ref={lettersContainerRef}
-        className="relative inline-flex items-center justify-center px-6 py-8 overflow-visible"
       >
-        {/* HARDWARE-ACCELERATED OUTER WRAPPER (Translates trajectory via GPU translate3d) */}
+        {/* Typography & Ball Coordinate Grid */}
         <div
-          className="absolute top-0 left-0 pointer-events-none z-30"
-          style={{
-            transform: `translate3d(${dotPos.x}px, ${dotPos.y}px, 0)`,
-            transition:
-              dotPos.isBouncing || dotPos.isExpanding
-                ? 'none'
-                : 'transform 225ms cubic-bezier(0.22, 1, 0.36, 1)',
-            willChange: 'transform',
-            opacity: dotPos.opacity,
-          }}
+          ref={lettersContainerRef}
+          className="relative inline-flex items-center justify-center overflow-visible"
         >
-          {/* INNER BALL (Handles bouncing animation, floating levitation, bloom, and dramatic dissolve supernova) */}
+          {/* HARDWARE-ACCELERATED OUTER WRAPPER (Translates trajectory via GPU translate3d) */}
           <div
-            className={`rounded-full ${
-              dotPos.isBouncing
-                ? 'animate-ball-drop-bounce'
-                : dotPos.isFloating
-                ? 'animate-ball-floating'
-                : ''
-            }`}
+            className="absolute top-0 left-0 pointer-events-none z-30"
             style={{
-              width: '26px',
-              height: '26px',
-              transform:
-                dotPos.isBouncing || dotPos.isFloating
-                  ? undefined
-                  : `translate(-50%, -50%) scale(${dotPos.scale})`,
-              transition: dotPos.isExpanding
-                ? 'transform 650ms cubic-bezier(0.25, 1, 0.35, 1)'
-                : 'none',
-              background: '#FFFFFF',
-              boxShadow: dotPos.isExpanding
-                ? '0 0 160px 80px #FFFFFF, 0 0 350px 150px #FFFFFF, 0 0 600px 250px rgba(45,212,191,0.85)'
-                : '0 0 16px 3px #FFFFFF, 0 0 32px 8px rgba(45,212,191,0.85), 0 0 55px 16px rgba(56,189,248,0.4)',
+              transform: `translate3d(${dotPos.x}px, ${dotPos.y}px, 0)`,
+              transition:
+                dotPos.isBouncing
+                  ? 'none'
+                  : 'transform 225ms cubic-bezier(0.22, 1, 0.36, 1)',
               willChange: 'transform',
+              opacity: dotPos.opacity,
             }}
-          />
-        </div>
+          >
+            {/* INNER BALL (Handles bouncing animation, floating levitation, and soft bloom) */}
+            <div
+              className={`rounded-full ${
+                dotPos.isBouncing
+                  ? 'animate-ball-drop-bounce'
+                  : dotPos.isFloating && !isDissolving
+                  ? 'animate-ball-floating'
+                  : ''
+              }`}
+              style={{
+                width: '26px',
+                height: '26px',
+                transform:
+                  isDissolving
+                    ? 'translate(-50%, -50%) scale(2.2)'
+                    : dotPos.isBouncing || dotPos.isFloating
+                    ? undefined
+                    : `translate(-50%, -50%) scale(${dotPos.scale})`,
+                transition: isDissolving
+                  ? 'transform 850ms cubic-bezier(0.22, 1, 0.36, 1), opacity 850ms cubic-bezier(0.22, 1, 0.36, 1)'
+                  : 'none',
+                opacity: isDissolving ? 0 : 1,
+                background: '#FFFFFF',
+                boxShadow:
+                  '0 0 16px 3px #FFFFFF, 0 0 32px 8px rgba(45,212,191,0.85), 0 0 55px 16px rgba(56,189,248,0.4)',
+                willChange: 'transform, opacity',
+              }}
+            />
+          </div>
 
-        {/* Typography "FMCU TEAMS" with GPU-Optimized Seamless Text-Shadow */}
-        <div className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans overflow-visible">
-          {CHARACTERS.map((char, idx) => {
-            const isRevealed = idx <= revealedCharIndex;
-            const isCurrent = idx === revealedCharIndex;
+          {/* Typography "FMCU TEAMS" with GPU-Optimized Seamless Text-Shadow */}
+          <div className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans overflow-visible">
+            {CHARACTERS.map((char, idx) => {
+              const isRevealed = idx <= revealedCharIndex;
+              const isCurrent = idx === revealedCharIndex;
 
-            if (char === ' ') {
+              if (char === ' ') {
+                return (
+                  <span
+                    key={idx}
+                    ref={(el) => (charRefs.current[idx] = el)}
+                    className="w-3 sm:w-6 inline-block select-none"
+                  >
+                    &nbsp;
+                  </span>
+                );
+              }
+
               return (
                 <span
                   key={idx}
                   ref={(el) => (charRefs.current[idx] = el)}
-                  className="w-3 sm:w-6 inline-block select-none"
+                  className="inline-block select-none transition-all duration-300 overflow-visible"
+                  style={{
+                    opacity: isRevealed ? 1 : 0,
+                    transform: isRevealed
+                      ? 'translate3d(0, 0, 0) scale(1)'
+                      : 'translate3d(0, 6px, 0) scale(0.85)',
+                    color: '#FFFFFF',
+                    textShadow: isCurrent
+                      ? '0 0 10px #FFFFFF, 0 0 20px rgba(45, 212, 191, 0.9), 0 0 40px rgba(45, 212, 191, 0.45)'
+                      : isRevealed
+                      ? '0 0 8px rgba(255, 255, 255, 0.75), 0 0 18px rgba(45, 212, 191, 0.35)'
+                      : 'none',
+                    willChange: isRevealed ? 'auto' : 'transform, opacity',
+                  }}
                 >
-                  &nbsp;
+                  {char}
                 </span>
               );
-            }
+            })}
 
-            return (
-              <span
-                key={idx}
-                ref={(el) => (charRefs.current[idx] = el)}
-                className="inline-block select-none transition-all duration-300 overflow-visible"
-                style={{
-                  opacity: isRevealed ? 1 : 0,
-                  transform: isRevealed
-                    ? 'translate3d(0, 0, 0) scale(1)'
-                    : 'translate3d(0, 6px, 0) scale(0.85)',
-                  color: '#FFFFFF',
-                  // Lightweight 2-3 tier bloom: vibrant, smooth, zero lag on mobile GPUs
-                  textShadow: isCurrent
-                    ? '0 0 10px #FFFFFF, 0 0 20px rgba(45, 212, 191, 0.9), 0 0 40px rgba(45, 212, 191, 0.45)'
-                    : isRevealed
-                    ? '0 0 8px rgba(255, 255, 255, 0.75), 0 0 18px rgba(45, 212, 191, 0.35)'
-                    : 'none',
-                  willChange: isRevealed ? 'auto' : 'transform, opacity',
-                }}
-              >
-                {char}
-              </span>
-            );
-          })}
-
-          {/* Anchor Slot right AFTER letter 'S' on TEAMS (where the dot stops) */}
-          <span
-            ref={afterSRef}
-            className="w-4 sm:w-6 h-8 inline-flex items-center justify-center select-none"
-          />
+            {/* Anchor Slot right AFTER letter 'S' on TEAMS (where the dot stops) */}
+            <span
+              ref={afterSRef}
+              className="w-4 sm:w-6 h-8 inline-flex items-center justify-center select-none"
+            />
+          </div>
         </div>
+
+        {/* Elegant User Welcome Badge when User is Already Logged In */}
+        {user && (
+          <div
+            className={`mt-7 flex flex-col items-center select-none transition-all duration-600 ${
+              dotPos.isFloating && !isDissolving
+                ? 'opacity-100 translate-y-0'
+                : 'opacity-0 translate-y-2 pointer-events-none'
+            }`}
+          >
+            <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white shadow-lg">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-semibold text-slate-100">
+                {user.isAdmin ? 'Administrator FMCU' : user.name}
+              </span>
+              <span className="text-[10px] font-bold text-teal-300 bg-teal-500/25 px-2 py-0.5 rounded-full border border-teal-400/30">
+                {user.isAdmin ? 'Super Admin' : 'Terhubung'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 font-medium tracking-wide">
+              Membuka {user.isAdmin ? 'Portal Admin FMCU' : 'Jadwal Operasional'}...
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

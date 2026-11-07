@@ -46,6 +46,7 @@ interface AdminPortalProps {
   onLogout: () => void;
   onAddUser?: (newUser: User) => void;
   onResetUserPassword?: (userName: string) => void;
+  onReplaySplash?: () => void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
@@ -60,6 +61,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onLogout,
   onAddUser,
   onResetUserPassword,
+  onReplaySplash,
 }) => {
   // Navigation Tabs: 'dashboard' | 'schedules' | 'import-excel' | 'users' | 'categories'
   const [activeTab, setActiveTab] = useState<'dashboard' | 'schedules' | 'import-excel' | 'users' | 'categories'>('dashboard');
@@ -345,6 +347,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
         {/* Right Admin Profile & Switch View */}
         <div className="flex items-center gap-3">
+          {/* Replay Splash Button */}
+          {onReplaySplash && (
+            <button
+              onClick={onReplaySplash}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all active:scale-95"
+              title="Putar ulang animasi splash FMCU TEAMS"
+            >
+              <Sparkles className="w-4 h-4 text-teal-600" />
+              <span>Animasi Splash</span>
+            </button>
+          )}
+
           {/* Switch to User View Preview */}
           <button
             onClick={onSwitchToUserView}

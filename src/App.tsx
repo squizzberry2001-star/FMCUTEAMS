@@ -116,6 +116,13 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Eagerly preload heavy bundles in background during splash so there is ZERO suspense lag when dissolving
+  useEffect(() => {
+    import('./components/admin/AdminPortal');
+    import('./components/DesktopDashboard');
+    import('./components/visit/VisitReportForm');
+  }, []);
+
   // Save master users to localStorage
   useEffect(() => {
     localStorage.setItem('fmcu_users_v2', JSON.stringify(users));
@@ -229,7 +236,13 @@ export const App: React.FC = () => {
   if (!user) {
     return (
       <>
-        {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
+        {showSplash && (
+          <SplashScreen
+            onComplete={handleSplashComplete}
+            user={null}
+            targetThemeColor="#F8F9FD"
+          />
+        )}
         <LoginPage
           users={users}
           onLogin={handleLogin}
@@ -243,8 +256,14 @@ export const App: React.FC = () => {
   if (user.isAdmin && !adminPreviewMode) {
     return (
       <>
-        {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
-        <Suspense fallback={<div className="min-h-screen w-full bg-[#F8F9FD] flex items-center justify-center" />}>
+        {showSplash && (
+          <SplashScreen
+            onComplete={handleSplashComplete}
+            user={user}
+            targetThemeColor="#FFFFFF"
+          />
+        )}
+        <Suspense fallback={<div className="min-h-screen w-full bg-[#F4F6FB] flex items-center justify-center" />}>
           <AdminPortal
             adminUser={user}
             agendas={agendas}
@@ -257,6 +276,7 @@ export const App: React.FC = () => {
             onLogout={handleLogout}
             onAddUser={handleAddUser}
             onResetUserPassword={handleResetUserPassword}
+            onReplaySplash={() => setShowSplash(true)}
           />
         </Suspense>
       </>
@@ -266,7 +286,13 @@ export const App: React.FC = () => {
   // 3. User View (Field Staff View or Admin in Preview Mode)
   return (
     <>
-      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
+      {showSplash && (
+        <SplashScreen
+          onComplete={handleSplashComplete}
+          user={user}
+          targetThemeColor="#F8F9FD"
+        />
+      )}
       <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
       {/* Admin Preview Floating Header */}
       {user.isAdmin && adminPreviewMode && (
@@ -402,6 +428,7 @@ export const App: React.FC = () => {
                   onBack={() => setMobileTab('home')}
                   onLogout={handleLogout}
                   onUpdateUser={handleUpdateUser}
+                  onReplaySplash={() => setShowSplash(true)}
                 />
               )}
             </>
