@@ -274,14 +274,16 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     return stories.filter((s) => isStoryActive24h(s, nowMs));
   }, [stories]);
 
-  // Own active stories (within last 24h)
+  // Own active stories (within last 24h) sorted chronologically (Slide 1 -> Slide 2 -> Slide 3)
   const myActiveStories = React.useMemo(
     () =>
-      activeStories.filter(
-        (s) =>
-          s.userId === currentUserId ||
-          s.userName.toLowerCase() === currentUserName.toLowerCase()
-      ),
+      activeStories
+        .filter(
+          (s) =>
+            s.userId === currentUserId ||
+            s.userName.toLowerCase() === currentUserName.toLowerCase()
+        )
+        .sort((a, b) => a.createdAtMs - b.createdAtMs),
     [activeStories, currentUserId, currentUserName]
   );
 
@@ -298,7 +300,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       }
     >();
 
-    activeStories.forEach((s) => {
+    // Sort oldest-to-newest so each user's slides play in sequence 1 -> 2 -> 3
+    const chronological = [...activeStories].sort((a, b) => a.createdAtMs - b.createdAtMs);
+
+    chronological.forEach((s) => {
       if (
         s.userId === currentUserId ||
         s.userName.toLowerCase() === currentUserName.toLowerCase()
@@ -556,17 +561,20 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     if (activeViewerGroupIdx === null || !currentSlide || isPaused || showViewersList) return;
 
     const interval = setInterval(() => {
-      setSlideProgress((prev) => {
-        if (prev >= 100) {
-          handleNextSlide();
-          return 0;
-        }
-        return prev + 2; // 50 ticks * 120ms = 6000ms
-      });
+      setSlideProgress((prev) => Math.min(100, prev + 2)); // 50 ticks * 120ms = 6000ms
     }, 120);
 
     return () => clearInterval(interval);
   }, [activeViewerGroupIdx, activeSlideIdx, currentSlide, isPaused, showViewersList]);
+
+  // Trigger next slide when progress reaches 100% (outside state updater to prevent double firing)
+  useEffect(() => {
+    if (slideProgress >= 100 && activeViewerGroupIdx !== null) {
+      handleNextSlide(true);
+    }
+  }, [slideProgress, activeViewerGroupIdx]);
+
+  const lastNavTimeRef = useRef<number>(0);
 
   const openOwnStoriesOrUpload = () => {
     if (myActiveStories.length > 0) {
@@ -625,8 +633,12 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     setShowViewersList(false);
   };
 
-  const handleNextSlide = () => {
+  const handleNextSlide = (isFromAutoTimer: boolean = false) => {
     if (activeViewerGroupIdx === null) return;
+    const now = Date.now();
+    if (!isFromAutoTimer && now - lastNavTimeRef.current < 200) return;
+    lastNavTimeRef.current = now;
+
     setShowViewersList(false);
     if (activeSlideIdx < currentViewerSlides.length - 1) {
       setActiveSlideIdx((prev) => prev + 1);
@@ -636,20 +648,32 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         setActiveViewerGroupIdx(0);
         setActiveSlideIdx(0);
         setSlideProgress(0);
-      } else {
+      } else if (isFromAutoTimer) {
         closeViewer();
+      } else {
+        // Manual tap right on last own slide when no other user groups exist: loop back to first slide instead of exiting
+        setActiveSlideIdx(0);
+        setSlideProgress(0);
       }
     } else if (activeViewerGroupIdx < otherUserGroups.length - 1) {
       setActiveViewerGroupIdx((prev) => (prev !== null ? prev + 1 : null));
       setActiveSlideIdx(0);
       setSlideProgress(0);
-    } else {
+    } else if (isFromAutoTimer) {
       closeViewer();
+    } else {
+      // Manual tap right on the last slide of last group: loop back to first slide of current group instead of exiting
+      setActiveSlideIdx(0);
+      setSlideProgress(0);
     }
   };
 
   const handlePrevSlide = () => {
     if (activeViewerGroupIdx === null) return;
+    const now = Date.now();
+    if (now - lastNavTimeRef.current < 200) return;
+    lastNavTimeRef.current = now;
+
     setShowViewersList(false);
     if (activeSlideIdx > 0) {
       setActiveSlideIdx((prev) => prev - 1);
@@ -669,7 +693,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }
   };
 
-  // Requirement 4: Instagram-style swipe & tap gesture handlers (no navigation arrow buttons)
+  // Requirement 4: Instagram-style swipe & tap gesture handlers (unified Pointer Events to prevent touch+mouse double-fire)
   const handlePointerDownCanvas = (clientX: number, clientY: number) => {
     gestureRef.current = {
       startX: clientX,
@@ -696,7 +720,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     // 1. Horizontal swipe left/right (Instagram slide change)
     if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY)) {
       if (deltaX < 0) {
-        handleNextSlide();
+        handleNextSlide(false);
       } else {
         handlePrevSlide();
       }
@@ -709,13 +733,13 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       return;
     }
 
-    // 3. Quick tap (< 260ms and minimal movement) -> Left 32% prev, Right 68% next
-    if (elapsed < 260 && Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) {
+    // 3. Quick tap (< 300ms and minimal movement) -> Left 32% prev, Right 68% next
+    if (elapsed < 300 && Math.abs(deltaX) < 18 && Math.abs(deltaY) < 18) {
       const relativeX = clientX - containerRect.left;
       if (relativeX < containerRect.width * 0.32) {
         handlePrevSlide();
       } else {
-        handleNextSlide();
+        handleNextSlide(false);
       }
     }
   };
@@ -1128,31 +1152,25 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
             {/* 2. Story Photo Canvas (Instagram Swipe & Tap Gestures — NO Navigation Arrow Buttons) */}
             <div
               className="relative flex-1 my-2 rounded-3xl overflow-hidden bg-slate-950 border border-white/10 shadow-2xl flex items-center justify-center touch-pan-y cursor-pointer"
-              onMouseDown={(e) => handlePointerDownCanvas(e.clientX, e.clientY)}
-              onMouseUp={(e) =>
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                handlePointerDownCanvas(e.clientX, e.clientY);
+              }}
+              onPointerUp={(e) => {
+                e.stopPropagation();
                 handlePointerUpCanvas(
                   e.clientX,
                   e.clientY,
                   e.currentTarget.getBoundingClientRect()
-                )
-              }
-              onMouseLeave={() => {
+                );
+              }}
+              onPointerCancel={() => {
                 gestureRef.current.isDown = false;
                 setIsPaused(false);
               }}
-              onTouchStart={(e) => {
-                const t = e.touches[0];
-                if (t) handlePointerDownCanvas(t.clientX, t.clientY);
-              }}
-              onTouchEnd={(e) => {
-                const t = e.changedTouches[0];
-                if (t) {
-                  handlePointerUpCanvas(
-                    t.clientX,
-                    t.clientY,
-                    e.currentTarget.getBoundingClientRect()
-                  );
-                }
+              onPointerLeave={() => {
+                gestureRef.current.isDown = false;
+                setIsPaused(false);
               }}
             >
               <img
