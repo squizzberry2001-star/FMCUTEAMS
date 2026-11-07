@@ -129,20 +129,25 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       Math.hypot(originX, h - originY),
       Math.hypot(w - originX, h - originY),
     ];
-    const maxRadius = Math.max(...cornerDistances) + 60;
+    const maxRadius = Math.max(...cornerDistances) + 120;
     const initialRadius = 14; // exact radius of 26px dot
-    const duration = 850;
+    const duration = 950;
     const startTime = performance.now();
     let themeSwitched = false;
 
-    // Immediately draw Frame 0 synchronously so there is zero flash
+    // Immediately draw Frame 0 with soft feather from dot so there is zero flash
     ctx.save();
     ctx.scale(dpr, dpr);
     ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(-20, -20, w + 40, h + 40);
     ctx.globalCompositeOperation = 'destination-out';
+    const initGrad = ctx.createRadialGradient(originX, originY, 0, originX, originY, initialRadius + 20);
+    initGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    initGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.7)');
+    initGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = initGrad;
     ctx.beginPath();
-    ctx.arc(originX, originY, initialRadius, 0, Math.PI * 2);
+    ctx.arc(originX, originY, initialRadius + 22, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
@@ -150,12 +155,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / duration);
 
-      // Ease-out quartic curve: fast energetic burst from dot, graceful majestic finish
-      const ease = 1 - Math.pow(1 - progress, 3.8);
+      // Smooth cubic-bezier ease-out curve: gentle start from dot, seamless dissolve into page
+      const ease = 1 - Math.pow(1 - progress, 3.2);
       const currentRadius = initialRadius + ease * (maxRadius - initialRadius);
 
       // Midpoint theme-color switch for mobile status bar (Dynamic Island / notch)
-      if (progress >= 0.38 && !themeSwitched) {
+      if (progress >= 0.35 && !themeSwitched) {
         themeSwitched = true;
         const metaTheme = document.querySelector('meta[name="theme-color"]');
         if (metaTheme) metaTheme.setAttribute('content', targetThemeColor);
@@ -176,30 +181,38 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         ctx.fillStyle = '#000000';
         ctx.fillRect(-20, -20, w + 40, h + 40);
 
-        // Step 2: Cut open the circular portal starting from the dot
+        // Step 2: Cut open the silky feathered portal using destination-out with soft radial gradient
         ctx.globalCompositeOperation = 'destination-out';
+        const feather = Math.min(160, 40 + currentRadius * 0.30);
+        const r0 = Math.max(0, currentRadius - feather);
+        const r1 = currentRadius + feather;
+
+        const grad = ctx.createRadialGradient(originX, originY, r0, originX, originY, r1);
+        grad.addColorStop(0, 'rgba(0, 0, 0, 1)'); // completely transparent destination
+        grad.addColorStop(0.35, 'rgba(0, 0, 0, 0.92)');
+        grad.addColorStop(0.68, 'rgba(0, 0, 0, 0.45)');
+        grad.addColorStop(0.90, 'rgba(0, 0, 0, 0.12)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)'); // uncarved black
+
+        ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(originX, originY, currentRadius, 0, Math.PI * 2);
+        ctx.arc(originX, originY, r1 + 5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Step 3: Draw radiant luminous halo on the expanding aperture rim
-        const rimAlpha = Math.max(0, 1 - progress * 0.9);
-        if (rimAlpha > 0) {
+        // Step 3: Draw soft atmospheric aura bloom along the feathered melting boundary
+        const auraAlpha = Math.max(0, (1 - progress) * 0.65);
+        if (auraAlpha > 0.01) {
           ctx.globalCompositeOperation = 'source-over';
+          const glowGrad = ctx.createRadialGradient(originX, originY, r0, originX, originY, r1);
+          glowGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+          glowGrad.addColorStop(0.4, `rgba(255, 255, 255, ${0.35 * auraAlpha})`);
+          glowGrad.addColorStop(0.68, `rgba(45, 212, 191, ${0.45 * auraAlpha})`);
+          glowGrad.addColorStop(1, 'rgba(45, 212, 191, 0)');
 
-          // Outer cyan aura
+          ctx.fillStyle = glowGrad;
           ctx.beginPath();
-          ctx.arc(originX, originY, currentRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(45, 212, 191, ${0.9 * rimAlpha})`;
-          ctx.lineWidth = 10;
-          ctx.stroke();
-
-          // Inner white laser edge
-          ctx.beginPath();
-          ctx.arc(originX, originY, currentRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(255, 255, 255, ${0.98 * rimAlpha})`;
-          ctx.lineWidth = 2.5;
-          ctx.stroke();
+          ctx.arc(originX, originY, r1 + 5, 0, Math.PI * 2);
+          ctx.fill();
         }
 
         ctx.restore();
@@ -431,9 +444,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         className="relative z-20 flex flex-col items-center justify-center px-6 py-8 overflow-visible select-none"
         style={{
           opacity: isDissolving ? 0 : 1,
-          transform: isDissolving ? 'scale(1.02)' : 'scale(1)',
-          transition: 'opacity 260ms ease-out, transform 260ms ease-out',
-          willChange: 'opacity, transform',
+          transform: isDissolving ? 'scale(1.05) translate3d(0, -6px, 0)' : 'scale(1) translate3d(0, 0, 0)',
+          filter: isDissolving ? 'blur(6px)' : 'none',
+          transition: 'opacity 650ms cubic-bezier(0.25, 1, 0.5, 1), transform 750ms cubic-bezier(0.25, 1, 0.5, 1), filter 600ms ease-out',
+          willChange: 'opacity, transform, filter',
         }}
       >
         {/* Typography & Ball Coordinate Grid */}

@@ -42,8 +42,12 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
       */}
       <div
         onClick={onResetScale}
-        className={`flex items-center pointer-events-auto transform-gpu dock-transition origin-center relative overflow-hidden select-none ${
-          isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
+        style={{
+          transform: isScrolled ? 'scale(0.88)' : 'scale(1)',
+          maxWidth: isScrolled ? '300px' : '440px',
+        }}
+        className={`flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none ${
+          isScrolled ? 'iphone-glass-dock-scrolled shadow-xl py-1 px-1' : 'iphone-glass-dock shadow-2xl py-1.5 px-2'
         }`}
       >
         {/* Top Prismatic Hairline Reflection (Apple iPhone Glass Specular) */}

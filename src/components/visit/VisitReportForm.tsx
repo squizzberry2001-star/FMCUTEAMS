@@ -198,38 +198,41 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // GPS Refresh state
   const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
 
-  // Scroll Detection & Auto Navbar Scale with Responsive Scroll Threshold
+  // Scroll Detection & Auto Navbar Scale (Responsive & Lock-Free)
   const [isScrolled, setIsScrolled] = useState(false);
-  const upscaleLockedRef = useRef(false);
-  const lastScrollTopRef = useRef(0);
 
   const getScrollTop = () => {
-    return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    const targets = [
+      window.scrollY,
+      window.pageYOffset,
+      document.documentElement?.scrollTop,
+      document.body?.scrollTop,
+    ];
+    return Math.max(...targets.map((v) => (typeof v === 'number' && !isNaN(v) ? v : 0)));
   };
 
   const handleResetScale = () => {
     setIsScrolled(false);
-    upscaleLockedRef.current = true;
-    lastScrollTopRef.current = getScrollTop();
   };
 
   useEffect(() => {
     const handleScroll = () => {
       const top = getScrollTop();
-      if (upscaleLockedRef.current) {
-        if (Math.abs(top - lastScrollTopRef.current) > 12) {
-          upscaleLockedRef.current = false;
-        } else {
-          return;
-        }
-      }
-      setIsScrolled(top > 15);
+      setIsScrolled(top > 10);
     };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    document.addEventListener('scroll', handleScroll, { passive: true });
+
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    window.addEventListener('touchmove', handleScroll, { passive: true });
+    window.addEventListener('wheel', handleScroll, { passive: true });
+
+    handleScroll();
+
     return () => {
-      window.removeEventListener('scroll', handleScroll);
-      document.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('touchmove', handleScroll);
+      window.removeEventListener('wheel', handleScroll);
     };
   }, []);
 
@@ -1780,8 +1783,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
         <div
           onClick={handleResetScale}
-          className={`flex items-center pointer-events-auto transform-gpu dock-transition origin-center relative overflow-hidden select-none ${
-            isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
+          style={{
+            transform: isScrolled ? 'scale(0.88)' : 'scale(1)',
+            maxWidth: isScrolled ? '290px' : '440px',
+          }}
+          className={`flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none ${
+            isScrolled ? 'iphone-glass-dock-scrolled shadow-xl py-1 px-1' : 'iphone-glass-dock shadow-2xl py-1.5 px-2'
           }`}
         >
           {/* Top Specular Hairline Reflection */}

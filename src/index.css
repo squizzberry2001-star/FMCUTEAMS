@@ -132,13 +132,13 @@
     inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.14);
 }
 
-/* Auto-Shrinking Scrolled State (scale 0.90 and max-width 310px) */
+/* Auto-Shrinking Scrolled State (scale 0.88 and max-width 300px) */
 .iphone-glass-dock-scrolled {
-  width: 310px !important;
-  max-width: 310px !important;
+  width: 100% !important;
+  max-width: 300px !important;
   padding: 4px !important;
   border-radius: 30px !important;
-  transform: scale(0.90) translateZ(0) !important;
+  transform: scale(0.88) translateZ(0) !important;
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.35) 0%,

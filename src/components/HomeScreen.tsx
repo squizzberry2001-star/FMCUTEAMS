@@ -81,49 +81,46 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return true; // Bulan ini
   });
 
-  // Scroll detection & auto navbar scale with upscale lock on icon press
-  const upscaleLockedRef = useRef(false);
-  const lastScrollTopRef = useRef(0);
-
+  // Scroll detection & auto navbar scale (Responsive & Lock-Free)
   const getScrollTop = () => {
-    const cTop = scrollContainerRef.current ? scrollContainerRef.current.scrollTop : 0;
-    const wTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-    return Math.max(cTop, wTop);
+    const targets = [
+      window.scrollY,
+      window.pageYOffset,
+      document.documentElement?.scrollTop,
+      document.body?.scrollTop,
+      scrollContainerRef.current?.scrollTop,
+    ];
+    return Math.max(...targets.map((v) => (typeof v === 'number' && !isNaN(v) ? v : 0)));
   };
 
   const handleResetScale = () => {
     setIsScrolled(false);
-    upscaleLockedRef.current = true;
-    lastScrollTopRef.current = getScrollTop();
   };
 
   const checkScroll = () => {
     const top = getScrollTop();
-
-    if (upscaleLockedRef.current) {
-      if (Math.abs(top - lastScrollTopRef.current) > 12) {
-        upscaleLockedRef.current = false;
-      } else {
-        return;
-      }
-    }
-
-    setIsScrolled(top > 15);
+    setIsScrolled(top > 10);
   };
 
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    window.addEventListener('scroll', checkScroll, { passive: true });
-    document.addEventListener('scroll', checkScroll, { passive: true });
-    if (container) {
-      container.addEventListener('scroll', checkScroll, { passive: true });
-    }
+    const handleScroll = () => {
+      const top = getScrollTop();
+      setIsScrolled(top > 10);
+    };
+
+    // Capture phase catches scroll events from any child or container in the document
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    window.addEventListener('touchmove', handleScroll, { passive: true });
+    window.addEventListener('wheel', handleScroll, { passive: true });
+
+    handleScroll();
+
     return () => {
-      window.removeEventListener('scroll', checkScroll);
-      document.removeEventListener('scroll', checkScroll);
-      if (container) {
-        container.removeEventListener('scroll', checkScroll);
-      }
+      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('touchmove', handleScroll);
+      window.removeEventListener('wheel', handleScroll);
     };
   }, []);
 
