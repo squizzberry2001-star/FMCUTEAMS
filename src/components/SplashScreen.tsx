@@ -33,6 +33,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const afterSRef = useRef<HTMLSpanElement>(null);
   const lettersContainerRef = useRef<HTMLDivElement>(null);
+  const isDissolvingRef = useRef(false);
 
   // Synchronize mobile status bar / theme-color during splash
   useEffect(() => {
@@ -64,7 +65,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
 
   // Trigger dot expansion and dissolve into destination screen
   const triggerDissolve = () => {
-    if (splashStage === 'dissolving' || splashStage === 'completed') return;
+    if (isDissolvingRef.current || splashStage === 'completed') return;
+    isDissolvingRef.current = true;
     setSplashStage('dissolving');
 
     setDotPos((prev) => ({
@@ -81,66 +83,100 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     }, 850);
   };
 
-  // Splash Animation Sequence:
-  // 1. Ball drops from above outside the screen, bounces like a ball (1050ms)
-  // 2. Dashes immediately into the first letter 'F' (240ms)
-  // 3. Glides sequentially through letters at 230ms per char
-  // 4. Stops right after 'S' on TEAMS for 3 seconds (3000ms)
-  // 5. Expands and dissolves into destination screen
+  // 1. Bulletproof Watchdog: If anything stalls on low-end mobile devices, force dissolve after 8.5s!
+  useEffect(() => {
+    const watchdog = setTimeout(() => {
+      if (!isDissolvingRef.current) {
+        triggerDissolve();
+      }
+    }, 8500);
+
+    return () => clearTimeout(watchdog);
+  }, []);
+
+  // 2. High-Performance Mobile Animation Sequence:
+  // - Pre-measures all character positions ONCE (zero layout thrashing during animation)
+  // - Hardware-accelerated GPU translate3d trajectory
+  // - Bouncing ball drop (1050ms) -> Dash to 'F' (240ms) -> Letters (230ms/char) -> 3s hold after 'S'
   useEffect(() => {
     let isMounted = true;
     let timerIds: ReturnType<typeof setTimeout>[] = [];
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    const updateDotToChar = (index: number) => {
-      if (!isMounted) return;
+    // Helper: calculate relative (x, y) coordinates of each letter inside container
+    const measurePositions = (): { x: number; y: number }[] | null => {
       const contEl = lettersContainerRef.current;
-      let charEl: HTMLElement | null = null;
+      if (!contEl) return null;
+      const contRect = contEl.getBoundingClientRect();
+      if (contRect.width === 0 || contRect.height === 0) return null;
 
-      if (index < CHARACTERS.length) {
-        charEl = charRefs.current[index];
-      } else if (index === CHARACTERS.length) {
-        charEl = afterSRef.current;
-      }
-
-      if (charEl && contEl) {
-        const charRect = charEl.getBoundingClientRect();
-        const contRect = contEl.getBoundingClientRect();
-        const x = charRect.left - contRect.left + charRect.width / 2;
-        const y = charRect.top - contRect.top + charRect.height / 2;
-
-        setDotPos({
-          x,
-          y,
-          opacity: 1,
-          scale: 1,
-          isExpanding: false,
-          isBouncing: false,
-        });
-
-        if (index < CHARACTERS.length) {
-          setRevealedCharIndex(index);
+      const positions: { x: number; y: number }[] = [];
+      for (let i = 0; i < CHARACTERS.length; i++) {
+        const el = charRefs.current[i];
+        if (el) {
+          const r = el.getBoundingClientRect();
+          positions.push({
+            x: r.left - contRect.left + r.width / 2,
+            y: r.top - contRect.top + r.height / 2,
+          });
+        } else {
+          positions.push({ x: 0, y: contRect.height / 2 });
         }
       }
+
+      // Slot 10: anchor slot right after 'S'
+      if (afterSRef.current) {
+        const r = afterSRef.current.getBoundingClientRect();
+        positions.push({
+          x: r.left - contRect.left + r.width / 2,
+          y: r.top - contRect.top + r.height / 2,
+        });
+      } else {
+        const last = positions[positions.length - 1];
+        positions.push({ x: last ? last.x + 32 : 260, y: last ? last.y : 35 });
+      }
+
+      return positions;
     };
 
-    // Initial measurement after 80ms
-    const t0 = setTimeout(() => {
+    // Retry measuring with requestAnimationFrame until layout is painted, or fallback safely
+    let attempts = 0;
+    const initAndRun = () => {
       if (!isMounted) return;
 
-      const char0El = charRefs.current[0];
-      const contEl = lettersContainerRef.current;
-      if (!char0El || !contEl) return;
+      const pos = measurePositions();
+      // If layout not ready yet, retry up to 10 frames
+      if ((!pos || pos[0].x <= 0) && attempts < 10) {
+        attempts++;
+        requestAnimationFrame(initAndRun);
+        return;
+      }
 
-      const fRect = char0El.getBoundingClientRect();
-      const contRect = contEl.getBoundingClientRect();
-      const fX = fRect.left - contRect.left + fRect.width / 2;
-      const fY = fRect.top - contRect.top + fRect.height / 2;
-      const startX = Math.max(12, fX - 75);
+      // Fallback safe coordinates if extreme low-end device fails measurement
+      const validPositions =
+        pos && pos[0].x > 0
+          ? pos
+          : [
+              { x: 30, y: 35 },
+              { x: 60, y: 35 },
+              { x: 90, y: 35 },
+              { x: 120, y: 35 },
+              { x: 140, y: 35 },
+              { x: 165, y: 35 },
+              { x: 195, y: 35 },
+              { x: 225, y: 35 },
+              { x: 255, y: 35 },
+              { x: 285, y: 35 },
+              { x: 315, y: 35 },
+            ];
+
+      const fPos = validPositions[0];
+      const startX = Math.max(12, fPos.x - 75);
 
       // Phase 1: Ball drops from above outside viewport and bounces like a ball (1050ms)
       setDotPos({
         x: startX,
-        y: fY,
+        y: fPos.y,
         opacity: 1,
         scale: 1,
         isExpanding: false,
@@ -152,8 +188,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         if (!isMounted) return;
 
         setDotPos({
-          x: fX,
-          y: fY,
+          x: fPos.x,
+          y: fPos.y,
           opacity: 1,
           scale: 1,
           isExpanding: false,
@@ -166,19 +202,31 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
           setRevealedCharIndex(0);
 
           // Phase 4: Reveal remaining letters sequentially at slower pace (230ms per char)
+          // Uses PRE-CALCULATED positions -> zero layout reflow!
           let currentIdx = 0;
-          const letterInterval = setInterval(() => {
-            if (!isMounted) {
-              clearInterval(letterInterval);
-              return;
-            }
+          intervalId = setInterval(() => {
+            if (!isMounted) return;
+
             currentIdx++;
-            if (currentIdx <= CHARACTERS.length) {
-              updateDotToChar(currentIdx);
+            if (currentIdx < validPositions.length) {
+              const target = validPositions[currentIdx];
+              setDotPos({
+                x: target.x,
+                y: target.y,
+                opacity: 1,
+                scale: 1,
+                isExpanding: false,
+                isBouncing: false,
+              });
+
+              if (currentIdx < CHARACTERS.length) {
+                setRevealedCharIndex(currentIdx);
+              }
             } else {
-              clearInterval(letterInterval);
+              if (intervalId) clearInterval(intervalId);
+
               // Dot has arrived right after 'S' and stops there!
-              // Pause for 3 seconds (3000ms) as requested
+              // Pause for 3 seconds (3000ms) as requested by user
               const tHold = setTimeout(() => {
                 if (isMounted) {
                   triggerDissolve();
@@ -193,13 +241,17 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
 
       }, 1050); // 1050ms bounce duration
       timerIds.push(tBounce);
+    };
 
-    }, 80);
-
-    timerIds.push(t0);
+    // Start with a slight delay for smooth component mount
+    const tInit = setTimeout(() => {
+      requestAnimationFrame(initAndRun);
+    }, 40);
+    timerIds.push(tInit);
 
     return () => {
       isMounted = false;
+      if (intervalId) clearInterval(intervalId);
       timerIds.forEach((id) => clearTimeout(id));
     };
   }, []);
@@ -219,43 +271,55 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       }}
       title="Ketuk untuk langsung membuka portal"
     >
-      {/* Subtle Ambient Cosmic Glows */}
-      <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-teal-500/15 rounded-full blur-[130px] pointer-events-none" />
-      <div className="absolute bottom-0 right-10 w-[450px] h-[300px] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none" />
-      <div className="absolute top-1/3 left-10 w-[350px] h-[250px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
+      {/* Lightweight GPU-friendly radial gradients (Zero GPU blur passes) */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(circle at 50% 25%, rgba(45, 212, 191, 0.12) 0%, transparent 55%), radial-gradient(circle at 80% 75%, rgba(37, 99, 235, 0.08) 0%, transparent 45%), radial-gradient(circle at 20% 65%, rgba(16, 185, 129, 0.07) 0%, transparent 45%)',
+        }}
+      />
 
       {/* Perfectly Centered Stage */}
       <div
         ref={lettersContainerRef}
         className="relative inline-flex items-center justify-center px-6 py-8 overflow-visible"
       >
-        {/* LARGE GLOWING WHITE DOT (Bounces down from above, dashes to 'F', reveals letters, stops after 'S' for 3s) */}
+        {/* HARDWARE-ACCELERATED OUTER WRAPPER (Translates trajectory via GPU translate3d) */}
         <div
-          className={`absolute rounded-full pointer-events-none z-30 ${
-            dotPos.isBouncing ? 'animate-ball-drop-bounce' : ''
-          }`}
+          className="absolute top-0 left-0 pointer-events-none z-30"
           style={{
-            left: `${dotPos.x}px`,
-            top: `${dotPos.y}px`,
-            width: '26px',
-            height: '26px',
-            transform: dotPos.isBouncing
-              ? undefined
-              : `translate(-50%, -50%) scale(${dotPos.scale})`,
+            transform: `translate3d(${dotPos.x}px, ${dotPos.y}px, 0)`,
+            transition:
+              dotPos.isBouncing || dotPos.isExpanding
+                ? 'none'
+                : 'transform 225ms cubic-bezier(0.22, 1, 0.36, 1)',
+            willChange: 'transform',
             opacity: dotPos.opacity,
-            transition: dotPos.isExpanding
-              ? 'transform 850ms cubic-bezier(0.4, 0, 0.2, 1), opacity 650ms ease-out'
-              : dotPos.isBouncing
-              ? 'none'
-              : 'left 230ms cubic-bezier(0.22, 1, 0.36, 1), top 230ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out',
-            background: '#FFFFFF',
-            boxShadow: dotPos.isExpanding
-              ? '0 0 160px 70px #FFFFFF, 0 0 320px 120px rgba(45,212,191,0.9), 0 0 500px 180px rgba(56,189,248,0.7)'
-              : '0 0 20px 5px #FFFFFF, 0 0 45px 12px rgba(45,212,191,0.85), 0 0 80px 24px rgba(56,189,248,0.5)',
           }}
-        />
+        >
+          {/* INNER BALL (Handles bouncing animation, bloom, and dissolve expansion) */}
+          <div
+            className={`rounded-full ${dotPos.isBouncing ? 'animate-ball-drop-bounce' : ''}`}
+            style={{
+              width: '26px',
+              height: '26px',
+              transform: dotPos.isBouncing
+                ? undefined
+                : `translate(-50%, -50%) scale(${dotPos.scale})`,
+              transition: dotPos.isExpanding
+                ? 'transform 850ms cubic-bezier(0.4, 0, 0.2, 1)'
+                : 'none',
+              background: '#FFFFFF',
+              boxShadow: dotPos.isExpanding
+                ? '0 0 100px 40px #FFFFFF, 0 0 220px 80px rgba(45,212,191,0.9)'
+                : '0 0 16px 3px #FFFFFF, 0 0 32px 8px rgba(45,212,191,0.85), 0 0 55px 16px rgba(56,189,248,0.4)',
+              willChange: 'transform',
+            }}
+          />
+        </div>
 
-        {/* Typography "FMCU TEAMS" with Seamless Multi-Tier Text-Shadow */}
+        {/* Typography "FMCU TEAMS" with GPU-Optimized Seamless Text-Shadow */}
         <div className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans overflow-visible">
           {CHARACTERS.map((char, idx) => {
             const isRevealed = idx <= revealedCharIndex;
@@ -281,15 +345,16 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
                 style={{
                   opacity: isRevealed ? 1 : 0,
                   transform: isRevealed
-                    ? 'translateY(0) scale(1)'
-                    : 'translateY(6px) scale(0.85)',
+                    ? 'translate3d(0, 0, 0) scale(1)'
+                    : 'translate3d(0, 6px, 0) scale(0.85)',
                   color: '#FFFFFF',
-                  // Multi-tiered concentric Gaussian text-shadow: seamless, deep bloom, zero boxiness
+                  // Lightweight 2-3 tier bloom: vibrant, smooth, zero lag on mobile GPUs
                   textShadow: isCurrent
-                    ? '0 0 8px #FFFFFF, 0 0 18px rgba(255, 255, 255, 0.9), 0 0 32px rgba(45, 212, 191, 0.8), 0 0 55px rgba(45, 212, 191, 0.5), 0 0 85px rgba(56, 189, 248, 0.3)'
+                    ? '0 0 10px #FFFFFF, 0 0 20px rgba(45, 212, 191, 0.9), 0 0 40px rgba(45, 212, 191, 0.45)'
                     : isRevealed
-                    ? '0 0 6px rgba(255, 255, 255, 0.8), 0 0 15px rgba(255, 255, 255, 0.5), 0 0 28px rgba(45, 212, 191, 0.4), 0 0 48px rgba(45, 212, 191, 0.2)'
+                    ? '0 0 8px rgba(255, 255, 255, 0.75), 0 0 18px rgba(45, 212, 191, 0.35)'
                     : 'none',
+                  willChange: isRevealed ? 'auto' : 'transform, opacity',
                 }}
               >
                 {char}
