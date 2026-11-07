@@ -100,64 +100,61 @@
 }
 
 /* Authentic Apple Liquid Frosted Glass with Ultra-Thin Hairline Rim for White Backgrounds */
+/* 80% True Transparency Crystalline Glass Aesthetic */
 .iphone-glass-dock {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.82) 0%,
-    rgba(255, 255, 255, 0.52) 55%,
-    rgba(255, 255, 255, 0.70) 100%
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.20) 100%
   ) !important;
-  backdrop-filter: blur(42px) saturate(260%) brightness(1.08);
-  -webkit-backdrop-filter: blur(42px) saturate(260%) brightness(1.08);
-  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: blur(28px) saturate(190%) contrast(102%) brightness(1.06);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(102%) brightness(1.06);
+  border: 1px solid rgba(255, 255, 255, 0.45) !important;
   box-shadow: 
-    0 16px 45px -8px rgba(15, 23, 42, 0.12),
-    0 4px 14px -2px rgba(15, 23, 42, 0.06),
-    /* Dual-Rim Specular Hairline around Curvatures */
-    inset 0 0 0 1px rgba(255, 255, 255, 0.95),
-    inset 0 2px 2px 0 #ffffff,
-    inset 0 -1.5px 1.5px 0 rgba(255, 255, 255, 0.45),
-    inset 1px 0 1.5px 0 rgba(255, 255, 255, 0.6),
-    inset -1px 0 1.5px 0 rgba(255, 255, 255, 0.6);
+    0 14px 40px -8px rgba(15, 23, 42, 0.08),
+    0 4px 12px -2px rgba(15, 23, 42, 0.04),
+    /* Delicate Optical Specular Hairline around Curvatures */
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.25),
+    inset 1px 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset -1px 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .iphone-glass-dock-scrolled {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.90) 0%,
-    rgba(255, 255, 255, 0.68) 100%
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.18) 100%
   ) !important;
-  backdrop-filter: blur(48px) saturate(275%) brightness(1.10);
-  -webkit-backdrop-filter: blur(48px) saturate(275%) brightness(1.10);
-  border: 1px solid rgba(15, 23, 42, 0.10) !important;
+  backdrop-filter: blur(32px) saturate(200%) brightness(1.08);
+  -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.08);
+  border: 1px solid rgba(255, 255, 255, 0.55) !important;
   box-shadow: 
-    0 20px 50px -8px rgba(15, 23, 42, 0.15),
-    0 6px 18px -2px rgba(15, 23, 42, 0.08),
-    /* Dual-Rim Specular Hairline around Curvatures */
-    inset 0 0 0 1px #ffffff,
-    inset 0 2px 2px 0 #ffffff,
-    inset 0 -1.5px 1.5px 0 rgba(255, 255, 255, 0.55);
+    0 16px 42px -8px rgba(15, 23, 42, 0.10),
+    0 4px 14px -2px rgba(15, 23, 42, 0.05),
+    /* Delicate Optical Specular Hairline around Curvatures */
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-/* Sliding Floating Lens Pill on Active Tab (Pure White Liquid Glass, No Border, +5% Transparency) */
+/* Sliding Floating Lens Pill on Active Tab (Liquid Glass Lens, +80% Transparency) */
 .iphone-glass-pill {
   background: linear-gradient(
     140deg,
-    rgba(255, 255, 255, 0.93) 0%,
-    rgba(255, 255, 255, 0.88) 50%,
-    rgba(255, 255, 255, 0.84) 100%
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.50) 50%,
+    rgba(255, 255, 255, 0.62) 100%
   ) !important;
-  border: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
   box-shadow: 
-    0 8px 24px -2px rgba(15, 23, 42, 0.12),
-    0 3px 8px -1px rgba(15, 23, 42, 0.08),
+    0 6px 20px -2px rgba(15, 23, 42, 0.08),
+    0 2px 6px -1px rgba(15, 23, 42, 0.04),
     /* Convex Lens Double-Bevel Specular Insets */
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1),
-    inset 0 -1.5px 2px 0 rgba(255, 255, 255, 0.6),
-    inset 1.5px 0 2px 0 rgba(255, 255, 255, 0.8),
-    inset -1.5px 0 2px 0 rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(28px) saturate(260%) contrast(115%) brightness(1.12);
-  -webkit-backdrop-filter: blur(28px) saturate(260%) contrast(115%) brightness(1.12);
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 1.5px 0 rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(24px) saturate(210%) contrast(110%) brightness(1.08);
+  -webkit-backdrop-filter: blur(24px) saturate(210%) contrast(110%) brightness(1.08);
 }
 
 /* Super Smooth Deliberate Transition Classes (Calm & Graceful Motion) */

@@ -1779,10 +1779,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           }`}
         >
           {/* Top Specular Hairline Reflection */}
-          <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95 z-0" />
+          <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-75 z-0" />
 
           {/* Ambient Bottom Refraction Rim */}
-          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80 z-0" />
+          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 z-0" />
 
           {/* 
             SLIDING ACTIVE GLASS LENS PILL (White Liquid Glass, No Border, +5% Transparency)

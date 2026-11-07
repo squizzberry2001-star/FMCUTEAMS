@@ -49,10 +49,10 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
         }`}
       >
         {/* Top Prismatic Hairline Reflection (Apple iPhone Glass Specular) */}
-        <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95 z-0" />
+        <div className="pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-75 z-0" />
 
         {/* Ambient bottom light refraction rim */}
-        <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80 z-0" />
+        <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 z-0" />
 
         {/* 
           SLIDING ACTIVE GLASS LENS PILL (White Liquid Glass, No Border, +5% Transparency)
