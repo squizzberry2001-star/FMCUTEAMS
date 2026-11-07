@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface PageTransitionLoaderProps {
   visible?: boolean;
+  delayMs?: number;
   label?: string;
 }
 
@@ -9,8 +10,26 @@ const FMCU_BOUNCE_CHARS = ['F', 'M', 'C', 'U', '.', '.', '.', '.', '.'];
 
 export const PageTransitionLoader: React.FC<PageTransitionLoaderProps> = ({
   visible = true,
+  delayMs = 200,
 }) => {
-  if (!visible) return null;
+  const [shouldShow, setShouldShow] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setShouldShow(false);
+      return;
+    }
+    if (delayMs <= 0) {
+      setShouldShow(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setShouldShow(true);
+    }, delayMs);
+    return () => clearTimeout(timer);
+  }, [visible, delayMs]);
+
+  if (!visible || !shouldShow) return null;
 
   return (
     <div

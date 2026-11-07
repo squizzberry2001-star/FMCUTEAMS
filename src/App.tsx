@@ -195,21 +195,8 @@ export const App: React.FC = () => {
   // Forced layout override (auto / desktop / mobile) for testing on PC
   const [layoutMode, setLayoutMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
 
-  // Smooth Blur + Silhouette + Mini "FMCU....." Transition Loader on Page / Tab changes
-  const [isPageTransitioning, setIsPageTransitioning] = useState(false);
-  const hasMountedNavRef = useRef(false);
-
-  useEffect(() => {
-    if (!hasMountedNavRef.current) {
-      hasMountedNavRef.current = true;
-      return;
-    }
-    setIsPageTransitioning(true);
-    const timer = setTimeout(() => {
-      setIsPageTransitioning(false);
-    }, 340);
-    return () => clearTimeout(timer);
-  }, [mobileTab, mobileScreen, adminPreviewMode, layoutMode]);
+  // Only show Transition Loader when a concurrent render or Suspense load actually takes >200ms
+  const [isPageTransitioning] = React.useTransition();
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth < 1024;

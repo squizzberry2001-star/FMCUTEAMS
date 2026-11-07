@@ -380,8 +380,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // Preview Mode
   const [showPreview, setShowPreview] = useState(false);
 
-  // Smooth Blur + Silhouette + Mini "FMCU....." Transition Loader on Section / SubTab changes
-  const [isSectionTransitioning, setIsSectionTransitioning] = useState(false);
+  // Only show Transition Loader if a heavy render takes >200ms (never forced on fast section changes)
+  const [isSectionTransitioning] = React.useTransition();
   const hasMountedSectionRef = useRef(false);
 
   useEffect(() => {
@@ -389,12 +389,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       hasMountedSectionRef.current = true;
       return;
     }
-    setIsSectionTransitioning(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    const timer = setTimeout(() => {
-      setIsSectionTransitioning(false);
-    }, 320);
-    return () => clearTimeout(timer);
   }, [activeSection, obsSubTab, evidenceSubTab, showPreview]);
 
   // Modal zoom photo
