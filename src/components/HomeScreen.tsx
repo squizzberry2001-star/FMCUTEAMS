@@ -99,15 +99,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }, []);
 
   return (
-    <div className="flex flex-col h-full min-h-screen bg-[#F8F9FD] relative select-none w-full max-w-xl mx-auto">
-      {/* Scrollable Content Container */}
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto no-scrollbar px-5 sm:px-6 pt-6 pb-28"
-      >
-        {/* Section 1 Item 1: Head Title "Your Weekly Schedule" & Time-based Greeting */}
-        <div className="flex items-start justify-between mb-5">
+    <div
+      ref={scrollContainerRef}
+      onScroll={handleScroll}
+      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-6 pb-28 max-w-xl mx-auto w-full relative select-none"
+    >
+      {/* Section 1 Item 1: Head Title "Your Weekly Schedule" & Time-based Greeting */}
+      <div className="flex items-start justify-between mb-5">
           <div>
             <h1 className="text-[26px] font-extrabold text-slate-900 leading-[1.15] tracking-tight">
               Your Weekly<br />Schedule
@@ -240,9 +238,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             ))
           )}
         </div>
-      </div>
 
-      {/* Navbar: Hapus tombol +, auto mengecil 4% saat scroll, auto reset saat section ditekan */}
+      {/* Navbar: Hapus tombol +, auto mengecil scale 0.91 saat scroll, auto reset saat section ditekan */}
       <BottomNavbar
         activeTab={activeNavTab as NavTabType}
         onSelectTab={(tab) => {
