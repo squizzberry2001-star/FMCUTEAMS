@@ -38,11 +38,11 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
       {/* 
         Floating iPhone Glass Dock with Optical Refraction & Visual Distortion
         Menyudut tetap center (origin-center, tidak menyusut ke bawah)
-        Super smooth transition & auto-upscale on press
+        Super smooth deliberate transition (800ms) & auto-upscale on press
       */}
       <div
         onClick={onResetScale}
-        className={`flex items-center pointer-events-auto transform-gpu transition-all duration-550 ease-[cubic-bezier(0.16,1,0.3,1)] origin-center relative overflow-hidden select-none will-change-transform ${
+        className={`flex items-center pointer-events-auto transform-gpu dock-transition origin-center relative overflow-hidden select-none ${
           isScrolled
             ? 'iphone-glass-dock-scrolled scale-[0.91] w-[320px] p-1 rounded-[30px] shadow-xl'
             : 'iphone-glass-dock scale-100 w-full max-w-md p-1.5 rounded-[36px] shadow-2xl'
@@ -63,11 +63,11 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
         <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80 z-0" />
 
         {/* 
-          SLIDING ACTIVE GLASS LENS PILL (100% Mirip Glass iPhone)
-          Lens kaca meluncur dengan spring physics overshoot khas Apple
+          SLIDING ACTIVE GLASS LENS PILL (High Contrast Mint-Teal Liquid Glass)
+          Warna kontras tegas di atas dock putih transparan, meluncur anggun
         */}
         <div
-          className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none transition-all duration-550 ease-[cubic-bezier(0.16,1,0.3,1)] z-0 ${
+          className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0 ${
             isScrolled ? 'top-1 bottom-1' : 'top-1.5 bottom-1.5'
           }`}
           style={{
@@ -76,10 +76,9 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
             left: isScrolled ? '4px' : '6px',
           }}
         >
-          {/* Prismatic Refraction inside the Lens Pill */}
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-tr from-teal-300/15 via-white/40 to-pink-300/15 mix-blend-overlay" />
-          <div className="pointer-events-none absolute inset-x-3 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/45 via-transparent to-white/15" />
+          {/* Top specular hairline inside the pill */}
+          <div className="pointer-events-none absolute inset-x-2.5 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-100" />
+          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/50 via-teal-100/25 to-teal-200/35" />
         </div>
 
         {/* Tab Items Buttons */}
@@ -94,30 +93,30 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
                 if (onResetScale) onResetScale();
               }}
               onClick={() => handleTabClick(item.id)}
-              className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center transition-all duration-550 active:scale-90 group cursor-pointer focus:outline-none ${
+              className={`relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none ${
                 isScrolled ? 'py-1 px-1 gap-0.5' : 'py-2 sm:py-2.5 px-1.5 gap-1'
               }`}
             >
               {/* Icon Container dengan Micro-Spring Damping */}
               <div className="relative flex items-center justify-center">
                 <Icon
-                  className={`transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                  className={`transition-all duration-500 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                     isScrolled ? 'w-4 h-4' : 'w-5 h-5'
                   } ${
                     isActive
-                      ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
+                      ? 'scale-115 text-teal-800 stroke-[2.6] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(13,148,136,0.45)]'
                       : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
                   }`}
                 />
               </div>
 
-              {/* Label Typography (Titik di bawah dihilangkan sesuai permintaan user) */}
+              {/* Label Typography dengan Kontras Tegas Saat Aktif */}
               <span
-                className={`tracking-tight leading-none transition-all duration-200 ${
+                className={`tracking-tight leading-none transition-all duration-300 ${
                   isScrolled ? 'text-[9px]' : 'text-[10px]'
                 } ${
                   isActive
-                    ? 'text-slate-900 font-black scale-[1.03]'
+                    ? 'text-teal-950 font-black scale-[1.04]'
                     : 'text-slate-400 font-semibold group-hover:text-slate-600'
                 }`}
               >

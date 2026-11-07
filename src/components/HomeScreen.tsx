@@ -96,27 +96,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const top = scrollContainerRef.current.scrollTop;
 
     if (upscaleLockedRef.current) {
-      if (Math.abs(top - lastScrollTopRef.current) > 35) {
+      if (Math.abs(top - lastScrollTopRef.current) > 45) {
         upscaleLockedRef.current = false;
       } else {
         return;
       }
     }
 
-    setIsScrolled(top > 25);
+    setIsScrolled(top > 55);
   };
 
   useEffect(() => {
     const handleWindowScroll = () => {
       const top = window.scrollY || document.documentElement.scrollTop;
       if (upscaleLockedRef.current) {
-        if (Math.abs(top - lastScrollTopRef.current) > 35) {
+        if (Math.abs(top - lastScrollTopRef.current) > 45) {
           upscaleLockedRef.current = false;
         } else {
           return;
         }
       }
-      setIsScrolled(top > 25);
+      setIsScrolled(top > 55);
     };
     window.addEventListener('scroll', handleWindowScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleWindowScroll);
