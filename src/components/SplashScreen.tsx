@@ -24,7 +24,40 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     'animating' | 'jumping' | 'morphing' | 'dissolving' | 'completed'
   >('animating');
 
-  const [revealedCharIndex, setRevealedCharIndex] = useState<number>(-1);
+  const [revealedSet, setRevealedSet] = useState<Set<number>>(() => new Set());
+  const [currentActiveChar, setCurrentActiveChar] = useState<number>(-1);
+
+  // Random per-character positional offsets (kept centered around the middle axis) & randomized visit order
+  const randomChoreography = React.useMemo(() => {
+    const rawOffsets = CHARACTERS.map((ch) => {
+      if (ch === ' ') return { dx: 0, dy: 0 };
+      const dx = Math.round((Math.random() - 0.5) * 6);
+      const dy = Math.round((Math.random() - 0.5) * 32); // -16px to +16px random vertical position
+      return { dx, dy };
+    });
+    // Ensure vertical average is 0 so the whole word remains dead-center
+    const nonSpace = rawOffsets.filter((_, i) => CHARACTERS[i] !== ' ');
+    const avgY =
+      nonSpace.reduce((sum, item) => sum + item.dy, 0) / Math.max(1, nonSpace.length);
+    const offsets = rawOffsets.map((item, i) =>
+      CHARACTERS[i] === ' ' ? item : { dx: item.dx, dy: Math.round(item.dy - avgY) }
+    );
+
+    // Randomize order in which the dot visits each letter
+    const indices = CHARACTERS.map((ch, idx) => (ch === ' ' ? -1 : idx)).filter(
+      (idx) => idx !== -1
+    );
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+
+    // Random initial drop offset away from letter 'F' (never directly on 'F')
+    const dropOffsetX = Math.round(-55 - Math.random() * 30);
+    const dropOffsetY = Math.round((Math.random() > 0.5 ? -1 : 1) * (24 + Math.random() * 18));
+
+    return { offsets, visitOrder: indices, dropOffsetX, dropOffsetY };
+  }, []);
 
   const [dotPos, setDotPos] = useState<{
     x: number;
@@ -355,14 +388,14 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       const positions: { x: number; y: number }[] = [];
       for (let i = 0; i < CHARACTERS.length; i++) {
         const el = charRefs.current[i];
+        const off = randomChoreography.offsets[i] || { dx: 0, dy: 0 };
         if (el) {
-          // Use layout offsetLeft/offsetTop + half width/height so unrevealed scale(0.85)/translateY(6px) never offsets the exact center of 'F'
           positions.push({
-            x: el.offsetLeft + el.offsetWidth / 2,
-            y: el.offsetTop + el.offsetHeight / 2,
+            x: el.offsetLeft + el.offsetWidth / 2 + off.dx,
+            y: el.offsetTop + el.offsetHeight / 2 + off.dy,
           });
         } else {
-          positions.push({ x: 0, y: contRect.height / 2 });
+          positions.push({ x: off.dx, y: contRect.height / 2 + off.dy });
         }
       }
 
@@ -409,11 +442,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             ];
 
       const fPos = validPositions[0];
+      // Phase 1: Initial drop point is offset away from 'F' (never directly on 'F')
+      const initialDropX = fPos.x + randomChoreography.dropOffsetX;
+      const initialDropY = fPos.y + randomChoreography.dropOffsetY;
 
-      // Phase 1: Ball drops from above directly onto the exact center of letter 'F' (fPos.x, fPos.y)
       setDotPos({
-        x: fPos.x,
-        y: fPos.y,
+        x: initialDropX,
+        y: initialDropY,
         width: 26,
         height: 26,
         opacity: 1,
@@ -423,20 +458,17 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         isMorphingPill: false,
       });
 
-      // Illuminate 'F' at the exact moment of first impact on 'F' (38% of 1050ms = ~395ms)
-      const tFirstImpact = setTimeout(() => {
-        if (!isMounted) return;
-        setRevealedCharIndex(0);
-      }, 395);
-      timerIds.push(tFirstImpact);
-
-      // Phase 2: After bouncing on 'F' settles (1050ms), immediately glide through remaining letters M-C-U T-E-A-M-S
+      // Phase 2: After initial drop bounce settles (1050ms), visit each letter in randomized order & position
       const tBounce = setTimeout(() => {
         if (!isMounted) return;
-        setRevealedCharIndex(0);
+
+        const order = randomChoreography.visitOrder;
+        const firstIdx = order[0];
+        const firstTarget = validPositions[firstIdx];
+
         setDotPos({
-          x: fPos.x,
-          y: fPos.y,
+          x: firstTarget.x,
+          y: firstTarget.y,
           width: 26,
           height: 26,
           opacity: 1,
@@ -446,97 +478,100 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           isMorphingPill: false,
         });
 
-        let currentIdx = 0;
-        intervalId = setInterval(() => {
+        const tFirstArrive = setTimeout(() => {
           if (!isMounted) return;
+          setCurrentActiveChar(firstIdx);
+          setRevealedSet((prev) => {
+            const next = new Set(prev);
+            next.add(firstIdx);
+            return next;
+          });
 
-          currentIdx++;
-          if (currentIdx < CHARACTERS.length) {
-            const target = validPositions[currentIdx];
-            setDotPos({
-              x: target.x,
-              y: target.y,
-              width: 26,
-              height: 26,
-              opacity: 1,
-              scale: 1,
-              isBouncing: false,
-              isJumping: false,
-              isMorphingPill: false,
-            });
-            setRevealedCharIndex(currentIdx);
-          } else {
-            // Dot has just finished the last letter 'S'!
-            if (intervalId) clearInterval(intervalId);
+          let step = 0;
+          intervalId = setInterval(() => {
+            if (!isMounted) return;
 
-            // Step briefly to slot right after 'S' and immediately jump to Actual Date Pill!
-            const afterSTarget = validPositions[CHARACTERS.length] || validPositions[CHARACTERS.length - 1];
-            setDotPos({
-              x: afterSTarget.x,
-              y: afterSTarget.y,
-              width: 26,
-              height: 26,
-              opacity: 1,
-              scale: 1,
-              isBouncing: false,
-              isJumping: false,
-              isMorphingPill: false,
-            });
-
-            const tImmediateJump = setTimeout(() => {
-              if (!isMounted) return;
-
-              // Measure exact position & size of the Actual Date Pill
-              const pillTarget = measureActualDatePill();
-              setSplashStage('jumping');
+            step++;
+            if (step < order.length) {
+              const charIdx = order[step];
+              const target = validPositions[charIdx];
               setDotPos({
-                x: pillTarget.relX,
-                y: pillTarget.relY,
+                x: target.x,
+                y: target.y,
                 width: 26,
                 height: 26,
                 opacity: 1,
                 scale: 1,
                 isBouncing: false,
-                isJumping: true,
+                isJumping: false,
                 isMorphingPill: false,
               });
+              setCurrentActiveChar(charIdx);
+              setRevealedSet((prev) => {
+                const next = new Set(prev);
+                next.add(charIdx);
+                return next;
+              });
+            } else {
+              // All letters of FMCU TEAMS have been revealed at their random dot positions!
+              if (intervalId) clearInterval(intervalId);
 
-              // After jumping to the Actual Date Pill (340ms), bounce into position & transform size to match the pill!
-              const tLandAndMorph = setTimeout(() => {
+              const tImmediateJump = setTimeout(() => {
                 if (!isMounted) return;
 
-                const exactPill = measureActualDatePill();
-                setSplashStage('morphing');
+                // Measure exact position & size of the Actual Date Pill
+                const pillTarget = measureActualDatePill();
+                setSplashStage('jumping');
                 setDotPos({
-                  x: exactPill.relX,
-                  y: exactPill.relY,
-                  width: exactPill.width,
-                  height: exactPill.height,
+                  x: pillTarget.relX,
+                  y: pillTarget.relY,
+                  width: 26,
+                  height: 26,
                   opacity: 1,
                   scale: 1,
                   isBouncing: false,
-                  isJumping: false,
-                  isMorphingPill: true,
+                  isJumping: true,
+                  isMorphingPill: false,
                 });
 
-                // After bounce & size transform lock with 100% precision (520ms), trigger Dissolve!
-                const tDissolve = setTimeout(() => {
+                // After jumping to the Actual Date Pill (340ms), bounce into position & transform size to match the pill!
+                const tLandAndMorph = setTimeout(() => {
                   if (!isMounted) return;
-                  const finalPill = measureActualDatePill();
-                  triggerDissolve(
-                    finalPill.screenX,
-                    finalPill.screenY,
-                    Math.max(finalPill.width, finalPill.height) * 0.45
-                  );
-                }, 520);
-                timerIds.push(tDissolve);
-              }, 340);
-              timerIds.push(tLandAndMorph);
-            }, 150);
-            timerIds.push(tImmediateJump);
-          }
-        }, 230); // 230ms per character
-      }, 1050); // 1050ms bounce duration on 'F'
+
+                  const exactPill = measureActualDatePill();
+                  setSplashStage('morphing');
+                  setDotPos({
+                    x: exactPill.relX,
+                    y: exactPill.relY,
+                    width: exactPill.width,
+                    height: exactPill.height,
+                    opacity: 1,
+                    scale: 1,
+                    isBouncing: false,
+                    isJumping: false,
+                    isMorphingPill: true,
+                  });
+
+                  // After bounce & size transform lock with 100% precision (520ms), trigger Dissolve!
+                  const tDissolve = setTimeout(() => {
+                    if (!isMounted) return;
+                    const finalPill = measureActualDatePill();
+                    triggerDissolve(
+                      finalPill.screenX,
+                      finalPill.screenY,
+                      Math.max(finalPill.width, finalPill.height) * 0.45
+                    );
+                  }, 520);
+                  timerIds.push(tDissolve);
+                }, 340);
+                timerIds.push(tLandAndMorph);
+              }, 160);
+              timerIds.push(tImmediateJump);
+            }
+          }, 230); // 230ms per random letter jump
+        }, 210);
+        timerIds.push(tFirstArrive);
+      }, 1050); // 1050ms initial drop bounce duration
       timerIds.push(tBounce);
     };
 
@@ -712,8 +747,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             }}
           >
             {CHARACTERS.map((char, idx) => {
-              const isRevealed = idx <= revealedCharIndex;
-              const isCurrent = idx === revealedCharIndex;
+              const isRevealed = revealedSet.has(idx);
+              const isCurrent = currentActiveChar === idx;
+              const off = randomChoreography.offsets[idx] || { dx: 0, dy: 0 };
 
               if (char === ' ') {
                 return (
@@ -735,8 +771,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                   style={{
                     opacity: isRevealed ? 1 : 0,
                     transform: isRevealed
-                      ? 'translate3d(0, 0, 0) scale(1)'
-                      : 'translate3d(0, 6px, 0) scale(0.85)',
+                      ? `translate3d(${off.dx}px, ${off.dy}px, 0) scale(1)`
+                      : `translate3d(${off.dx}px, ${off.dy + 8}px, 0) scale(0.75)`,
                     color: '#FFFFFF',
                     textShadow: isCurrent
                       ? '0 0 10px #FFFFFF, 0 0 20px rgba(45, 212, 191, 0.9), 0 0 40px rgba(45, 212, 191, 0.45)'
