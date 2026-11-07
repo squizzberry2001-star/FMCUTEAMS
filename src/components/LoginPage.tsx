@@ -16,6 +16,7 @@ import {
 import { User } from '../types';
 import { ADMIN_PASSWORD, ADMIN_USER, initialUsers } from '../data/mockData';
 import { ParacetamolHero3D } from './3d-icons/Illustrations';
+import { PageTransitionLoader } from './PageTransitionLoader';
 
 interface LoginPageProps {
   users?: User[];
@@ -81,9 +82,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setErrorMessage(null);
   };
 
-  // Member Submit Handler
+  // Member Submit Handler (with 5-second loading animation on click Masuk)
   const handleMemberSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setErrorMessage(null);
     setIsSubmitting(true);
 
@@ -92,36 +94,50 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     );
 
     if (!foundUser) {
-      setErrorMessage(`Nama "${staffSearchQuery}" belum terdaftar. Silakan pilih dari 36 nama karyawan.`);
-      setIsSubmitting(false);
+      setTimeout(() => {
+        setErrorMessage(`Nama "${staffSearchQuery}" belum terdaftar. Silakan pilih dari 36 nama karyawan.`);
+        setIsSubmitting(false);
+      }, 600);
       return;
     }
 
     const expectedPassword = foundUser.password || '0000';
     if (staffPassword !== expectedPassword) {
-      setErrorMessage('Password salah! Password default adalah 0000 (atau gunakan sandi akun Anda).');
-      setIsSubmitting(false);
+      setTimeout(() => {
+        setErrorMessage('Password salah! Password default adalah 0000 (atau gunakan sandi akun Anda).');
+        setIsSubmitting(false);
+      }, 600);
       return;
     }
 
-    onLogin(foundUser);
+    // Show 5-second loading animation before entering the app
+    setTimeout(() => {
+      setIsSubmitting(false);
+      onLogin(foundUser);
+    }, 5000);
   };
 
-  // Admin Submit Handler
+  // Admin Submit Handler (with 5-second loading animation on click Masuk)
   const handleAdminSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setErrorMessage(null);
     setIsSubmitting(true);
 
     const entered = adminPasswordInput.trim();
     if (entered !== ADMIN_PASSWORD && entered !== '607090') {
-      setErrorMessage('Kode Otorisasi salah! Masukkan kode resmi: 607090');
-      setIsSubmitting(false);
+      setTimeout(() => {
+        setErrorMessage('Kode Otorisasi salah! Masukkan kode resmi: 607090');
+        setIsSubmitting(false);
+      }, 600);
       return;
     }
 
     const adminAccount = users.find((u) => u.isAdmin) || ADMIN_USER;
-    onLogin(adminAccount);
+    setTimeout(() => {
+      setIsSubmitting(false);
+      onLogin(adminAccount);
+    }, 5000);
   };
 
   return (
@@ -139,6 +155,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       onTouchMove={(e) => e.preventDefault()}
       onWheel={(e) => e.preventDefault()}
     >
+      {/* 5-Second Loading Animation Overlay on Login Submit */}
+      <PageTransitionLoader visible={isSubmitting} delayMs={0} />
       {/* Full-bleed solid background shield matching web color `#F8F9FD` */}
       <div
         className="fixed inset-0 -z-10 bg-[#F8F9FD] pointer-events-none"
