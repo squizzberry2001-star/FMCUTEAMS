@@ -12,8 +12,10 @@ const CHARACTERS = ['F', 'M', 'C', 'U', ' ', 'T', 'E', 'A', 'M', 'S'];
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({
   onComplete,
+  user = null,
   targetThemeColor = '#F8F9FD',
 }) => {
+  const isLoggedOut = !user;
   // Splash stages:
   // 'animating' (ball drop + letter reveal) ->
   // 'jumping' (jump from after 'S' to Actual Date Pill position) ->
@@ -154,10 +156,45 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     };
   }, [targetThemeColor]);
 
-  // Measure the exact DOM bounding box of the Actual Date Pill (live or fallback mirror)
+  // Measure the exact DOM bounding box of the target element:
+  // - If not logged in (!user): Target is the Login Submit Button ("Tombol Masuk")
+  // - If logged in (user): Target is the Actual Date Pill in CalendarStrip
   const measureActualDatePill = () => {
     const contEl = lettersContainerRef.current;
     const contRect = contEl?.getBoundingClientRect();
+
+    if (isLoggedOut) {
+      const loginBtn = document.querySelector(
+        '[data-splash-target="login-submit-btn"]'
+      ) as HTMLElement | null;
+      if (loginBtn && contRect) {
+        const r = loginBtn.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          const screenCenterX = r.left + r.width / 2;
+          const screenCenterY = r.top + r.height / 2;
+          return {
+            relX: screenCenterX - contRect.left,
+            relY: screenCenterY - contRect.top,
+            screenX: screenCenterX,
+            screenY: screenCenterY,
+            width: r.width,
+            height: r.height,
+          };
+        }
+      }
+      // Fallback for Login Submit Button
+      const fallbackLoginX = window.innerWidth / 2;
+      const fallbackLoginY = Math.round(window.innerHeight * 0.72);
+      const fallbackLoginW = Math.min(340, window.innerWidth - 64);
+      return {
+        relX: contRect ? fallbackLoginX - contRect.left : 0,
+        relY: contRect ? fallbackLoginY - contRect.top : 140,
+        screenX: fallbackLoginX,
+        screenY: fallbackLoginY,
+        width: fallbackLoginW,
+        height: 48,
+      };
+    }
 
     const livePill =
       (document.querySelector('[data-splash-target="actual-date-pill"]') as HTMLElement | null) ||
@@ -713,10 +750,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                 : {}),
             }}
           >
-            {/* INNER BALL / PILL (Handles drop bounce, jump arc, and bounce + size transform into Actual Date Pill) */}
+            {/* INNER BALL / PILL (Handles drop bounce, jump arc, and bounce + size transform into Login Submit Button or Actual Date Pill) */}
             <div
               ref={dotBallRef}
-              className={`rounded-full flex flex-col items-center justify-center overflow-hidden ${
+              className={`rounded-full flex items-center justify-center overflow-hidden ${
                 dotPos.isBouncing
                   ? 'animate-ball-drop-bounce'
                   : dotPos.isJumping
@@ -733,32 +770,52 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                     ? undefined
                     : `translate(-50%, -50%) scale(${dotPos.scale})`,
                 background: isPillMorphed
-                  ? 'linear-gradient(180deg, #FF7E98 0%, #FF5376 100%)'
+                  ? isLoggedOut
+                    ? 'linear-gradient(90deg, #32C2AD 0%, #20A894 100%)'
+                    : 'linear-gradient(180deg, #FF7E98 0%, #FF5376 100%)'
                   : '#FFFFFF',
                 boxShadow: isPillMorphed
-                  ? '0 10px 25px -4px rgba(255, 107, 139, 0.55), 0 0 24px 4px rgba(255, 126, 152, 0.45)'
+                  ? isLoggedOut
+                    ? '0 12px 28px -6px rgba(43, 179, 160, 0.55), 0 0 24px 4px rgba(50, 194, 173, 0.45)'
+                    : '0 10px 25px -4px rgba(255, 107, 139, 0.55), 0 0 24px 4px rgba(255, 126, 152, 0.45)'
                   : '0 0 16px 3px #FFFFFF, 0 0 32px 8px rgba(45,212,191,0.85), 0 0 55px 16px rgba(56,189,248,0.4)',
                 transition:
                   'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1), background 260ms ease-out, box-shadow 260ms ease-out',
                 willChange: 'transform, width, height',
               }}
             >
-              {/* Exact Date Number & Day Label matching CalendarStrip Actual Date Pill */}
-              <div
-                className="flex flex-col items-center justify-center"
-                style={{
-                  opacity: isPillMorphed ? 1 : 0,
-                  transform: isPillMorphed ? 'scale(1)' : 'scale(0.5)',
-                  transition: 'opacity 200ms ease-out 110ms, transform 240ms cubic-bezier(0.22, 1, 0.36, 1) 110ms',
-                }}
-              >
-                <span className="text-base font-bold leading-tight text-white">
-                  {todayItem.num}
-                </span>
-                <span className="text-[10px] font-semibold mt-0.5 text-white/95">
-                  {todayItem.label}
-                </span>
-              </div>
+              {/* Inner Content: Login Submit Button Text if logged out, or Actual Date Pill if logged in */}
+              {isLoggedOut ? (
+                <div
+                  className="flex items-center justify-center gap-2 whitespace-nowrap text-white font-bold text-sm"
+                  style={{
+                    opacity: isPillMorphed ? 1 : 0,
+                    transform: isPillMorphed ? 'scale(1)' : 'scale(0.8)',
+                    transition:
+                      'opacity 200ms ease-out 100ms, transform 240ms cubic-bezier(0.22, 1, 0.36, 1) 100ms',
+                  }}
+                >
+                  <span>Masuk ke Jadwal Saya</span>
+                  <span>→</span>
+                </div>
+              ) : (
+                <div
+                  className="flex flex-col items-center justify-center"
+                  style={{
+                    opacity: isPillMorphed ? 1 : 0,
+                    transform: isPillMorphed ? 'scale(1)' : 'scale(0.5)',
+                    transition:
+                      'opacity 200ms ease-out 110ms, transform 240ms cubic-bezier(0.22, 1, 0.36, 1) 110ms',
+                  }}
+                >
+                  <span className="text-base font-bold leading-tight text-white">
+                    {todayItem.num}
+                  </span>
+                  <span className="text-[10px] font-semibold mt-0.5 text-white/95">
+                    {todayItem.label}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

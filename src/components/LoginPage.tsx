@@ -336,6 +336,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <div className="pt-1">
               <button
                 type="submit"
+                data-splash-target="login-submit-btn"
                 disabled={isSubmitting}
                 className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
               >
@@ -424,6 +425,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <div className="pt-1">
               <button
                 type="submit"
+                data-splash-target="login-submit-btn"
                 disabled={isSubmitting}
                 className="w-full py-3.5 rounded-full bg-gradient-to-r from-teal-600 via-teal-700 to-slate-800 text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
               >
