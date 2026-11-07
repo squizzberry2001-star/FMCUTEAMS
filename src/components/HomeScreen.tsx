@@ -197,7 +197,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Section 1 Item 2: Instagram-Style Circle Story Bar Below "Hallo, User!" */}
-      <EmployeeStoriesBar currentUser={user} />
+      <EmployeeStoriesBar currentUser={user} agendas={agendas} />
 
       {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
       <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top,16px))] pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 transition-all">

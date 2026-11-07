@@ -3,18 +3,16 @@ import {
   Plus,
   X,
   Camera,
-  Image as ImageIcon,
-  ChevronLeft,
-  ChevronRight,
-  Sparkles,
   Trash2,
   MapPin,
-  Clock,
-  CheckCircle2,
   AlertCircle,
   Heart,
+  Eye,
+  RefreshCw,
+  Send,
+  CalendarCheck,
 } from 'lucide-react';
-import { User } from '../types';
+import { ScheduleAgenda, User } from '../types';
 
 export interface StorySlide {
   id: string;
@@ -27,19 +25,26 @@ export interface StorySlide {
   storeTag?: string;
   createdAt: string; // HH:MM WIB
   dateKey: string; // YYYY-MM-DD
-  /** Map of emoji -> array of userNames who reacted */
+  createdAtMs: number; // Epoch ms when story was created
+  expiresAtMs: number; // Epoch ms when story expires (createdAtMs + 24 hours)
+  /** Map of emoji -> array of userNames who reacted (max 1 reaction per user per slide) */
   reactions: Record<string, string[]>;
+  /** Array of other userNames who have viewed this story slide */
+  views: string[];
 }
 
 interface EmployeeStoriesBarProps {
   currentUser?: User | null;
+  agendas?: ScheduleAgenda[];
   users?: User[];
 }
 
 const MAX_STORIES_PER_DAY = 3;
+const STORY_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours (Instagram standard)
 const QUICK_EMOJIS = ['❤️', '🔥', '👏', '😍', '👍', '🙌', '🚀', '💯'];
-const STORAGE_KEY = 'fmcu_employee_stories_v1';
-const VIEWED_STORAGE_KEY = 'fmcu_viewed_stories_v1';
+const STORAGE_KEY = 'fmcu_employee_stories_v2';
+const LEGACY_STORAGE_KEY = 'fmcu_employee_stories_v1';
+const VIEWED_STORAGE_KEY = 'fmcu_viewed_stories_v2';
 
 const getTodayDateKey = () => {
   const now = new Date();
@@ -54,121 +59,44 @@ const getCurrentWibTime = () => {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
 };
 
-const getDefaultSeedStories = (todayKey: string): StorySlide[] => [
-  {
-    id: 'seed-story-1',
-    userId: 'septiana',
-    userName: 'Septiana Indasari',
-    userRole: 'Field Supervisor FMCU',
-    userAvatar:
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=180&auto=format&fit=crop&q=80',
-    imageUrl:
-      'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=900&auto=format&fit=crop&q=80',
-    caption: 'Pengecekan standar QSC & display produk pagi ini di Store Thamrin berjalan lancar ✨',
-    storeTag: 'FM Thamrin City',
-    createdAt: '08:30 WIB',
-    dateKey: todayKey,
-    reactions: {
-      '🔥': ['Hadi Ilman', 'Novy Rusnani', 'Sutris Ismawan', 'Fikri S.'],
-      '❤️': ['Tini Pratiwi', 'Marisa Giselina', 'Zildzian Azhar'],
-      '👏': ['Hadi Ilman', 'Fikri S.'],
-    },
-  },
-  {
-    id: 'seed-story-2',
-    userId: 'septiana',
-    userName: 'Septiana Indasari',
-    userRole: 'Field Supervisor FMCU',
-    userAvatar:
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=180&auto=format&fit=crop&q=80',
-    imageUrl:
-      'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=900&auto=format&fit=crop&q=80',
-    caption: 'Briefing tim shift pagi untuk memastikan pelayanan & FEFO chiller terjaga 100% 💪',
-    storeTag: 'FM Thamrin City',
-    createdAt: '09:15 WIB',
-    dateKey: todayKey,
-    reactions: {
-      '👍': ['Hadi Ilman', 'Sutris Ismawan'],
-      '💯': ['Novy Rusnani', 'Tini Pratiwi'],
-    },
-  },
-  {
-    id: 'seed-story-3',
-    userId: 'hadi',
-    userName: 'Hadi Ilman',
-    userRole: 'Area Manager FMCU',
-    userAvatar:
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=180&auto=format&fit=crop&q=80',
-    imageUrl:
-      'https://images.unsplash.com/photo-1542838132-92c53300491e?w=900&auto=format&fit=crop&q=80',
-    caption: 'Audit kesegaran produk fresh & kesiapan area F&B bar station hari ini 🚀',
-    storeTag: 'FM Sudirman Park',
-    createdAt: '09:40 WIB',
-    dateKey: todayKey,
-    reactions: {
-      '🔥': ['Septiana Indasari', 'Novy Rusnani', 'Marisa Giselina', 'Sutris Ismawan', 'Fikri S.'],
-      '🚀': ['Tini Pratiwi', 'Zildzian Azhar'],
-      '👏': ['Septiana Indasari'],
-    },
-  },
-  {
-    id: 'seed-story-4',
-    userId: 'novy',
-    userName: 'Novy Rusnani',
-    userRole: 'Regional Manager',
-    userAvatar:
-      'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=180&auto=format&fit=crop&q=80',
-    imageUrl:
-      'https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=900&auto=format&fit=crop&q=80',
-    caption: 'Apresiasi untuk tim store dengan pencapaian QSC tertinggi minggu ini! Pertahankan 🌟',
-    storeTag: 'FM Grand Indonesia',
-    createdAt: '10:05 WIB',
-    dateKey: todayKey,
-    reactions: {
-      '❤️': ['Septiana Indasari', 'Hadi Ilman', 'Sutris Ismawan', 'Fikri S.', 'Tini Pratiwi'],
-      '😍': ['Marisa Giselina', 'Zildzian Azhar'],
-      '🙌': ['Hadi Ilman'],
-    },
-  },
-  {
-    id: 'seed-story-5',
-    userId: 'sutris',
-    userName: 'Sutris Ismawan',
-    userRole: 'Store Head',
-    userAvatar:
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=180&auto=format&fit=crop&q=80',
-    imageUrl:
-      'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=900&auto=format&fit=crop&q=80',
-    caption: 'Area coffee machine & chiller sudah deep cleaning sesuai jadwal checklist harian ✅',
-    storeTag: 'FM Kuningan',
-    createdAt: '10:50 WIB',
-    dateKey: todayKey,
-    reactions: {
-      '👏': ['Septiana Indasari', 'Hadi Ilman', 'Novy Rusnani'],
-      '🔥': ['Fikri S.'],
-    },
-  },
-  {
-    id: 'seed-story-6',
-    userId: 'marisa',
-    userName: 'Marisa Giselina',
-    userRole: 'Field Auditor FMCU',
-    userAvatar:
-      'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=180&auto=format&fit=crop&q=80',
-    imageUrl:
-      'https://images.unsplash.com/photo-1528698827591-e19ccd7bc23d?w=900&auto=format&fit=crop&q=80',
-    caption: 'Monitoring kelengkapan price card & planogram rak minuman dingin 📋',
-    storeTag: 'FM Kemang',
-    createdAt: '11:20 WIB',
-    dateKey: todayKey,
-    reactions: {
-      '❤️': ['Septiana Indasari', 'Tini Pratiwi'],
-      '👍': ['Hadi Ilman'],
-    },
-  },
-];
+const isStoryActive24h = (slide: StorySlide, nowMs: number = Date.now()): boolean => {
+  if (!slide || slide.id.startsWith('seed-story-')) return false;
+  const expiresAt =
+    typeof slide.expiresAtMs === 'number'
+      ? slide.expiresAtMs
+      : typeof slide.createdAtMs === 'number'
+      ? slide.createdAtMs + STORY_TTL_MS
+      : 0;
+  return expiresAt > nowMs;
+};
 
-// Compress uploaded image for smooth localStorage persistence
+/**
+ * Find the single most-reacted emoji across a list of story slides.
+ * Returns null if there are no reactions.
+ */
+const getTopReactedEmoji = (slides: StorySlide[]): string | null => {
+  const counts: Record<string, number> = {};
+  slides.forEach((slide) => {
+    Object.entries(slide.reactions || {}).forEach(([emoji, reactors]) => {
+      if (Array.isArray(reactors) && reactors.length > 0) {
+        counts[emoji] = (counts[emoji] || 0) + reactors.length;
+      }
+    });
+  });
+
+  let topEmoji: string | null = null;
+  let maxCount = 0;
+  Object.entries(counts).forEach(([emoji, count]) => {
+    if (count > maxCount) {
+      maxCount = count;
+      topEmoji = emoji;
+    }
+  });
+
+  return topEmoji;
+};
+
+// Compress uploaded/captured image for smooth persistence
 const compressStoryImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -193,7 +121,7 @@ const compressStoryImage = (file: File): Promise<string> => {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, w, h);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
           URL.revokeObjectURL(objectUrl);
           resolve(dataUrl);
         } else {
@@ -215,28 +143,37 @@ const compressStoryImage = (file: File): Promise<string> => {
 
 export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   currentUser,
+  agendas = [],
 }) => {
   const todayKey = getTodayDateKey();
-  const currentUserName = currentUser?.name || 'Sarah Jenkins';
+  const currentUserName = currentUser?.name || 'User FMCU';
   const currentUserRole = currentUser?.role || 'Field Staff FMCU';
-  const currentUserAvatar =
-    currentUser?.avatar ||
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=180&auto=format&fit=crop&q=80';
+  const currentUserAvatar = currentUser?.avatar || '';
   const currentUserId = currentUserName.toLowerCase().replace(/\s+/g, '-');
 
+  // Initialize stories without any dummy seed data & purge expired (>24h) stories
   const [stories, setStories] = useState<StorySlide[]>(() => {
     try {
+      // Remove legacy dummy stories key if present
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          const nowMs = Date.now();
+          return parsed
+            .filter((s: StorySlide) => isStoryActive24h(s, nowMs))
+            .map((s: StorySlide) => ({
+              ...s,
+              reactions: s.reactions || {},
+              views: Array.isArray(s.views) ? s.views : [],
+            }));
         }
       }
     } catch (e) {
       console.warn(e);
     }
-    return getDefaultSeedStories(todayKey);
+    return [];
   });
 
   const [viewedStoryIds, setViewedStoryIds] = useState<string[]>(() => {
@@ -249,12 +186,26 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     return [];
   });
 
-  // Save stories to localStorage
+  // Auto-disappear check every 30 seconds (Instagram 24 hours expiration)
+  useEffect(() => {
+    const pruneExpired = () => {
+      const nowMs = Date.now();
+      setStories((prev) => {
+        const active = prev.filter((s) => isStoryActive24h(s, nowMs));
+        return active.length === prev.length ? prev : active;
+      });
+    };
+    pruneExpired();
+    const timer = setInterval(pruneExpired, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Save active stories to localStorage
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
     } catch (e) {
-      console.warn('Story storage full, trimming oldest seed:', e);
+      console.warn('Story storage full:', e);
     }
   }, [stories]);
 
@@ -266,14 +217,24 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }
   }, [viewedStoryIds]);
 
-  // Group stories by user
-  const myTodayStories = stories.filter(
-    (s) =>
-      s.dateKey === todayKey &&
-      (s.userId === currentUserId || s.userName.toLowerCase() === currentUserName.toLowerCase())
+  // Active stories (within 24h)
+  const activeStories = React.useMemo(() => {
+    const nowMs = Date.now();
+    return stories.filter((s) => isStoryActive24h(s, nowMs));
+  }, [stories]);
+
+  // Own active stories (within last 24h)
+  const myActiveStories = React.useMemo(
+    () =>
+      activeStories.filter(
+        (s) =>
+          s.userId === currentUserId ||
+          s.userName.toLowerCase() === currentUserName.toLowerCase()
+      ),
+    [activeStories, currentUserId, currentUserName]
   );
 
-  // Other employees' stories grouped by userName
+  // Other employees' active stories grouped by userName (no dummy stories)
   const otherUserGroups = React.useMemo(() => {
     const map = new Map<
       string,
@@ -286,7 +247,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       }
     >();
 
-    stories.forEach((s) => {
+    activeStories.forEach((s) => {
       if (
         s.userId === currentUserId ||
         s.userName.toLowerCase() === currentUserName.toLowerCase()
@@ -310,49 +271,237 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     });
 
     return Array.from(map.values());
-  }, [stories, currentUserId, currentUserName]);
+  }, [activeStories, currentUserId, currentUserName]);
+
+  // Compute user's Actual Agendas for today (for Auto Agenda Actual caption)
+  const myTodayAgendas = React.useMemo(() => {
+    const matchesUser = (a: ScheduleAgenda) =>
+      !a.pic ||
+      a.pic.toLowerCase().includes(currentUserName.toLowerCase()) ||
+      currentUserName.toLowerCase().includes(a.pic.toLowerCase());
+
+    const exactToday = agendas.filter((a) => a.date === todayKey && matchesUser(a));
+    if (exactToday.length > 0) return exactToday;
+
+    const anyToday = agendas.filter((a) => a.date === todayKey);
+    if (anyToday.length > 0) return anyToday.slice(0, 3);
+
+    return agendas.filter(matchesUser).slice(0, 3);
+  }, [agendas, todayKey, currentUserName]);
+
+  const buildAutoAgendaCaption = (): { caption: string; storeTag: string } => {
+    if (myTodayAgendas.length > 0) {
+      // Pick the agenda closest to current time
+      const now = new Date();
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      let bestAgenda = myTodayAgendas[0];
+      let bestDiff = Infinity;
+
+      myTodayAgendas.forEach((ag) => {
+        const [hh, mm] = (ag.time || '09:00').split(':').map(Number);
+        if (!isNaN(hh) && !isNaN(mm)) {
+          const diff = Math.abs(hh * 60 + mm - nowMinutes);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestAgenda = ag;
+          }
+        }
+      });
+
+      const caption = `${bestAgenda.title} — ${bestAgenda.location} (${bestAgenda.time} WIB)`;
+      const storeTag = bestAgenda.location || bestAgenda.category || 'FMCU Field Activity';
+      return { caption, storeTag };
+    }
+
+    return {
+      caption: `Agenda Kunjungan Aktual • ${currentUserName} (${getCurrentWibTime()})`,
+      storeTag: 'FMCU Field Activity',
+    };
+  };
 
   // Story Viewer State
   const [activeViewerGroupIdx, setActiveViewerGroupIdx] = useState<number | null>(null); // -1 for own stories, 0..N for otherUserGroups
   const [activeSlideIdx, setActiveSlideIdx] = useState<number>(0);
   const [slideProgress, setSlideProgress] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [showViewersList, setShowViewersList] = useState<boolean>(false);
+
+  // Gesture tracking for Story Viewer (Tap vs Hold vs Swipe)
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    startTime: number;
+    isDown: boolean;
+  }>({
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+    isDown: false,
+  });
 
   // Floating emoji burst animation in viewer
   const [floatingBursts, setFloatingBursts] = useState<
     { id: number; emoji: string; left: number }[]
   >([]);
 
-  // Upload Story Modal State
+  // Full-Screen Camera & Edit Caption Modal State
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
   const [draftImage, setDraftImage] = useState<string>('');
   const [draftCaption, setDraftCaption] = useState<string>('');
-  const [draftStoreTag, setDraftStoreTag] = useState<string>('Store Visit FMCU');
+  const [draftStoreTag, setDraftStoreTag] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState<boolean>(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
+  const [isCameraStreamActive, setIsCameraStreamActive] = useState<boolean>(false);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const captionInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Stop active WebRTC camera stream
+  const stopCameraStream = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraStreamActive(false);
+  };
+
+  // Start live camera stream inside the Full-Screen Story Modal
+  const startLiveCamera = async (facing: 'environment' | 'user' = cameraFacingMode) => {
+    stopCameraStream();
+    setUploadError(null);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      // Fallback to native file input with camera capture
+      cameraInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1080 },
+          height: { ideal: 1920 },
+        },
+        audio: false,
+      });
+      mediaStreamRef.current = stream;
+      setIsCameraStreamActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Live camera unavailable, falling back to native camera input:', err);
+      setIsCameraStreamActive(false);
+      // Automatically open native camera picker as fallback
+      cameraInputRef.current?.click();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopCameraStream();
+    };
+  }, []);
+
+  // Attach stream to video element whenever it mounts
+  useEffect(() => {
+    if (isCameraStreamActive && videoRef.current && mediaStreamRef.current) {
+      videoRef.current.srcObject = mediaStreamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isCameraStreamActive, showUploadModal, draftImage]);
+
+  // Capture photo frame from live WebRTC video feed
+  const handleCaptureLiveFrame = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    const maxDim = 1080;
+    let w = video.videoWidth;
+    let h = video.videoHeight;
+    if (w > maxDim || h > maxDim) {
+      if (w > h) {
+        h = Math.round((h * maxDim) / w);
+        w = maxDim;
+      } else {
+        w = Math.round((w * maxDim) / h);
+        h = maxDim;
+      }
+    }
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      if (cameraFacingMode === 'user') {
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(video, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      setDraftImage(dataUrl);
+      stopCameraStream();
+    }
+  };
+
+  const handleSwitchCameraFacing = () => {
+    const nextFacing = cameraFacingMode === 'environment' ? 'user' : 'environment';
+    setCameraFacingMode(nextFacing);
+    startLiveCamera(nextFacing);
+  };
 
   // Determine currently active slides in viewer
   const currentViewerSlides: StorySlide[] = React.useMemo(() => {
     if (activeViewerGroupIdx === null) return [];
-    if (activeViewerGroupIdx === -1) return myTodayStories;
+    if (activeViewerGroupIdx === -1) return myActiveStories;
     return otherUserGroups[activeViewerGroupIdx]?.slides || [];
-  }, [activeViewerGroupIdx, myTodayStories, otherUserGroups]);
+  }, [activeViewerGroupIdx, myActiveStories, otherUserGroups]);
 
   const currentSlide = currentViewerSlides[activeSlideIdx] || null;
 
-  // Mark current slide as viewed
+  // Mark current slide as viewed & record viewer name if viewing another user's story
   useEffect(() => {
-    if (currentSlide && !viewedStoryIds.includes(currentSlide.id)) {
+    if (!currentSlide) return;
+
+    if (!viewedStoryIds.includes(currentSlide.id)) {
       setViewedStoryIds((prev) => [...prev, currentSlide.id]);
     }
-  }, [currentSlide, viewedStoryIds]);
+
+    // Record view from other users on the story slide itself
+    const isOwnSlide =
+      currentSlide.userId === currentUserId ||
+      currentSlide.userName.toLowerCase() === currentUserName.toLowerCase();
+
+    if (!isOwnSlide) {
+      const existingViews = currentSlide.views || [];
+      const alreadyRecorded = existingViews.some(
+        (v) => v.toLowerCase() === currentUserName.toLowerCase()
+      );
+      if (!alreadyRecorded) {
+        setStories((prev) =>
+          prev.map((s) =>
+            s.id === currentSlide.id
+              ? { ...s, views: [...(s.views || []), currentUserName] }
+              : s
+          )
+        );
+      }
+    }
+  }, [currentSlide?.id, currentUserId, currentUserName]);
 
   // Auto-advance progress bar in viewer (6 seconds per slide)
   useEffect(() => {
-    if (activeViewerGroupIdx === null || !currentSlide || isPaused) return;
+    if (activeViewerGroupIdx === null || !currentSlide || isPaused || showViewersList) return;
 
     const interval = setInterval(() => {
       setSlideProgress((prev) => {
@@ -365,47 +514,68 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }, 120);
 
     return () => clearInterval(interval);
-  }, [activeViewerGroupIdx, activeSlideIdx, currentSlide, isPaused]);
+  }, [activeViewerGroupIdx, activeSlideIdx, currentSlide, isPaused, showViewersList]);
 
   const openOwnStoriesOrUpload = () => {
-    if (myTodayStories.length > 0) {
+    if (myActiveStories.length > 0) {
       setActiveViewerGroupIdx(-1);
       setActiveSlideIdx(0);
       setSlideProgress(0);
+      setShowViewersList(false);
     } else {
-      handleOpenUploadModal();
+      handleOpenCameraAndCaptionModal();
     }
   };
 
-  const handleOpenUploadModal = (e?: React.MouseEvent) => {
+  // Click '+' -> Immediately Auto Open Camera + Full-Screen Edit Caption (Auto Agenda Actual)
+  const handleOpenCameraAndCaptionModal = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setUploadError(null);
-    if (myTodayStories.length >= MAX_STORIES_PER_DAY) {
+    setDraftImage('');
+
+    const autoAgenda = buildAutoAgendaCaption();
+    setDraftCaption(autoAgenda.caption);
+    setDraftStoreTag(autoAgenda.storeTag);
+
+    if (myActiveStories.length >= MAX_STORIES_PER_DAY) {
       setUploadError(
-        `Batas harian tercapai (${MAX_STORIES_PER_DAY}/${MAX_STORIES_PER_DAY} story hari ini). Maksimal upload 3x story per hari.`
+        `Batas harian tercapai (${MAX_STORIES_PER_DAY}/${MAX_STORIES_PER_DAY} story dalam 24 jam). Maksimal upload 3x story per hari.`
       );
+      setShowUploadModal(true);
+      return;
     }
+
     setShowUploadModal(true);
+    startLiveCamera('environment');
+  };
+
+  const closeUploadModal = () => {
+    stopCameraStream();
+    setShowUploadModal(false);
+    setDraftImage('');
+    setUploadError(null);
   };
 
   const openEmployeeStoryGroup = (index: number) => {
     const group = otherUserGroups[index];
     if (!group || group.slides.length === 0) return;
-    // Start at first unviewed slide if any
     const firstUnviewedIdx = group.slides.findIndex((s) => !viewedStoryIds.includes(s.id));
     setActiveViewerGroupIdx(index);
     setActiveSlideIdx(firstUnviewedIdx >= 0 ? firstUnviewedIdx : 0);
     setSlideProgress(0);
+    setShowViewersList(false);
   };
 
   const closeViewer = () => {
     setActiveViewerGroupIdx(null);
     setActiveSlideIdx(0);
     setSlideProgress(0);
+    setShowViewersList(false);
   };
 
   const handleNextSlide = () => {
     if (activeViewerGroupIdx === null) return;
+    setShowViewersList(false);
     if (activeSlideIdx < currentViewerSlides.length - 1) {
       setActiveSlideIdx((prev) => prev + 1);
       setSlideProgress(0);
@@ -428,6 +598,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
   const handlePrevSlide = () => {
     if (activeViewerGroupIdx === null) return;
+    setShowViewersList(false);
     if (activeSlideIdx > 0) {
       setActiveSlideIdx((prev) => prev - 1);
       setSlideProgress(0);
@@ -437,17 +608,68 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       setActiveViewerGroupIdx(prevGroupIdx);
       setActiveSlideIdx(Math.max(0, prevSlides.length - 1));
       setSlideProgress(0);
-    } else if (activeViewerGroupIdx === 0 && myTodayStories.length > 0) {
+    } else if (activeViewerGroupIdx === 0 && myActiveStories.length > 0) {
       setActiveViewerGroupIdx(-1);
-      setActiveSlideIdx(Math.max(0, myTodayStories.length - 1));
+      setActiveSlideIdx(Math.max(0, myActiveStories.length - 1));
       setSlideProgress(0);
     } else {
       setSlideProgress(0);
     }
   };
 
-  // Toggle or add emoji reaction on the current story
-  const handleToggleReaction = (emoji: string) => {
+  // Requirement 4: Instagram-style swipe & tap gesture handlers (no navigation arrow buttons)
+  const handlePointerDownCanvas = (clientX: number, clientY: number) => {
+    gestureRef.current = {
+      startX: clientX,
+      startY: clientY,
+      startTime: Date.now(),
+      isDown: true,
+    };
+    setIsPaused(true);
+  };
+
+  const handlePointerUpCanvas = (
+    clientX: number,
+    clientY: number,
+    containerRect: DOMRect
+  ) => {
+    if (!gestureRef.current.isDown) return;
+    gestureRef.current.isDown = false;
+    setIsPaused(false);
+
+    const deltaX = clientX - gestureRef.current.startX;
+    const deltaY = clientY - gestureRef.current.startY;
+    const elapsed = Date.now() - gestureRef.current.startTime;
+
+    // 1. Horizontal swipe left/right (Instagram slide change)
+    if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) {
+        handleNextSlide();
+      } else {
+        handlePrevSlide();
+      }
+      return;
+    }
+
+    // 2. Vertical swipe down (Instagram close viewer)
+    if (deltaY > 85 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      closeViewer();
+      return;
+    }
+
+    // 3. Quick tap (< 260ms and minimal movement) -> Left 32% prev, Right 68% next
+    if (elapsed < 260 && Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) {
+      const relativeX = clientX - containerRect.left;
+      if (relativeX < containerRect.width * 0.32) {
+        handlePrevSlide();
+      } else {
+        handleNextSlide();
+      }
+    }
+  };
+
+  // Requirement 1: React max 1x per story slide, but user can switch/change emoji freely
+  const handleSelectReaction = (emoji: string) => {
     if (!currentSlide) return;
 
     // Trigger floating emoji burst
@@ -461,32 +683,38 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     setStories((prev) =>
       prev.map((slide) => {
         if (slide.id !== currentSlide.id) return slide;
-        const currentReactors = slide.reactions[emoji] || [];
-        const hasReacted = currentReactors.some(
+
+        const existingForTarget = slide.reactions[emoji] || [];
+        const alreadyPickedThisEmoji = existingForTarget.some(
           (name) => name.toLowerCase() === currentUserName.toLowerCase()
         );
-        const updatedReactors = hasReacted
-          ? currentReactors.filter(
-              (name) => name.toLowerCase() !== currentUserName.toLowerCase()
-            )
-          : [...currentReactors, currentUserName];
 
-        const updatedReactions = { ...slide.reactions };
-        if (updatedReactors.length > 0) {
-          updatedReactions[emoji] = updatedReactors;
-        } else {
-          delete updatedReactions[emoji];
+        // First, remove currentUserName from ALL emojis on this slide (enforces max 1 reaction per user)
+        const cleanedReactions: Record<string, string[]> = {};
+        Object.entries(slide.reactions || {}).forEach(([em, usersList]) => {
+          const filtered = usersList.filter(
+            (name) => name.toLowerCase() !== currentUserName.toLowerCase()
+          );
+          if (filtered.length > 0) {
+            cleanedReactions[em] = filtered;
+          }
+        });
+
+        // If user clicked a DIFFERENT emoji (or hadn't reacted yet), set their 1 reaction to this emoji.
+        // If they tapped the exact same emoji again, it toggles off.
+        if (!alreadyPickedThisEmoji) {
+          cleanedReactions[emoji] = [...(cleanedReactions[emoji] || []), currentUserName];
         }
 
         return {
           ...slide,
-          reactions: updatedReactions,
+          reactions: cleanedReactions,
         };
       })
     );
   };
 
-  // Handle selecting photo for new story
+  // Handle selecting/capturing photo from native camera input fallback
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -495,9 +723,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     try {
       const compressed = await compressStoryImage(file);
       setDraftImage(compressed);
+      stopCameraStream();
     } catch (err) {
       console.error(err);
-      setUploadError('Gagal memuat foto. Silakan pilih foto lain.');
+      setUploadError('Gagal memuat foto. Silakan ambil ulang foto.');
     } finally {
       setIsProcessingPhoto(false);
       e.target.value = '';
@@ -506,32 +735,38 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
   const handlePublishStory = (e: React.FormEvent) => {
     e.preventDefault();
-    if (myTodayStories.length >= MAX_STORIES_PER_DAY) {
+    if (myActiveStories.length >= MAX_STORIES_PER_DAY) {
       setUploadError(
-        `Anda sudah mencapai batas maksimal ${MAX_STORIES_PER_DAY}x upload story hari ini!`
+        `Anda sudah mencapai batas maksimal ${MAX_STORIES_PER_DAY}x upload story dalam 24 jam!`
       );
       return;
     }
     if (!draftImage) {
-      setUploadError('Pilih atau ambil foto terlebih dahulu untuk dibagikan ke Story.');
+      setUploadError('Ambil foto terlebih dahulu untuk dibagikan ke Story.');
       return;
     }
 
+    const nowMs = Date.now();
+    const autoFallback = buildAutoAgendaCaption();
     const newStory: StorySlide = {
-      id: `story-${Date.now()}`,
+      id: `story-${nowMs}`,
       userId: currentUserId,
       userName: currentUserName,
       userRole: currentUserRole,
       userAvatar: currentUserAvatar,
       imageUrl: draftImage,
-      caption: draftCaption.trim() || 'Update aktivitas kunjungan harian FMCU ✨',
-      storeTag: draftStoreTag.trim() || 'FMCU Field Activity',
+      caption: draftCaption.trim() || autoFallback.caption,
+      storeTag: draftStoreTag.trim() || autoFallback.storeTag,
       createdAt: getCurrentWibTime(),
       dateKey: todayKey,
+      createdAtMs: nowMs,
+      expiresAtMs: nowMs + STORY_TTL_MS,
       reactions: {},
+      views: [],
     };
 
     setStories((prev) => [newStory, ...prev]);
+    stopCameraStream();
     setDraftImage('');
     setDraftCaption('');
     setShowUploadModal(false);
@@ -553,10 +788,21 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }
   };
 
-  const remainingQuota = Math.max(0, MAX_STORIES_PER_DAY - myTodayStories.length);
+  const remainingQuota = Math.max(0, MAX_STORIES_PER_DAY - myActiveStories.length);
+  const myTopEmoji = getTopReactedEmoji(myActiveStories);
 
   return (
     <>
+      {/* Hidden Native Camera Input Fallback */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handlePhotoFileChange}
+        className="hidden"
+      />
+
       {/* Horizontal Instagram-Style Circle Stories Strip */}
       <div className="w-full mb-3.5 -mx-1 px-1">
         <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar py-1.5">
@@ -567,21 +813,21 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 type="button"
                 onClick={openOwnStoriesOrUpload}
                 className={`w-16 h-16 rounded-full p-[2.5px] transition-transform active:scale-95 cursor-pointer ${
-                  myTodayStories.length > 0
+                  myActiveStories.length > 0
                     ? 'bg-gradient-to-tr from-[#FEDA77] via-[#DD2A7B] to-[#8134AF] shadow-sm'
                     : 'bg-gradient-to-tr from-slate-200 via-slate-300 to-slate-200'
                 }`}
-                title="Cerita Anda (Maks 3x/hari)"
+                title="Cerita Anda (Maks 3x / 24 Jam)"
               >
                 <div className="w-full h-full rounded-full bg-white p-[2px] flex items-center justify-center overflow-hidden relative">
-                  {myTodayStories.length > 0 ? (
+                  {myActiveStories.length > 0 ? (
                     <img
-                      src={myTodayStories[0].imageUrl || currentUserAvatar}
+                      src={myActiveStories[0].imageUrl}
                       alt={currentUserName}
                       className="w-full h-full rounded-full object-cover"
                     />
                   ) : (
-                    /* Story Silhouette with Subtle Avatar Overlay */
+                    /* Silhouette Profile Picture User when no story uploaded yet */
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-slate-100 to-slate-200 flex items-center justify-center relative overflow-hidden">
                       <svg
                         viewBox="0 0 24 24"
@@ -595,15 +841,17 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 </div>
               </button>
 
-              {/* Daily Quota Pill Top-Left (e.g. 1/3) */}
-              <span className="absolute -top-1 -left-1 px-1.5 py-0.2 rounded-full bg-slate-900/90 text-white text-[9px] font-black tracking-tight border border-white shadow-xs pointer-events-none">
-                {myTodayStories.length}/{MAX_STORIES_PER_DAY}
-              </span>
+              {/* Small Top-Reacted Single Emoji Badge at Bottom-Left (if own story has reactions) */}
+              {myTopEmoji && (
+                <span className="absolute -bottom-1 left-0 w-5 h-5 rounded-full bg-white border border-slate-200 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
+                  {myTopEmoji}
+                </span>
+              )}
 
-              {/* Instagram '+' Badge at Bottom-Right */}
+              {/* Instagram '+' Badge at Bottom-Right -> Auto Open Camera */}
               <button
                 type="button"
-                onClick={handleOpenUploadModal}
+                onClick={handleOpenCameraAndCaptionModal}
                 className={`absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full flex items-center justify-center border-2 border-[#F8F9FD] shadow-md transition-transform active:scale-90 cursor-pointer ${
                   remainingQuota > 0
                     ? 'bg-gradient-to-tr from-[#0095F6] to-[#2563EB] text-white'
@@ -611,7 +859,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 }`}
                 title={
                   remainingQuota > 0
-                    ? `Tambah Story (${remainingQuota} kuota tersisa hari ini)`
+                    ? `Buka Kamera & Buat Story (${remainingQuota} kuota tersisa)`
                     : 'Kuota Story Hari Ini Penuh (3/3)'
                 }
               >
@@ -624,18 +872,12 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
             </span>
           </div>
 
-          {/* 2. Other Employees' Story Circles */}
+          {/* 2. Other Employees' Active Story Circles (Only shown when real stories exist) */}
           {otherUserGroups.map((group, idx) => {
             const hasUnviewed = group.slides.some((s) => !viewedStoryIds.includes(s.id));
             const firstName = group.userName.split(' ')[0];
-
-            // Count total reactions across this employee's stories
-            const totalGroupReactions = group.slides.reduce((acc, s) => {
-              return (
-                acc +
-                Object.values(s.reactions).reduce((sum, arr) => sum + arr.length, 0)
-              );
-            }, 0);
+            // Requirement 7: Small badge below story only displays 1 most-reacted emoji
+            const topGroupEmoji = getTopReactedEmoji(group.slides);
 
             return (
               <button
@@ -652,27 +894,31 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                         : 'bg-slate-300/80'
                     }`}
                   >
-                    <div className="w-full h-full rounded-full bg-white p-[2px] overflow-hidden">
-                      <img
-                        src={group.userAvatar}
-                        alt={group.userName}
-                        className="w-full h-full rounded-full object-cover"
-                      />
+                    <div className="w-full h-full rounded-full bg-white p-[2px] overflow-hidden flex items-center justify-center">
+                      {group.userAvatar ? (
+                        <img
+                          src={group.userAvatar}
+                          alt={group.userName}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-gradient-to-b from-slate-100 to-slate-200 flex items-center justify-center overflow-hidden">
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="w-9 h-9 text-slate-400/90 translate-y-1"
+                            fill="currentColor"
+                          >
+                            <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z" />
+                          </svg>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Slide count badge if >1 story */}
-                  {group.slides.length > 1 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-white text-slate-900 border border-slate-200 shadow-xs text-[9px] font-black flex items-center justify-center">
-                      {group.slides.length}
-                    </span>
-                  )}
-
-                  {/* Mini reaction indicator pill at bottom center */}
-                  {totalGroupReactions > 0 && (
-                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-white/95 backdrop-blur-xs border border-slate-200/80 shadow-xs text-[8px] font-extrabold text-slate-700 flex items-center gap-0.5 whitespace-nowrap">
-                      <span>🔥</span>
-                      <span>{totalGroupReactions}</span>
+                  {/* Requirement 7: Small badge at bottom center displaying ONLY the 1 most-reacted emoji */}
+                  {topGroupEmoji && (
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white/95 backdrop-blur-xs border border-slate-200/80 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
+                      {topGroupEmoji}
                     </span>
                   )}
                 </div>
@@ -691,16 +937,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       </div>
 
       {/* =========================================================================
-          MODAL 1: FULL-SCREEN INSTAGRAM STORY VIEWER WITH EMOJI REACTIONS BELOW PHOTO
+          MODAL 1: FULL-SCREEN INSTAGRAM STORY VIEWER
           ========================================================================= */}
       {activeViewerGroupIdx !== null && currentSlide && (
-        <div
-          className="fixed inset-0 z-[9500] bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-between p-2 sm:p-4 select-none animate-in fade-in duration-150"
-          onMouseDown={() => setIsPaused(true)}
-          onMouseUp={() => setIsPaused(false)}
-          onTouchStart={() => setIsPaused(true)}
-          onTouchEnd={() => setIsPaused(false)}
-        >
+        <div className="fixed inset-0 z-[9500] bg-black flex flex-col items-center justify-between p-2 sm:p-4 select-none animate-in fade-in duration-150">
           {/* Story Container (Instagram 9:16 Mobile Frame) */}
           <div className="relative w-full max-w-md h-full flex flex-col justify-between overflow-hidden">
             {/* 1. Segmented Progress Bars + User Header */}
@@ -717,7 +957,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                   return (
                     <div
                       key={slide.id}
-                      className="flex-1 h-1 rounded-full bg-white/30 overflow-hidden"
+                      className="flex-1 h-0.5 rounded-full bg-white/30 overflow-hidden"
                     >
                       <div
                         className="h-full bg-white rounded-full transition-all duration-100 ease-linear"
@@ -732,52 +972,53 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-9 h-9 rounded-full p-[1.5px] bg-gradient-to-tr from-[#FEDA77] via-[#DD2A7B] to-[#8134AF] shrink-0">
-                    <img
-                      src={currentSlide.userAvatar}
-                      alt={currentSlide.userName}
-                      className="w-full h-full rounded-full object-cover border border-black"
-                    />
+                    {currentSlide.userAvatar ? (
+                      <img
+                        src={currentSlide.userAvatar}
+                        alt={currentSlide.userName}
+                        className="w-full h-full rounded-full object-cover border border-black"
+                      />
+                    ) : (
+                      <div className="w-full h-full rounded-full bg-slate-800 flex items-center justify-center text-white text-xs font-bold border border-black">
+                        {currentSlide.userName.charAt(0)}
+                      </div>
+                    )}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-extrabold text-white truncate">
                         {currentSlide.userName}
                       </span>
-                      <span className="text-[10px] text-white/70 font-medium shrink-0">
+                      <span className="text-[10px] text-white/70 font-light shrink-0">
                         • {currentSlide.createdAt}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-teal-300 font-semibold truncate">
-                      {currentSlide.storeTag && (
-                        <span className="inline-flex items-center gap-0.5">
-                          <MapPin className="w-2.5 h-2.5" />
-                          {currentSlide.storeTag}
-                        </span>
-                      )}
-                      <span className="text-white/50">
-                        ({activeSlideIdx + 1}/{currentViewerSlides.length})
-                      </span>
-                    </div>
+                    {currentSlide.storeTag && (
+                      <div className="flex items-center gap-1 text-[10px] text-teal-300 font-medium truncate">
+                        <MapPin className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">{currentSlide.storeTag}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1.5">
+                  {/* Requirement 3: In personal story, replace '+ Tambah' button with Eye icon & view count from other users */}
                   {activeViewerGroupIdx === -1 && (
                     <>
-                      {remainingQuota > 0 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            closeViewer();
-                            handleOpenUploadModal();
-                          }}
-                          className="px-2.5 py-1 rounded-full bg-white/15 hover:bg-white/25 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>Tambah ({myTodayStories.length}/3)</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowViewersList((prev) => !prev);
+                        }}
+                        className="px-2.5 py-1 rounded-full bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
+                        title="Jumlah dilihat oleh user lain"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-teal-300" />
+                        <span>{(currentSlide.views || []).length}</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -806,45 +1047,83 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               </div>
             </div>
 
-            {/* 2. Story Photo Canvas (with Left/Right Tap Zones & Caption) */}
-            <div className="relative flex-1 my-2 rounded-3xl overflow-hidden bg-slate-900 border border-white/10 shadow-2xl flex items-center justify-center">
+            {/* 2. Story Photo Canvas (Instagram Swipe & Tap Gestures — NO Navigation Arrow Buttons) */}
+            <div
+              className="relative flex-1 my-2 rounded-3xl overflow-hidden bg-slate-950 border border-white/10 shadow-2xl flex items-center justify-center touch-pan-y cursor-pointer"
+              onMouseDown={(e) => handlePointerDownCanvas(e.clientX, e.clientY)}
+              onMouseUp={(e) =>
+                handlePointerUpCanvas(
+                  e.clientX,
+                  e.clientY,
+                  e.currentTarget.getBoundingClientRect()
+                )
+              }
+              onMouseLeave={() => {
+                gestureRef.current.isDown = false;
+                setIsPaused(false);
+              }}
+              onTouchStart={(e) => {
+                const t = e.touches[0];
+                if (t) handlePointerDownCanvas(t.clientX, t.clientY);
+              }}
+              onTouchEnd={(e) => {
+                const t = e.changedTouches[0];
+                if (t) {
+                  handlePointerUpCanvas(
+                    t.clientX,
+                    t.clientY,
+                    e.currentTarget.getBoundingClientRect()
+                  );
+                }
+              }}
+            >
               <img
                 src={currentSlide.imageUrl}
                 alt={currentSlide.caption}
-                className="w-full h-full object-cover"
+                draggable={false}
+                className="w-full h-full object-cover pointer-events-none select-none"
               />
 
-              {/* Subtle Bottom Gradient Vignette for Caption */}
-              <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none" />
+              {/* Subtle bottom gradient for readability (no box on caption) */}
+              <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/70 via-black/25 to-transparent pointer-events-none" />
 
-              {/* Left & Right Tap Navigation Zones */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePrevSlide();
-                }}
-                className="absolute inset-y-0 left-0 w-1/3 z-10 flex items-center justify-start pl-2 opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
-                aria-label="Story Sebelumnya"
-              >
-                <span className="w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center">
-                  <ChevronLeft className="w-5 h-5" />
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleNextSlide();
-                }}
-                className="absolute inset-y-0 right-0 w-2/3 z-10 flex items-center justify-end pr-2 opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
-                aria-label="Story Berikutnya"
-              >
-                <span className="w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center">
-                  <ChevronRight className="w-5 h-5" />
-                </span>
-              </button>
+              {/* Viewers List Popover (when clicking Eye icon on own story) */}
+              {activeViewerGroupIdx === -1 && showViewersList && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute top-3 right-3 z-30 w-56 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-white/15 p-3 text-white shadow-xl"
+                >
+                  <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-white/10">
+                    <span className="text-[11px] font-bold flex items-center gap-1.5">
+                      <Eye className="w-3.5 h-3.5 text-teal-400" />
+                      <span>Dilihat oleh ({(currentSlide.views || []).length})</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowViewersList(false)}
+                      className="text-white/60 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {(currentSlide.views || []).length === 0 ? (
+                    <p className="text-[11px] text-white/60 font-light">
+                      Belum ada rekan kerja lain yang melihat story ini.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1 max-h-32 overflow-y-auto">
+                      {(currentSlide.views || []).map((viewerName, i) => (
+                        <li
+                          key={viewerName + i}
+                          className="text-[11px] font-medium text-white/90 truncate"
+                        >
+                          • {viewerName}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {/* Floating Emoji Bursts */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
@@ -862,10 +1141,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 ))}
               </div>
 
-              {/* Story Caption Overlay */}
+              {/* Requirement 2: Caption without background, positioned bottom-left, left-aligned, thin small text */}
               {currentSlide.caption && (
-                <div className="absolute bottom-3.5 inset-x-3.5 z-20 pointer-events-none">
-                  <p className="text-xs sm:text-sm font-semibold text-white leading-snug drop-shadow-sm bg-black/45 backdrop-blur-md px-3.5 py-2.5 rounded-2xl border border-white/15">
+                <div className="absolute bottom-3 left-3.5 right-6 z-20 pointer-events-none text-left">
+                  <p className="text-[11px] font-light text-white/95 text-left leading-relaxed tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
                     {currentSlide.caption}
                   </p>
                 </div>
@@ -883,9 +1162,9 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                   {Object.entries(currentSlide.reactions).filter(
                     ([, usersList]) => usersList.length > 0
                   ).length === 0 ? (
-                    <span className="text-[11px] text-white/60 font-medium flex items-center gap-1">
+                    <span className="text-[11px] text-white/60 font-light flex items-center gap-1">
                       <Heart className="w-3.5 h-3.5 text-pink-400" />
-                      <span>Belum ada reaksi — berikan emot pertama!</span>
+                      <span>Belum ada reaksi emot</span>
                     </span>
                   ) : (
                     Object.entries(currentSlide.reactions)
@@ -898,8 +1177,12 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                           <button
                             key={emoji}
                             type="button"
-                            onClick={() => handleToggleReaction(emoji)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold transition-all active:scale-90 cursor-pointer ${
+                            onClick={() => {
+                              if (activeViewerGroupIdx !== -1) {
+                                handleSelectReaction(emoji);
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all active:scale-90 cursor-pointer ${
                               iReacted
                                 ? 'bg-gradient-to-r from-pink-500/80 to-rose-500/80 text-white border border-pink-300 shadow-sm'
                                 : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
@@ -924,130 +1207,114 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 </span>
               </div>
 
-              {/* Instagram Quick Emoji Reaction Picker Bar */}
-              <div className="flex items-center justify-between bg-white/10 backdrop-blur-xl px-3 py-2 rounded-full border border-white/15">
-                <span className="text-[10px] font-bold text-white/70 pl-1 pr-2 hidden sm:inline">
-                  Kirim Reaksi:
-                </span>
-                <div className="flex items-center justify-around flex-1 gap-1">
-                  {QUICK_EMOJIS.map((emoji) => {
-                    const reactors = currentSlide.reactions[emoji] || [];
-                    const isMine = reactors.some(
-                      (u) => u.toLowerCase() === currentUserName.toLowerCase()
-                    );
-                    return (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => handleToggleReaction(emoji)}
-                        className={`w-9 h-9 rounded-full flex items-center justify-center text-lg transition-transform hover:scale-125 active:scale-90 cursor-pointer ${
-                          isMine
-                            ? 'bg-white/25 ring-2 ring-pink-400 scale-110'
-                            : 'hover:bg-white/15'
-                        }`}
-                        title={`Reaksi ${emoji}`}
-                      >
-                        {emoji}
-                      </button>
-                    );
-                  })}
+              {/* Requirement 1: When viewing ANOTHER user's story, allow reacting (1x per user, changeable) */}
+              {activeViewerGroupIdx !== -1 && (
+                <div className="flex items-center justify-between bg-white/10 backdrop-blur-xl px-3 py-1.5 rounded-full border border-white/15">
+                  <div className="flex items-center justify-around flex-1 gap-1">
+                    {QUICK_EMOJIS.map((emoji) => {
+                      const reactors = currentSlide.reactions[emoji] || [];
+                      const isMine = reactors.some(
+                        (u) => u.toLowerCase() === currentUserName.toLowerCase()
+                      );
+                      return (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => handleSelectReaction(emoji)}
+                          className={`w-9 h-9 rounded-full flex items-center justify-center text-lg transition-transform hover:scale-125 active:scale-90 cursor-pointer ${
+                            isMine
+                              ? 'bg-white/25 ring-2 ring-pink-400 scale-110'
+                              : 'hover:bg-white/15'
+                          }`}
+                          title={`Pilih Reaksi ${emoji} (Bisa ganti emot)`}
+                        >
+                          {emoji}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
       {/* =========================================================================
-          MODAL 2: UPLOAD STORY MODAL (MAX 3X PER DAY PER USER)
+          MODAL 2: FULL-SCREEN AUTO CAMERA & EDIT CAPTION AUTO AGENDA ACTUAL PAGE
           ========================================================================= */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-[9600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-in fade-in duration-150">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-slate-100 space-y-4">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#FEDA77] via-[#DD2A7B] to-[#8134AF] p-[2px]">
-                  <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-[#DD2A7B]" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">
-                    Bagikan Cerita (Story)
-                  </h3>
-                  <p className="text-[11px] font-semibold text-slate-500">
-                    Kuota Hari Ini:{' '}
-                    <span className="text-slate-900 font-extrabold">
-                      {myTodayStories.length}/{MAX_STORIES_PER_DAY}
-                    </span>{' '}
-                    (Maks 3x/hari)
-                  </p>
-                </div>
+        <div className="fixed inset-0 z-[9600] bg-black text-white flex flex-col justify-between select-none animate-in fade-in duration-150">
+          {/* Top Bar */}
+          <div className="pt-[max(0.75rem,env(safe-area-inset-top,16px))] px-4 pb-2 flex items-center justify-between z-30 bg-gradient-to-b from-black/80 to-transparent">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center">
+                <Camera className="w-4 h-4 text-teal-300" />
               </div>
+              <div>
+                <h3 className="text-xs font-extrabold text-white tracking-tight">
+                  Buat Story Kunjungan Aktual
+                </h3>
+                <p className="text-[10px] text-white/70 font-light">
+                  Kuota 24 Jam: {myActiveStories.length}/{MAX_STORIES_PER_DAY} • Otomatis hilang 24 jam
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {!draftImage && remainingQuota > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSwitchCameraFacing}
+                  className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-md text-white flex items-center justify-center cursor-pointer"
+                  title="Putar Kamera Depan/Belakang"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              )}
 
               <button
                 type="button"
-                onClick={() => setShowUploadModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer"
+                onClick={closeUploadModal}
+                className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-md text-white flex items-center justify-center cursor-pointer"
+                title="Tutup"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+          </div>
 
-            {/* Quota Progress Pills */}
-            <div className="grid grid-cols-3 gap-1.5">
-              {[0, 1, 2].map((slotIdx) => {
-                const used = slotIdx < myTodayStories.length;
-                return (
-                  <div
-                    key={slotIdx}
-                    className={`py-1.5 px-2 rounded-xl border text-[10px] font-extrabold flex items-center justify-center gap-1 ${
-                      used
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                        : 'bg-slate-50 border-slate-200 text-slate-500'
-                    }`}
-                  >
-                    <CheckCircle2
-                      className={`w-3 h-3 ${
-                        used ? 'text-emerald-600' : 'text-slate-300'
-                      }`}
-                    />
-                    <span>Story #{slotIdx + 1}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {uploadError && (
-              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-                <span>{uploadError}</span>
+          {/* Main Full-Screen Camera Viewfinder OR Captured Photo + Auto Agenda Caption Editor */}
+          {remainingQuota <= 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center px-6 text-center space-y-4">
+              <div className="w-14 h-14 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                <AlertCircle className="w-7 h-7" />
               </div>
-            )}
-
-            {/* Hidden File Inputs */}
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handlePhotoFileChange}
-              className="hidden"
-            />
-            <input
-              ref={galleryInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handlePhotoFileChange}
-              className="hidden"
-            />
-
-            {remainingQuota > 0 ? (
-              <form onSubmit={handlePublishStory} className="space-y-3.5">
-                {/* Photo Preview or Camera/Gallery Picker */}
+              <div className="space-y-1 max-w-xs">
+                <h4 className="text-base font-black text-white">
+                  Kuota 3x Story Hari Ini Terpenuhi
+                </h4>
+                <p className="text-xs text-white/70 font-light leading-relaxed">
+                  Setiap karyawan maksimal mengunggah 3 story dalam 24 jam. Story lama akan otomatis hilang setelah 24 jam.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeUploadModal}
+                className="px-6 py-2.5 rounded-full bg-white text-slate-950 text-xs font-extrabold cursor-pointer"
+              >
+                Kembali
+              </button>
+            </div>
+          ) : (
+            <form
+              onSubmit={handlePublishStory}
+              className="flex-1 flex flex-col justify-between relative overflow-hidden"
+            >
+              {/* Full-Screen Viewport */}
+              <div className="relative flex-1 mx-2 my-1 rounded-3xl overflow-hidden bg-slate-950 border border-white/15 flex items-center justify-center">
                 {draftImage ? (
-                  <div className="relative w-full h-56 rounded-2xl overflow-hidden bg-slate-900 border border-slate-200">
+                  <>
                     <img
                       src={draftImage}
                       alt="Preview Story"
@@ -1055,115 +1322,157 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => setDraftImage('')}
-                      className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full bg-black/60 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                      onClick={() => {
+                        setDraftImage('');
+                        startLiveCamera(cameraFacingMode);
+                      }}
+                      className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
                     >
-                      <X className="w-3 h-3" />
-                      <span>Ganti Foto</span>
+                      <Camera className="w-3.5 h-3.5 text-teal-300" />
+                      <span>Foto Ulang</span>
                     </button>
-                  </div>
+                  </>
+                ) : isCameraStreamActive ? (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover ${
+                      cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''
+                    }`}
+                  />
                 ) : (
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="flex flex-col items-center justify-center p-6 text-center space-y-3">
                     <button
                       type="button"
                       onClick={() => cameraInputRef.current?.click()}
-                      disabled={isProcessingPhoto}
-                      className="flex flex-col items-center justify-center gap-2 py-7 px-3 rounded-2xl border-2 border-dashed border-teal-300 bg-teal-50/50 hover:bg-teal-50 text-teal-800 transition cursor-pointer"
+                      className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#FEDA77] via-[#DD2A7B] to-[#8134AF] p-[3px] shadow-xl cursor-pointer"
                     >
-                      <div className="w-10 h-10 rounded-full bg-teal-600 text-white flex items-center justify-center shadow-sm">
-                        <Camera className="w-5 h-5" />
+                      <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center">
+                        <Camera className="w-8 h-8 text-white" />
                       </div>
-                      <span className="text-xs font-extrabold">Ambil Kamera</span>
-                      <span className="text-[10px] text-teal-600 font-medium">
-                        Foto Langsung
+                    </button>
+                    <p className="text-xs font-bold text-white">
+                      Ketuk untuk Membuka Kamera Perangkat
+                    </p>
+                    <p className="text-[11px] font-light text-white/60 max-w-xs">
+                      Ambil foto aktivitas kunjungan aktual Anda untuk dibagikan ke Story Tim FMCU.
+                    </p>
+                  </div>
+                )}
+
+                {uploadError && (
+                  <div className="absolute top-3 left-3 right-3 z-30 p-2.5 rounded-2xl bg-rose-600/90 backdrop-blur-md text-white text-[11px] font-bold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{uploadError}</span>
+                  </div>
+                )}
+
+                {/* Bottom-Left Thin Small Caption Overlay & Auto Agenda Actual Editor */}
+                <div className="absolute inset-x-0 bottom-0 pt-14 pb-3.5 px-3.5 bg-gradient-to-t from-black/85 via-black/45 to-transparent z-20 flex flex-col items-start text-left space-y-2">
+                  {/* Quick Selector Pills if User Has Multiple Agendas Today */}
+                  {myTodayAgendas.length > 0 && (
+                    <div className="w-full flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-teal-300 shrink-0">
+                        <CalendarCheck className="w-3 h-3" />
+                        <span>Auto Agenda:</span>
                       </span>
+                      {myTodayAgendas.slice(0, 4).map((ag) => {
+                        const agText = `${ag.title} — ${ag.location} (${ag.time} WIB)`;
+                        const isSelected = draftCaption === agText;
+                        return (
+                          <button
+                            key={ag.id}
+                            type="button"
+                            onClick={() => {
+                              setDraftCaption(agText);
+                              setDraftStoreTag(ag.location || ag.category);
+                            }}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-teal-500 text-slate-950 font-bold'
+                                : 'bg-white/15 text-white/85 hover:bg-white/25'
+                            }`}
+                          >
+                            {ag.title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Editable Thin Small Left-Aligned Caption (No Heavy Box) */}
+                  <div className="w-full text-left">
+                    <label className="block text-[9px] font-light uppercase tracking-wider text-white/60 mb-0.5">
+                      Caption Story (Ketuk untuk edit agenda aktual):
+                    </label>
+                    <textarea
+                      ref={captionInputRef}
+                      rows={2}
+                      value={draftCaption}
+                      onChange={(e) => setDraftCaption(e.target.value)}
+                      placeholder="Tulis caption agenda aktual..."
+                      className="w-full bg-transparent text-[11px] font-light text-white/95 placeholder:text-white/40 text-left leading-relaxed tracking-wide focus:outline-none border-b border-white/20 focus:border-teal-400 resize-none py-0.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Camera Shutter OR Publish Bar */}
+              <div className="pb-[max(1rem,env(safe-area-inset-bottom,20px))] pt-2 px-5 flex items-center justify-between gap-3 z-30">
+                {!draftImage ? (
+                  <div className="w-full flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="px-3.5 py-2 rounded-full bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold cursor-pointer"
+                    >
+                      Kamera Sistem
+                    </button>
+
+                    {/* Instagram-Style Shutter Button */}
+                    <button
+                      type="button"
+                      onClick={handleCaptureLiveFrame}
+                      disabled={isProcessingPhoto}
+                      className="w-18 h-18 rounded-full p-1 border-4 border-white flex items-center justify-center active:scale-90 transition cursor-pointer"
+                      title="Ambil Foto"
+                    >
+                      <span className="w-14 h-14 rounded-full bg-white block" />
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => galleryInputRef.current?.click()}
-                      disabled={isProcessingPhoto}
-                      className="flex flex-col items-center justify-center gap-2 py-7 px-3 rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50/50 hover:bg-blue-50 text-blue-800 transition cursor-pointer"
+                      onClick={() => captionInputRef.current?.focus()}
+                      className="px-3.5 py-2 rounded-full bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold cursor-pointer"
                     >
-                      <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-sm">
-                        <ImageIcon className="w-5 h-5" />
-                      </div>
-                      <span className="text-xs font-extrabold">Pilih Galeri</span>
-                      <span className="text-[10px] text-blue-600 font-medium">
-                        Upload Gambar
-                      </span>
+                      Edit Caption
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-full flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => captionInputRef.current?.focus()}
+                      className="px-4 py-3 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
+                    >
+                      Edit Caption
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={isProcessingPhoto}
+                      className="flex-1 py-3 px-5 rounded-full bg-gradient-to-r from-[#DD2A7B] via-[#E1306C] to-[#F58529] hover:brightness-110 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Bagikan Story ({myActiveStories.length + 1}/{MAX_STORIES_PER_DAY})</span>
                     </button>
                   </div>
                 )}
-
-                {/* Store / Location Tag & Caption */}
-                <div className="space-y-2">
-                  <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
-                      Lokasi / Cabang Toko
-                    </label>
-                    <input
-                      type="text"
-                      value={draftStoreTag}
-                      onChange={(e) => setDraftStoreTag(e.target.value)}
-                      placeholder="Contoh: FM Thamrin City"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
-                      Caption Story
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={draftCaption}
-                      onChange={(e) => setDraftCaption(e.target.value)}
-                      placeholder="Tulis aktivitas visit atau update singkat..."
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={!draftImage || isProcessingPhoto}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#DD2A7B] via-[#E1306C] to-[#F58529] hover:brightness-105 disabled:opacity-50 text-white font-black text-xs shadow-md transition active:scale-[0.98] cursor-pointer"
-                >
-                  {isProcessingPhoto
-                    ? 'Memproses Foto...'
-                    : `Bagikan ke Story (${myTodayStories.length + 1}/${MAX_STORIES_PER_DAY})`}
-                </button>
-              </form>
-            ) : (
-              <div className="space-y-3 pt-1">
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  Anda telah mengunggah <strong>3 Story</strong> hari ini. Sesuai kebijakan aplikasi, setiap karyawan maksimal mengunggah 3x story per hari.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUploadModal(false);
-                      setActiveViewerGroupIdx(-1);
-                      setActiveSlideIdx(0);
-                      setSlideProgress(0);
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
-                  >
-                    Lihat 3 Story Saya
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowUploadModal(false)}
-                    className="py-2.5 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer"
-                  >
-                    Tutup
-                  </button>
-                </div>
               </div>
-            )}
-          </div>
+            </form>
+          )}
         </div>
       )}
     </>
