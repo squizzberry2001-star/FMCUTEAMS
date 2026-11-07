@@ -16,6 +16,7 @@ import {
   Sparkles,
   ClipboardList,
   MapPin,
+  Camera,
   User as UserIcon
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
@@ -30,6 +31,7 @@ interface DesktopDashboardProps {
   onSelectDate: (date: string) => void;
   onSelectAgenda: (agenda: ScheduleAgenda) => void;
   onOpenNewAgenda: () => void;
+  onOpenVisitForm?: (agenda: ScheduleAgenda) => void;
   onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
 }
@@ -42,7 +44,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   onSelectDate,
   onSelectAgenda,
   onOpenNewAgenda,
-  onToggleComplete,
+  onOpenVisitForm,
   onLogout,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'Month'>('Today');
@@ -417,6 +419,25 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 </span>
               ))}
             </div>
+
+            {/* Khusus Agenda Visit Button */}
+            {selectedAgenda.category === 'VISIT' && (
+              <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
+                <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
+                  Khusus Agenda Visit
+                </span>
+                <p className="text-xs text-slate-600 mb-3">
+                  Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
+                </p>
+                <button
+                  onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
+                  className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Buka Form Visit Report</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center py-16">

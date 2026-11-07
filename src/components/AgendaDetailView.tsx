@@ -20,11 +20,13 @@ import { ScheduleAgenda, ScheduleCategory } from '../types';
 interface AgendaDetailViewProps {
   agenda: ScheduleAgenda;
   onBack: () => void;
+  onOpenVisitForm?: () => void;
 }
 
 export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   agenda,
   onBack,
+  onOpenVisitForm,
 }) => {
   const renderCategoryIcon = (category: ScheduleCategory) => {
     switch (category) {
@@ -196,26 +198,35 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
           </div>
         </div>
 
-        {/* Action Link: Form Visit / NSO */}
-        <div className="bg-gradient-to-br from-teal-50 to-white rounded-[28px] p-5 border border-teal-100 shadow-soft-card space-y-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-teal-600" />
-            <span className="text-xs font-extrabold text-slate-800">
-              Form Lapangan FMCU (Visit & NSO)
-            </span>
+        {/* KHUSUS AGENDA VISIT: Tombol BUKA FORM VISIT */}
+        {agenda.category === 'VISIT' && (
+          <div className="bg-gradient-to-br from-emerald-500/10 via-teal-50 to-white rounded-[28px] p-5 border-2 border-emerald-500/30 shadow-soft-card space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-[#00A389] text-white flex items-center justify-center font-black text-xs">
+                  FM
+                </div>
+                <span className="text-xs font-black text-slate-900 tracking-tight">
+                  FMCU Visit Store Report
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                Khusus Agenda Visit
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed font-medium">
+              Buka formulir inspeksi toko, input lembar QSC/FamiTrack, data store crew, observasi temuan OPI & QSC, serta unggah bukti foto lapangan.
+            </p>
+            <button
+              onClick={onOpenVisitForm}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+            >
+              <Camera className="w-4 h-4" />
+              <span>BUKA FORM VISIT REPORT</span>
+              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+            </button>
           </div>
-          <p className="text-xs text-slate-500">
-            Unggah foto dokumentasi toko dan input laporan hasil inspeksi langsung ke sistem.
-          </p>
-          <button
-            onClick={() => alert(`Membuka Form untuk: ${agenda.title}\n(Terkoneksi ke Google Drive & Apps Script)`)}
-            className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-          >
-            <Camera className="w-4 h-4" />
-            <span>Buka Form Dokumentasi & Foto</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

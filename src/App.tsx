@@ -9,6 +9,7 @@ import { ProfileView } from './components/ProfileView';
 import { DesktopDashboard } from './components/DesktopDashboard';
 import { NewAgendaModal } from './components/NewAgendaModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
+import { VisitReportForm } from './components/visit/VisitReportForm';
 import { LoginPage } from './components/LoginPage';
 import { Smartphone, Monitor } from 'lucide-react';
 
@@ -56,8 +57,8 @@ export const App: React.FC = () => {
   // Mobile navigation active tab
   const [mobileTab, setMobileTab] = useState<'home' | 'calendar' | 'history' | 'profile'>('home');
 
-  // Mobile sub-screen: 'main' (normal tabs) or 'detail' (agenda detail page)
-  const [mobileScreen, setMobileScreen] = useState<'main' | 'detail'>('main');
+  // Screen routing: 'main' (normal tabs), 'detail' (agenda detail), 'visit-form' (UI/UX Form Visit)
+  const [mobileScreen, setMobileScreen] = useState<'main' | 'detail' | 'visit-form'>('main');
 
   // Modal State for New Agenda
   const [showNewAgendaModal, setShowNewAgendaModal] = useState(false);
@@ -144,8 +145,8 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
-      {/* Real Web Header / Control Banner for Desktop Viewers */}
-      <div className="hidden lg:flex items-center justify-between px-6 py-2 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40">
+      {/* Real Web Header / Control Banner for Desktop Viewers (Hidden when printing PDF) */}
+      <div className="hidden lg:flex items-center justify-between px-6 py-2 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40 print:hidden">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-xs font-bold text-slate-800">FMCU TEAMS Live Web Application</span>
@@ -192,14 +193,22 @@ export const App: React.FC = () => {
       </div>
 
       {/* Main Content: Responsive Desktop or Native Mobile */}
-      {isMobileLayout ? (
-        /* Mobile Full-Screen Web App (No simulated hardware frame!) */
+      {mobileScreen === 'visit-form' && selectedAgenda ? (
+        /* Full UI/UX FORM VISIT (KHUSUS AGENDA VISIT) */
+        <VisitReportForm
+          agenda={selectedAgenda}
+          user={user}
+          onBack={() => setMobileScreen('detail')}
+        />
+      ) : isMobileLayout ? (
+        /* Mobile Full-Screen Web App */
         <div className="flex-1 w-full max-w-md mx-auto min-h-screen bg-[#F8F9FD] flex flex-col relative">
           {mobileScreen === 'detail' && selectedAgenda ? (
-            /* Halaman Detail Agenda ketika user klik list agenda (tanpa tombol checklist selesai) */
+            /* Halaman Detail Agenda */
             <AgendaDetailView
               agenda={selectedAgenda}
               onBack={() => setMobileScreen('main')}
+              onOpenVisitForm={() => setMobileScreen('visit-form')}
             />
           ) : (
             <>
@@ -257,6 +266,10 @@ export const App: React.FC = () => {
           onSelectDate={setSelectedDate}
           onSelectAgenda={handleSelectAgenda}
           onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+          onOpenVisitForm={(agenda) => {
+            setSelectedAgenda(agenda);
+            setMobileScreen('visit-form');
+          }}
           onLogout={handleLogout}
         />
       )}
