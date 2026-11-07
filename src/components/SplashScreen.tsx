@@ -292,15 +292,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       }}
       title="Ketuk untuk langsung membuka portal"
     >
-      {/* Pure AMOLED Pitch Black: Tight subtle central glow strictly behind text, zero bleed to status bar */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            'radial-gradient(circle at 50% 50%, rgba(45, 212, 191, 0.08) 0%, transparent 40%)',
-        }}
-      />
-
       {/* Optical White Light Dissolve Veil: Rises as the white dot blooms, bathing screen in pure white light */}
       <div
         className={`fixed inset-0 pointer-events-none z-35 transition-opacity duration-600 ease-in ${
