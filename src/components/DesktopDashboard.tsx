@@ -25,12 +25,12 @@ import { ScheduleCard } from './ScheduleCard';
 interface DesktopDashboardProps {
   user: User;
   agendas: ScheduleAgenda[];
-  selectedAgenda: ScheduleAgenda;
+  selectedAgenda?: ScheduleAgenda | null;
   selectedDate: string;
   onSelectDate: (date: string) => void;
   onSelectAgenda: (agenda: ScheduleAgenda) => void;
   onOpenNewAgenda: () => void;
-  onToggleComplete: (id: string, e?: React.MouseEvent) => void;
+  onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
 }
 
@@ -352,7 +352,6 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 <ScheduleCard
                   agenda={agenda}
                   onClick={onSelectAgenda}
-                  onToggleComplete={onToggleComplete}
                 />
               </div>
             ))
@@ -362,82 +361,82 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
 
       {/* 3. Right Sidebar Inspector Pane */}
       <aside className="w-96 bg-white border-l border-slate-100 flex flex-col justify-between p-7 overflow-y-auto z-20 flex-shrink-0">
-        <div>
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Detail Agenda Terpilih
-            </span>
-            <span className="text-xs font-bold text-teal-600 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
-              {selectedAgenda.category}
-            </span>
-          </div>
-
-          {/* Title & Description */}
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">
-            {selectedAgenda.title}
-          </h2>
-
-          <p className="text-xs text-slate-400 font-normal leading-relaxed mt-2">
-            {selectedAgenda.description || 'Tidak ada catatan tambahan untuk agenda ini.'}
-          </p>
-
-          {/* Details Badges */}
-          <div className="space-y-2 mt-5">
-            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-              <Clock className="w-4 h-4 text-teal-600 flex-shrink-0" />
-              <div className="text-xs font-bold text-slate-700">
-                {selectedAgenda.date} • {selectedAgenda.time} WIB
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-              <MapPin className="w-4 h-4 text-orange-500 flex-shrink-0" />
-              <div className="text-xs font-bold text-slate-700 truncate">
-                {selectedAgenda.location}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-              <UserIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              <div className="text-xs font-bold text-slate-700">
-                PIC: {selectedAgenda.pic}
-              </div>
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div className="flex flex-wrap items-center gap-2 mt-5">
-            {selectedAgenda.tags.map((t, idx) => (
-              <span
-                key={idx}
-                className="px-3 py-1 rounded-full text-xs font-medium tracking-wide bg-teal-50 text-teal-700 border border-teal-100"
-              >
-                {t}
+        {selectedAgenda ? (
+          <div>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Detail Agenda Terpilih
               </span>
-            ))}
+              <span className="text-xs font-bold text-teal-600 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
+                {selectedAgenda.category}
+              </span>
+            </div>
+
+            {/* Title & Description */}
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">
+              {selectedAgenda.title}
+            </h2>
+
+            <p className="text-xs text-slate-400 font-normal leading-relaxed mt-2">
+              {selectedAgenda.description || 'Tidak ada catatan tambahan untuk agenda ini.'}
+            </p>
+
+            {/* Details Badges */}
+            <div className="space-y-2 mt-5">
+              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                <Clock className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                <div className="text-xs font-bold text-slate-700">
+                  {selectedAgenda.date} • {selectedAgenda.time} WIB
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                <MapPin className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                <div className="text-xs font-bold text-slate-700 truncate">
+                  {selectedAgenda.location}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                <UserIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <div className="text-xs font-bold text-slate-700">
+                  PIC: {selectedAgenda.pic}
+                </div>
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div className="flex flex-wrap items-center gap-2 mt-5">
+              {selectedAgenda.tags.map((t, idx) => (
+                <span
+                  key={idx}
+                  className="px-3 py-1 rounded-full text-xs font-medium tracking-wide bg-teal-50 text-teal-700 border border-teal-100"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center py-16">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
+              <CalendarIcon className="w-6 h-6" />
+            </div>
+            <h4 className="text-sm font-bold text-slate-800">Detail Agenda</h4>
+            <p className="text-xs text-slate-400 mt-1 max-w-[220px]">
+              Pilih salah satu agenda di daftar untuk melihat detail informasi operasional.
+            </p>
+          </div>
+        )}
 
         {/* Bottom Actions */}
         <div className="mt-8 space-y-2.5">
           <button
-            onClick={() => onToggleComplete(selectedAgenda.id)}
-            className={`w-full py-3 rounded-full font-bold text-xs tracking-wide transition-all duration-300 flex items-center justify-center gap-2 ${
-              selectedAgenda.completed
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-            }`}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {selectedAgenda.completed ? 'Agenda Selesai (Klik Batalkan)' : 'Tandai Selesai'}
-          </button>
-
-          <button
             onClick={onOpenNewAgenda}
             className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
           >
-            <span>+ Buat Agenda Baru</span>
+            <span>+ Buat Agenda Baru (Admin)</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>

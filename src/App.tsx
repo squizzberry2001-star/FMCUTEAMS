@@ -13,9 +13,10 @@ import { LoginPage } from './components/LoginPage';
 import { Smartphone, Monitor } from 'lucide-react';
 
 export const App: React.FC = () => {
-  // 1. Data State with LocalStorage persistence for Agendas
+  // 1. Data State for Agendas (Hapus seluruh dummy data lawas di browser)
   const [agendas, setAgendas] = useState<ScheduleAgenda[]>(() => {
-    const saved = localStorage.getItem('fmcu_agendas_schedule');
+    localStorage.removeItem('fmcu_agendas_schedule');
+    const saved = localStorage.getItem('fmcu_agendas_schedule_v2');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -23,7 +24,7 @@ export const App: React.FC = () => {
         console.error(e);
       }
     }
-    return initialAgendas;
+    return initialAgendas; // Array kosong []
   });
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -34,9 +35,7 @@ export const App: React.FC = () => {
     return `${year}-${month}-${day}`;
   });
 
-  const [selectedAgenda, setSelectedAgenda] = useState<ScheduleAgenda>(() => {
-    return initialAgendas[0];
-  });
+  const [selectedAgenda, setSelectedAgenda] = useState<ScheduleAgenda | null>(null);
 
   const [user, setUser] = useState<User | null>(() => {
     const savedUser = localStorage.getItem('fmcu_user');
@@ -82,7 +81,7 @@ export const App: React.FC = () => {
 
   // Save changes to localStorage
   useEffect(() => {
-    localStorage.setItem('fmcu_agendas_schedule', JSON.stringify(agendas));
+    localStorage.setItem('fmcu_agendas_schedule_v2', JSON.stringify(agendas));
   }, [agendas]);
 
   useEffect(() => {
@@ -97,31 +96,6 @@ export const App: React.FC = () => {
   const handleSelectAgenda = (agenda: ScheduleAgenda) => {
     setSelectedAgenda(agenda);
     setMobileScreen('detail'); // Navigasi ke Halaman Detail Agenda
-  };
-
-  const handleToggleAgendaComplete = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setAgendas((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const nextState = !item.completed;
-          if (nextState) {
-            confetti({
-              particleCount: 45,
-              spread: 55,
-              origin: { y: 0.7 },
-              colors: ['#2BB3A0', '#4ADE80', '#FF6B8B', '#FFD12E'],
-            });
-          }
-          return { ...item, completed: nextState };
-        }
-        return item;
-      })
-    );
-
-    if (selectedAgenda?.id === id) {
-      setSelectedAgenda((prev) => ({ ...prev, completed: !prev.completed }));
-    }
   };
 
   const handleAddNewAgenda = (newAgenda: ScheduleAgenda) => {
@@ -221,12 +195,11 @@ export const App: React.FC = () => {
       {isMobileLayout ? (
         /* Mobile Full-Screen Web App (No simulated hardware frame!) */
         <div className="flex-1 w-full max-w-md mx-auto min-h-screen bg-[#F8F9FD] flex flex-col relative">
-          {mobileScreen === 'detail' ? (
-            /* Halaman Detail Agenda ketika user klik list agenda */
+          {mobileScreen === 'detail' && selectedAgenda ? (
+            /* Halaman Detail Agenda ketika user klik list agenda (tanpa tombol checklist selesai) */
             <AgendaDetailView
               agenda={selectedAgenda}
               onBack={() => setMobileScreen('main')}
-              onToggleComplete={handleToggleAgendaComplete}
             />
           ) : (
             <>
@@ -238,7 +211,6 @@ export const App: React.FC = () => {
                   selectedDate={selectedDate}
                   onSelectDate={setSelectedDate}
                   onSelectAgenda={handleSelectAgenda}
-                  onToggleComplete={handleToggleAgendaComplete}
                   onOpenCalendar={() => setMobileTab('calendar')}
                   onOpenHistory={() => setMobileTab('history')}
                   onOpenProfile={() => setMobileTab('profile')}
@@ -253,7 +225,6 @@ export const App: React.FC = () => {
                   agendas={agendas}
                   onBack={() => setMobileTab('home')}
                   onSelectAgenda={handleSelectAgenda}
-                  onToggleComplete={handleToggleAgendaComplete}
                 />
               )}
 
@@ -286,7 +257,6 @@ export const App: React.FC = () => {
           onSelectDate={setSelectedDate}
           onSelectAgenda={handleSelectAgenda}
           onOpenNewAgenda={() => setShowNewAgendaModal(true)}
-          onToggleComplete={handleToggleAgendaComplete}
           onLogout={handleLogout}
         />
       )}

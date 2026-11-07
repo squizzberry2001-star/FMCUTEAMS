@@ -12,7 +12,7 @@ interface HomeScreenProps {
   onSelectDate: (date: string) => void;
   onSelectAgenda?: (agenda: ScheduleAgenda) => void;
   onOpenNewAgenda?: () => void;
-  onToggleComplete: (id: string, e: React.MouseEvent) => void;
+  onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onOpenProfile?: () => void;
   onOpenCalendar?: () => void;
   onOpenHistory?: () => void;
@@ -181,7 +181,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 key={agenda.id}
                 agenda={agenda}
                 onClick={onSelectAgenda}
-                onToggleComplete={onToggleComplete}
               />
             ))
           )}

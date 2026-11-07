@@ -248,30 +248,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (onToggleComplete) onToggleComplete(item.id, e);
-                      }}
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${
-                        item.completed
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-amber-50 text-amber-700'
-                      }`}
-                    >
-                      {item.completed ? (
-                        <>
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Selesai</span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="w-3 h-3" />
-                          <span>Pending</span>
-                        </>
-                      )}
-                    </button>
+                  <div className="flex items-center gap-2 flex-shrink-0 text-slate-300">
+                    <ChevronRight className="w-4 h-4" />
                   </div>
                 </div>
               ))
@@ -293,8 +271,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                     <span className="text-[10px] font-bold text-slate-400">{item.date} • {item.time}</span>
                     <h5 className="text-xs font-bold text-slate-700 mt-0.5">{item.title}</h5>
                   </div>
-                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                    Selesai
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                    {item.category}
                   </span>
                 </div>
               ))
