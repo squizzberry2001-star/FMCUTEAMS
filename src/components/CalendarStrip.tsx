@@ -50,21 +50,51 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ selectedDate, onSe
             data-splash-target={item.isToday ? 'actual-date-pill' : undefined}
             data-selected-date-pill={isSelected ? 'true' : undefined}
             onClick={() => onSelectDate(item.dateString)}
+            style={
+              isSelected
+                ? item.isToday
+                  ? {
+                      boxShadow:
+                        'inset 0 0 0 1.5px rgba(255, 255, 255, 0.92), 0 10px 25px -4px rgba(255, 107, 139, 0.45)',
+                    }
+                  : undefined
+                : item.isToday
+                ? {
+                    boxShadow:
+                      'inset 0 0 0 1.25px #2BB3A0, 0 2px 6px -1px rgba(30, 41, 59, 0.04)',
+                  }
+                : undefined
+            }
             className={`flex flex-col items-center justify-center transition-all duration-300 flex-1 min-w-[42px] ${
               isSelected
                 ? 'py-3.5 rounded-full bg-gradient-to-b from-[#FF7E98] to-[#FF5376] text-white shadow-pill-coral transform -translate-y-0.5'
+                : item.isToday
+                ? 'py-3 rounded-full bg-white text-slate-800'
                 : 'py-3 rounded-full bg-white/90 hover:bg-white text-slate-400 hover:text-slate-600 shadow-soft-sm'
             }`}
           >
-            <span className={`text-base font-bold leading-tight ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+            <span
+              className={`text-base leading-tight ${
+                isSelected
+                  ? 'font-bold text-white'
+                  : item.isToday
+                  ? 'font-extrabold text-teal-700'
+                  : 'font-bold text-slate-800'
+              }`}
+            >
               {item.num}
             </span>
-            <span className={`text-[10px] font-semibold mt-0.5 ${isSelected ? 'text-white/95' : 'text-slate-400'}`}>
+            <span
+              className={`text-[10px] mt-0.5 ${
+                isSelected
+                  ? 'font-semibold text-white/95'
+                  : item.isToday
+                  ? 'font-bold text-teal-600'
+                  : 'font-semibold text-slate-400'
+              }`}
+            >
               {item.label}
             </span>
-            {item.isToday && !isSelected && (
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 mt-1" />
-            )}
           </button>
         );
       })}
