@@ -101,6 +101,7 @@
 
 /* Authentic Apple Liquid Frosted Glass with Silhouette Refraction Edges */
 /* 80% True Transparency Crystalline Glass Aesthetic with Left-Right Black & Top-Bottom White Specular Reflection */
+/* Super Thin (0.5px - 0.75px) Hairline Rim like genuine iOS Liquid Glass */
 .iphone-glass-dock {
   width: 100% !important;
   max-width: 440px !important;
@@ -115,20 +116,20 @@
   ) !important;
   backdrop-filter: blur(28px) saturate(190%) contrast(102%) brightness(1.06);
   -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(102%) brightness(1.06);
-  /* Top & bottom: White reflection | Left & right: Black silhouette edge */
-  border-top: 1.2px solid rgba(255, 255, 255, 0.90) !important;
-  border-bottom: 1.2px solid rgba(255, 255, 255, 0.55) !important;
-  border-left: 1.5px solid rgba(0, 0, 0, 0.35) !important;
-  border-right: 1.5px solid rgba(0, 0, 0, 0.35) !important;
+  /* Super fine hairline: Top white reflection | Bottom subtle white | Left & right black silhouette */
+  border-top: 0.75px solid rgba(255, 255, 255, 0.85) !important;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.35) !important;
+  border-left: 0.5px solid rgba(0, 0, 0, 0.22) !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.22) !important;
   box-shadow: 
-    0 14px 40px -8px rgba(15, 23, 42, 0.14),
-    0 4px 12px -2px rgba(15, 23, 42, 0.06),
-    /* Top & bottom white specular bevel */
-    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.40),
-    /* Left & right dark silhouette shadow */
-    inset 2px 0 2px 0 rgba(0, 0, 0, 0.25),
-    inset -2px 0 2px 0 rgba(0, 0, 0, 0.25);
+    0 12px 36px -6px rgba(15, 23, 42, 0.10),
+    0 4px 12px -2px rgba(15, 23, 42, 0.04),
+    /* Ultra-fine hairline specular insets */
+    inset 0 0.75px 0.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -0.5px 0.5px 0 rgba(255, 255, 255, 0.25),
+    /* Left & right delicate silhouette refraction */
+    inset 0.5px 0 0.5px 0 rgba(0, 0, 0, 0.14),
+    inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.14);
 }
 
 /* Auto-Shrinking Scrolled State (scale 0.90 and max-width 310px) */
@@ -145,20 +146,20 @@
   ) !important;
   backdrop-filter: blur(32px) saturate(200%) brightness(1.08);
   -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.08);
-  /* Top & bottom: White reflection | Left & right: Black silhouette edge */
-  border-top: 1.2px solid rgba(255, 255, 255, 0.95) !important;
-  border-bottom: 1.2px solid rgba(255, 255, 255, 0.60) !important;
-  border-left: 1.5px solid rgba(0, 0, 0, 0.40) !important;
-  border-right: 1.5px solid rgba(0, 0, 0, 0.40) !important;
+  /* Super fine hairline: Top white reflection | Bottom subtle white | Left & right black silhouette */
+  border-top: 0.75px solid rgba(255, 255, 255, 0.90) !important;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.40) !important;
+  border-left: 0.5px solid rgba(0, 0, 0, 0.25) !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.25) !important;
   box-shadow: 
-    0 16px 42px -8px rgba(15, 23, 42, 0.16),
-    0 4px 14px -2px rgba(15, 23, 42, 0.08),
-    /* Top & bottom white specular bevel */
-    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.45),
-    /* Left & right dark silhouette shadow */
-    inset 2px 0 2px 0 rgba(0, 0, 0, 0.30),
-    inset -2px 0 2px 0 rgba(0, 0, 0, 0.30);
+    0 14px 38px -6px rgba(15, 23, 42, 0.12),
+    0 4px 12px -2px rgba(15, 23, 42, 0.05),
+    /* Ultra-fine hairline specular insets */
+    inset 0 0.75px 0.5px 0 rgba(255, 255, 255, 0.80),
+    inset 0 -0.5px 0.5px 0 rgba(255, 255, 255, 0.30),
+    /* Left & right delicate silhouette refraction */
+    inset 0.5px 0 0.5px 0 rgba(0, 0, 0, 0.16),
+    inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.16);
 }
 
 /* Sliding Floating Lens Pill on Active Tab (Liquid Glass Lens, +80% Transparency) */
@@ -169,19 +170,19 @@
     rgba(255, 255, 255, 0.48) 50%,
     rgba(255, 255, 255, 0.62) 100%
   ) !important;
-  /* Top & bottom: White reflection | Left & right: Black silhouette edge */
-  border-top: 1px solid rgba(255, 255, 255, 0.95) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.60) !important;
-  border-left: 1.2px solid rgba(0, 0, 0, 0.28) !important;
-  border-right: 1.2px solid rgba(0, 0, 0, 0.28) !important;
+  /* Super fine hairline: Top white reflection | Bottom subtle white | Left & right black silhouette */
+  border-top: 0.75px solid rgba(255, 255, 255, 0.90) !important;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.40) !important;
+  border-left: 0.5px solid rgba(0, 0, 0, 0.18) !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.18) !important;
   box-shadow: 
-    0 6px 20px -2px rgba(15, 23, 42, 0.08),
-    0 2px 6px -1px rgba(15, 23, 42, 0.04),
-    /* Convex Lens Double-Bevel Specular Insets */
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1.5px 0 rgba(255, 255, 255, 0.4),
-    inset 1.5px 0 1.5px 0 rgba(0, 0, 0, 0.18),
-    inset -1.5px 0 1.5px 0 rgba(0, 0, 0, 0.18);
+    0 4px 16px -2px rgba(15, 23, 42, 0.06),
+    0 1px 4px -1px rgba(15, 23, 42, 0.03),
+    /* Convex Lens Ultra-fine Specular Insets */
+    inset 0 0.75px 0.75px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -0.5px 0.5px 0 rgba(255, 255, 255, 0.25),
+    inset 0.5px 0 0.5px 0 rgba(0, 0, 0, 0.10),
+    inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.10);
   backdrop-filter: blur(24px) saturate(210%) contrast(110%) brightness(1.08);
   -webkit-backdrop-filter: blur(24px) saturate(210%) contrast(110%) brightness(1.08);
 }
@@ -197,20 +198,19 @@
   ) !important;
   backdrop-filter: blur(24px) saturate(190%) contrast(102%) brightness(1.06);
   -webkit-backdrop-filter: blur(24px) saturate(190%) contrast(102%) brightness(1.06);
-  /* Top & bottom: White reflection | Left & right: Black silhouette edge */
-  border-top: 1.2px solid rgba(255, 255, 255, 0.92) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.55) !important;
-  border-left: 1.2px solid rgba(0, 0, 0, 0.32) !important;
-  border-right: 1.2px solid rgba(0, 0, 0, 0.32) !important;
+  /* Super fine hairline: Top white reflection | Bottom subtle white | Left & right black silhouette */
+  border-top: 0.75px solid rgba(255, 255, 255, 0.85) !important;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.35) !important;
+  border-left: 0.5px solid rgba(0, 0, 0, 0.20) !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.20) !important;
   box-shadow: 
-    0 8px 24px -4px rgba(15, 23, 42, 0.12),
-    0 2px 8px -2px rgba(15, 23, 42, 0.05),
-    /* Top & bottom white specular bevel */
-    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.40),
-    /* Left & right dark silhouette shadow */
-    inset 1.5px 0 1.5px 0 rgba(0, 0, 0, 0.20),
-    inset -1.5px 0 1.5px 0 rgba(0, 0, 0, 0.20);
+    0 6px 18px -3px rgba(15, 23, 42, 0.08),
+    0 2px 6px -1px rgba(15, 23, 42, 0.04),
+    /* Ultra-fine hairline specular insets */
+    inset 0 0.75px 0.5px 0 rgba(255, 255, 255, 0.80),
+    inset 0 -0.5px 0.5px 0 rgba(255, 255, 255, 0.25),
+    inset 0.5px 0 0.5px 0 rgba(0, 0, 0, 0.12),
+    inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.12);
 }
 
 /* Super Smooth Responsive Transition Classes (400ms Snappy Apple Motion) */
