@@ -587,11 +587,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }
   };
 
-  // Click '+' -> Immediately Auto Open Camera + Full-Screen Edit Caption (Auto Agenda Actual)
+  // Click '+' -> Immediately Auto Open Native System Camera synchronously
   const handleOpenCameraAndCaptionModal = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setUploadError(null);
-    setDraftImage('');
 
     const autoAgenda = buildAutoAgendaCaption();
     setDraftCaption(autoAgenda.caption);
@@ -605,8 +604,13 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       return;
     }
 
-    setShowUploadModal(true);
-    startLiveCamera('environment');
+    // Directly trigger the device's Native System Camera synchronously within user click gesture
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
+      cameraInputRef.current.click();
+    } else {
+      setShowUploadModal(true);
+    }
   };
 
   const closeUploadModal = () => {
@@ -792,12 +796,16 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     });
   };
 
-  // Handle selecting/capturing photo from native camera input fallback
+  // Handle selecting/capturing photo from native System Camera -> Open Full-Screen Edit Caption Modal
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsProcessingPhoto(true);
     setUploadError(null);
+    const autoAgenda = buildAutoAgendaCaption();
+    setDraftCaption((prev) => prev || autoAgenda.caption);
+    setDraftStoreTag((prev) => prev || autoAgenda.storeTag);
+    setShowUploadModal(true);
     try {
       const compressed = await compressStoryImage(file);
       setDraftImage(compressed);
@@ -1432,8 +1440,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setDraftImage('');
-                        startLiveCamera(cameraFacingMode);
+                        if (cameraInputRef.current) {
+                          cameraInputRef.current.value = '';
+                          cameraInputRef.current.click();
+                        }
                       }}
                       className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
                     >
