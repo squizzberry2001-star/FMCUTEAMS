@@ -688,7 +688,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           type="button"
           onClick={onBack}
           title="Kembali ke Home / Jadwal Toko"
-          className="w-11 h-11 rounded-full iphone-glass-dock pointer-events-auto flex items-center justify-center text-slate-700 hover:text-teal-700 shadow-lg border border-white/90 active:scale-90 transition-all duration-200 cursor-pointer hover:bg-white/90 group"
+          className="w-11 h-11 rounded-full iphone-glass-dock pointer-events-auto flex items-center justify-center text-slate-700 hover:text-teal-700 active:scale-90 transition-all duration-200 cursor-pointer hover:bg-white/95 group"
         >
           <Home className="w-5 h-5 stroke-[2.2] group-hover:scale-110 transition-transform" />
         </button>
@@ -698,7 +698,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           type="button"
           onClick={() => setShowPreview(true)}
           title="Pratinjau & Cetak Laporan PDF 16:9"
-          className="w-11 h-11 rounded-full iphone-glass-dock pointer-events-auto flex items-center justify-center text-rose-600 hover:text-rose-700 shadow-lg border border-white/90 active:scale-90 transition-all duration-200 cursor-pointer hover:bg-white/90 relative group"
+          className="w-11 h-11 rounded-full iphone-glass-dock pointer-events-auto flex items-center justify-center text-rose-600 hover:text-rose-700 active:scale-90 transition-all duration-200 cursor-pointer hover:bg-white/95 relative group"
         >
           <FileText className="w-5 h-5 stroke-[2.2] group-hover:scale-110 transition-transform" />
           <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-rose-600 text-white px-1 py-0.2 rounded-full leading-tight shadow-xs">
