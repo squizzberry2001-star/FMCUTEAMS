@@ -63,8 +63,8 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
         <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80 z-0" />
 
         {/* 
-          SLIDING ACTIVE GLASS LENS PILL (High Contrast Mint-Teal Liquid Glass)
-          Warna kontras tegas di atas dock putih transparan, meluncur anggun
+          SLIDING ACTIVE GLASS LENS PILL (White Liquid Glass, No Border, +5% Transparency)
+          Lens kaca putih meluncur anggun tanpa border
         */}
         <div
           className={`absolute rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0 ${
@@ -77,8 +77,8 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
           }}
         >
           {/* Top specular hairline inside the pill */}
-          <div className="pointer-events-none absolute inset-x-2.5 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-100" />
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/50 via-teal-100/25 to-teal-200/35" />
+          <div className="pointer-events-none absolute inset-x-2.5 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
+          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
         </div>
 
         {/* Tab Items Buttons */}
@@ -104,19 +104,19 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
                     isScrolled ? 'w-4 h-4' : 'w-5 h-5'
                   } ${
                     isActive
-                      ? 'scale-115 text-teal-800 stroke-[2.6] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(13,148,136,0.45)]'
+                      ? 'scale-115 text-teal-600 stroke-[2.4] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(20,184,166,0.35)]'
                       : 'scale-100 stroke-[1.9] text-slate-400 group-hover:text-slate-600 group-hover:scale-105'
                   }`}
                 />
               </div>
 
-              {/* Label Typography dengan Kontras Tegas Saat Aktif */}
+              {/* Label Typography */}
               <span
                 className={`tracking-tight leading-none transition-all duration-300 ${
                   isScrolled ? 'text-[9px]' : 'text-[10px]'
                 } ${
                   isActive
-                    ? 'text-teal-950 font-black scale-[1.04]'
+                    ? 'text-slate-900 font-black scale-[1.03]'
                     : 'text-slate-400 font-semibold group-hover:text-slate-600'
                 }`}
               >
