@@ -360,11 +360,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <div className="relative flex items-center">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
               <input
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? 'text' : 'tel'}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
                 value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
+                onChange={(e) => setCurrentPassword(e.target.value.replace(/\D/g, ''))}
                 placeholder={user.isAdmin ? 'Masukkan 607090' : 'Masukkan 0000'}
                 required
+                style={
+                  !showPassword
+                    ? ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)
+                    : undefined
+                }
                 className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-10 py-2.5 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-wider"
               />
             </div>
@@ -374,16 +382,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div>
             <label className="block text-xs text-slate-600 font-bold mb-1.5 flex items-center justify-between">
               <span>Sandi Baru</span>
-              <span className="text-[10px] text-teal-600 font-medium">Min. 4 karakter</span>
+              <span className="text-[10px] text-teal-600 font-medium">Min. 4 angka</span>
             </label>
             <div className="relative flex items-center">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
               <input
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? 'text' : 'tel'}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => setNewPassword(e.target.value.replace(/\D/g, ''))}
                 placeholder="Buat sandi baru..."
                 required
+                style={
+                  !showPassword
+                    ? ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)
+                    : undefined
+                }
                 className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-10 py-2.5 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-wider"
               />
             </div>
@@ -397,11 +413,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <div className="relative flex items-center">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
               <input
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? 'text' : 'tel'}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => setConfirmPassword(e.target.value.replace(/\D/g, ''))}
                 placeholder="Ketik ulang sandi baru..."
                 required
+                style={
+                  !showPassword
+                    ? ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)
+                    : undefined
+                }
                 className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-10 py-2.5 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-wider"
               />
             </div>

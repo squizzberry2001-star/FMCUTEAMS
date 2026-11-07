@@ -317,11 +317,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
 
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? 'text' : 'tel'}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
                   value={staffPassword}
-                  onChange={(e) => setStaffPassword(e.target.value)}
+                  onChange={(e) => setStaffPassword(e.target.value.replace(/\D/g, ''))}
                   placeholder="Masukkan password..."
                   required
+                  style={
+                    !showPassword
+                      ? ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)
+                      : undefined
+                  }
                   className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-11 py-2.5 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-wider placeholder:tracking-normal placeholder:font-normal"
                 />
 
@@ -410,12 +418,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
 
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? 'text' : 'tel'}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
                   value={adminPasswordInput}
-                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  onChange={(e) => setAdminPasswordInput(e.target.value.replace(/\D/g, ''))}
                   placeholder="Masukkan kode otorisasi..."
                   required
                   autoFocus
+                  style={
+                    !showPassword
+                      ? ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)
+                      : undefined
+                  }
                   className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-11 py-2.5 text-[16px] sm:text-xs font-bold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-widest placeholder:tracking-normal placeholder:font-normal"
                 />
 
