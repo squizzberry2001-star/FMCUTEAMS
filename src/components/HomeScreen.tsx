@@ -11,7 +11,6 @@ interface HomeScreenProps {
   onToggleTaken: (id: string, e: React.MouseEvent) => void;
   onOpenProfile?: () => void;
   onOpenCalendar?: () => void;
-  onOpenHistory?: () => void;
   activeNavTab?: string;
   setActiveNavTab?: (tab: string) => void;
 }
@@ -23,7 +22,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onToggleTaken,
   onOpenProfile,
   onOpenCalendar,
-  onOpenHistory,
   activeNavTab = 'home',
   setActiveNavTab,
 }) => {
@@ -38,9 +36,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   });
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FD] relative select-none w-full max-w-xl mx-auto">
+    <div className="flex flex-col h-full bg-[#F8F9FD] relative overflow-hidden select-none">
       {/* Scrollable Content Container */}
-      <div className="flex-1 overflow-y-auto no-scrollbar px-5 sm:px-6 pt-6 pb-28">
+      <div className="flex-1 overflow-y-auto no-scrollbar px-5 pt-7 pb-28">
         {/* Top Header: Title & Bell */}
         <div className="flex items-start justify-between mb-5">
           <div>
@@ -50,11 +48,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
 
           <button
-            onClick={() => alert("Notification: All morning doses are taken! Next scheduled dose is after dinner.")}
+            onClick={() => alert("All medicines are scheduled accurately for today!")}
             className="w-11 h-11 rounded-full bg-[#EAF8F2] flex items-center justify-center text-[#2BB3A0] shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative flex-shrink-0"
           >
             <Bell className="w-5 h-5" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[#2BB3A0] absolute top-2.5 right-2.5 border-2 border-white ring-2 ring-[#EAF8F2]" />
+            <span className="w-2 h-2 rounded-full bg-[#2BB3A0] absolute top-2.5 right-2.5 border-2 border-white ring-2 ring-[#EAF8F2]" />
           </button>
         </div>
 
@@ -91,13 +89,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         {/* Medicines List */}
         <div className="space-y-3">
           {displayedMedicines.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
+            <div className="text-center py-10 bg-white rounded-3xl p-6 border border-slate-100">
               <p className="text-slate-400 text-sm font-medium">No medicines scheduled for this period.</p>
               <button
                 onClick={onOpenNewReminder}
-                className="mt-3 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal"
+                className="mt-3 px-4 py-2 rounded-full bg-[#2BB3A0] text-white text-xs font-bold"
               >
-                + Add New Reminder
+                + Add Medicine
               </button>
             </div>
           ) : (
@@ -114,7 +112,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Floating Bottom Navigation Bar */}
-      <div className="fixed sm:sticky bottom-0 left-0 right-0 max-w-xl mx-auto px-5 pb-5 pt-2 bg-gradient-to-t from-[#F8F9FD] via-[#F8F9FD]/95 to-transparent pointer-events-none z-30">
+      <div className="absolute bottom-0 left-0 right-0 px-5 pb-5 pt-2 bg-gradient-to-t from-[#F8F9FD] via-[#F8F9FD]/95 to-transparent pointer-events-none">
         <div className="w-full bg-white/95 backdrop-blur-md rounded-[32px] px-5 py-3 shadow-dock flex items-center justify-between border border-white/60 pointer-events-auto">
           {/* Home */}
           <button
@@ -149,10 +147,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {/* List / History */}
           <button
-            onClick={() => {
-              if (onOpenHistory) onOpenHistory();
-              else if (setActiveNavTab) setActiveNavTab('history');
-            }}
+            onClick={() => setActiveNavTab && setActiveNavTab('history')}
             className={`p-2 transition-all ${
               activeNavTab === 'history' ? 'text-[#3E74FF]' : 'text-slate-300 hover:text-slate-500'
             }`}

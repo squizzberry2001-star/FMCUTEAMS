@@ -14,9 +14,6 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Types */
-    "types": ["vite/client"],
-
     /* Linting */
     "strict": true,
     "noUnusedLocals": false,
