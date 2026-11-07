@@ -1,4 +1,105 @@
-import { Medicine } from '../types';
+import { Medicine, ScheduleAgenda } from '../types';
+
+export const initialAgendas: ScheduleAgenda[] = [
+  {
+    id: 'sch-1',
+    title: 'Audit & Store Visit - Cabang Dago',
+    date: '2026-11-07', // Hari ini (Sabtu)
+    time: '09:30',
+    category: 'VISIT',
+    location: 'Toko Bandung Dago No. 124',
+    pic: 'Sarah Jenkins',
+    description: 'Pemeriksaan display rak gondola, kepatuhan kasir POS, dan verifikasi ketersediaan stok akhir pekan.',
+    tags: ['Visit Lapangan', 'Prioritas Tinggi'],
+    completed: true,
+    priority: 'HIGH',
+    createdBy: 'Admin FMCU',
+  },
+  {
+    id: 'sch-2',
+    title: 'Final Walkthrough NSO Bandung Timur',
+    date: '2026-11-07', // Hari ini (Sabtu)
+    time: '13:30',
+    category: 'NSO',
+    location: 'Ruko Metro Trade Center Blok B-12',
+    pic: 'Dimas Wicaksono',
+    description: 'Pengecekan instalasi AC, pencahayaan, rak display utama, dan uji coba jaringan kasir.',
+    tags: ['NSO Opening', 'Fit-Out Check'],
+    completed: false,
+    priority: 'HIGH',
+    createdBy: 'Admin FMCU',
+  },
+  {
+    id: 'sch-3',
+    title: 'Review SOP & Briefing Shift Siang',
+    date: '2026-11-07', // Hari ini (Sabtu)
+    time: '16:00',
+    category: 'TRAINING',
+    location: 'Cabang Riau Bandung',
+    pic: 'Sarah Jenkins',
+    description: 'Briefing hospitality pelayanan dan penataan visual merchandising untuk jam ramai toko.',
+    tags: ['Briefing Toko', 'SOP Hospitality'],
+    completed: false,
+    priority: 'NORMAL',
+    createdBy: 'Admin FMCU',
+  },
+  {
+    id: 'sch-4',
+    title: 'Audit Fasilitas Toko Sukajadi',
+    date: '2026-11-06', // Kemarin (Jumat)
+    time: '10:00',
+    category: 'AUDIT',
+    location: 'Jl. Sukajadi No. 88, Bandung',
+    pic: 'Rian Pratama',
+    description: 'Inspeksi kebersihan gudang penyimpanan dan verifikasi tanggal kedaluwarsa barang.',
+    tags: ['Audit Bulanan', 'Selesai'],
+    completed: true,
+    priority: 'MEDIUM',
+    createdBy: 'Admin FMCU',
+  },
+  {
+    id: 'sch-5',
+    title: 'Rapat Koordinasi Target FMCU',
+    date: '2026-11-05', // Kamis
+    time: '14:00',
+    category: 'MEETING',
+    location: 'Head Office Room 302',
+    pic: 'Aan Bagus',
+    description: 'Review pencapaian target kunjungan toko bulanan dan monitoring ekspansi cabang baru.',
+    tags: ['Meeting Internal', 'Review Bulanan'],
+    completed: true,
+    priority: 'NORMAL',
+    createdBy: 'Admin FMCU',
+  },
+  {
+    id: 'sch-6',
+    title: 'Inspeksi Lapangan Toko Buah Batu',
+    date: '2026-11-08', // Besok (Minggu)
+    time: '10:30',
+    category: 'VISIT',
+    location: 'Jl. Buah Batu No. 201',
+    pic: 'Sarah Jenkins',
+    description: 'Pengecekan traffic customer akhir pekan dan stok barang fast-moving.',
+    tags: ['Visit Rutin', 'Weekend Traffic'],
+    completed: false,
+    priority: 'HIGH',
+    createdBy: 'Admin FMCU',
+  },
+  {
+    id: 'sch-7',
+    title: 'Grand Opening NSO Cabang Cimahi',
+    date: '2026-11-09', // Senin Depan
+    time: '08:00',
+    category: 'NSO',
+    location: 'Jl. Raya Barat Cimahi No. 45',
+    pic: 'Dimas Wicaksono',
+    description: 'Peluncuran resmi cabang baru, pengawasan transaksi perdana, dan monitoring antrean.',
+    tags: ['Grand Opening', 'NSO Launch'],
+    completed: false,
+    priority: 'HIGH',
+    createdBy: 'Admin FMCU',
+  },
+];
 
 export const initialMedicines: Medicine[] = [
   {
@@ -49,14 +150,4 @@ export const initialMedicines: Medicine[] = [
     frequency: 'Daily',
     takenToday: false,
   },
-];
-
-export const calendarDays = [
-  { dayNum: 3, dayName: 'Fri', isToday: false },
-  { dayNum: 4, dayName: 'Sat', isToday: false },
-  { dayNum: 5, dayName: 'Sun', isToday: true, isSelected: true },
-  { dayNum: 6, dayName: 'Mon', isToday: false },
-  { dayNum: 7, dayName: 'Tue', isToday: false },
-  { dayNum: 8, dayName: 'Wed', isToday: false },
-  { dayNum: 9, dayName: 'Thu', isToday: false },
 ];

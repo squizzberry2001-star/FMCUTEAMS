@@ -2,25 +2,43 @@ export type MedicineType = 'capsule' | 'bottle' | 'syringe' | 'tablet';
 
 export type TimeSchedule = 'Before Breakfast' | 'After Breakfast' | 'Before Lunch' | 'After Lunch' | 'Before Dinner' | 'After Dinner' | 'Bedtime';
 
-export interface Medicine {
+export type ScheduleCategory = 'VISIT' | 'NSO' | 'MEETING' | 'AUDIT' | 'TRAINING';
+
+export interface ScheduleAgenda {
   id: string;
-  name: string;
-  strength: string; // e.g. "150mg"
-  dosageForm: string; // e.g. "1 capsule"
-  type: MedicineType;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  category: ScheduleCategory;
+  location: string;
+  pic: string;
   description?: string;
-  times: string[]; // e.g. ["After Breakfast", "After Dinner"]
-  amount: string; // e.g. "2 pill/Day"
-  thisMonthProgress: string; // e.g. "3/31 taken"
-  cause: string; // e.g. "Diabetes"
-  capSize: string; // e.g. "150 mg"
-  duration: string; // e.g. "1 Month"
-  frequency: string; // e.g. "Daily"
-  takenToday?: boolean;
+  tags: string[];
+  completed?: boolean;
+  priority?: 'HIGH' | 'MEDIUM' | 'NORMAL';
+  createdBy?: string;
 }
 
 export interface User {
   name: string;
   email: string;
   avatar?: string;
+  role?: string;
+}
+
+export interface Medicine {
+  id: string;
+  name: string;
+  strength: string;
+  dosageForm: string;
+  type: MedicineType;
+  description?: string;
+  times: string[];
+  amount: string;
+  thisMonthProgress: string;
+  cause: string;
+  capSize: string;
+  duration: string;
+  frequency: string;
+  takenToday?: boolean;
 }

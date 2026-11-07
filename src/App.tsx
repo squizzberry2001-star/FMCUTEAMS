@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Medicine, User } from './types';
-import { initialMedicines } from './data/mockData';
+import { ScheduleAgenda, User } from './types';
+import { initialAgendas } from './data/mockData';
 import { HomeScreen } from './components/HomeScreen';
-import { DetailView } from './components/DetailView';
-import { NewReminderView } from './components/NewReminderView';
 import { CalendarScheduleView } from './components/CalendarScheduleView';
 import { HistoryView } from './components/HistoryView';
 import { ProfileView } from './components/ProfileView';
 import { DesktopDashboard } from './components/DesktopDashboard';
-import { EditScheduleModal } from './components/EditScheduleModal';
+import { NewAgendaModal } from './components/NewAgendaModal';
 import { LoginPage } from './components/LoginPage';
-import { Smartphone, Monitor, X } from 'lucide-react';
+import { Smartphone, Monitor } from 'lucide-react';
 
 export const App: React.FC = () => {
-  // 1. Data State with LocalStorage persistence
-  const [medicines, setMedicines] = useState<Medicine[]>(() => {
-    const saved = localStorage.getItem('fmcu_medicines');
+  // 1. Data State with LocalStorage persistence for Agendas
+  const [agendas, setAgendas] = useState<ScheduleAgenda[]>(() => {
+    const saved = localStorage.getItem('fmcu_agendas_schedule');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -24,11 +22,19 @@ export const App: React.FC = () => {
         console.error(e);
       }
     }
-    return initialMedicines;
+    return initialAgendas;
   });
 
-  const [selectedMedicine, setSelectedMedicine] = useState<Medicine>(() => {
-    return initialMedicines[2] || initialMedicines[0];
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+
+  const [selectedAgenda, setSelectedAgenda] = useState<ScheduleAgenda>(() => {
+    return initialAgendas[0];
   });
 
   const [user, setUser] = useState<User | null>(() => {
@@ -41,7 +47,7 @@ export const App: React.FC = () => {
       }
     }
     return {
-      name: 'Dr. Sarah Jenkins',
+      name: 'Sarah Jenkins',
       email: 'sarah.j@fmcuteams.com',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     };
@@ -49,12 +55,9 @@ export const App: React.FC = () => {
 
   // Mobile navigation active tab
   const [mobileTab, setMobileTab] = useState<'home' | 'calendar' | 'history' | 'profile'>('home');
-  // Mobile sub-screens: null (shows tab), 'detail', 'new-reminder'
-  const [mobileScreen, setMobileScreen] = useState<'main' | 'detail' | 'new-reminder'>('main');
 
-  // Desktop modals
-  const [showDesktopNewReminderModal, setShowDesktopNewReminderModal] = useState(false);
-  const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
+  // Modal State for New Agenda
+  const [showNewAgendaModal, setShowNewAgendaModal] = useState(false);
 
   // Forced layout override (auto / desktop / mobile) for testing on PC
   const [layoutMode, setLayoutMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
@@ -75,8 +78,8 @@ export const App: React.FC = () => {
 
   // Save changes to localStorage
   useEffect(() => {
-    localStorage.setItem('fmcu_medicines', JSON.stringify(medicines));
-  }, [medicines]);
+    localStorage.setItem('fmcu_agendas_schedule', JSON.stringify(agendas));
+  }, [agendas]);
 
   useEffect(() => {
     if (user) {
@@ -87,22 +90,40 @@ export const App: React.FC = () => {
   }, [user]);
 
   // Handlers
-  const handleSelectMedicine = (med: Medicine) => {
-    setSelectedMedicine(med);
-    setMobileScreen('detail');
+  const handleSelectAgenda = (agenda: ScheduleAgenda) => {
+    setSelectedAgenda(agenda);
   };
 
-  const handleAddMedicine = (newMedData: Omit<Medicine, 'id'>) => {
-    const newMed: Medicine = {
-      ...newMedData,
-      id: `med-${Date.now()}`,
-    };
-    const updated = [newMed, ...medicines];
-    setMedicines(updated);
-    setSelectedMedicine(newMed);
-    setShowDesktopNewReminderModal(false);
-    setMobileScreen('main');
-    setMobileTab('home');
+  const handleToggleAgendaComplete = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setAgendas((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          const nextState = !item.completed;
+          if (nextState) {
+            confetti({
+              particleCount: 45,
+              spread: 55,
+              origin: { y: 0.7 },
+              colors: ['#2BB3A0', '#4ADE80', '#FF6B8B', '#FFD12E'],
+            });
+          }
+          return { ...item, completed: nextState };
+        }
+        return item;
+      })
+    );
+
+    if (selectedAgenda?.id === id) {
+      setSelectedAgenda((prev) => ({ ...prev, completed: !prev.completed }));
+    }
+  };
+
+  const handleAddNewAgenda = (newAgenda: ScheduleAgenda) => {
+    const updated = [newAgenda, ...agendas];
+    setAgendas(updated);
+    setSelectedAgenda(newAgenda);
+    setShowNewAgendaModal(false);
 
     confetti({
       particleCount: 50,
@@ -110,57 +131,6 @@ export const App: React.FC = () => {
       origin: { y: 0.6 },
       colors: ['#2BB3A0', '#FF6B8B', '#FFB085', '#5C86FA'],
     });
-  };
-
-  const handleRemoveMedicine = (id: string) => {
-    const filtered = medicines.filter((m) => m.id !== id);
-    setMedicines(filtered);
-    if (selectedMedicine.id === id && filtered.length > 0) {
-      setSelectedMedicine(filtered[0]);
-    }
-    setMobileScreen('main');
-  };
-
-  const handleSaveSchedule = (updated: Medicine) => {
-    setMedicines((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-    if (selectedMedicine.id === updated.id) {
-      setSelectedMedicine(updated);
-    }
-    setEditingMedicine(null);
-  };
-
-  const handleToggleTaken = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setMedicines((prev) =>
-      prev.map((m) => {
-        if (m.id === id) {
-          const updated = !m.takenToday;
-          if (updated) {
-            confetti({
-              particleCount: 40,
-              spread: 50,
-              origin: { y: 0.7 },
-              colors: ['#2BB3A0', '#4ADE80', '#FF6B8B', '#FFD12E'],
-            });
-          }
-          return {
-            ...m,
-            takenToday: updated,
-            thisMonthProgress: updated
-              ? `${Math.min(31, (parseInt(m.thisMonthProgress) || 0) + 1)}/31 taken`
-              : m.thisMonthProgress,
-          };
-        }
-        return m;
-      })
-    );
-
-    if (selectedMedicine.id === id) {
-      setSelectedMedicine((prev) => ({
-        ...prev,
-        takenToday: !prev.takenToday,
-      }));
-    }
   };
 
   const handleLogout = () => {
@@ -171,16 +141,16 @@ export const App: React.FC = () => {
   const isMobileLayout =
     layoutMode === 'mobile' || (layoutMode === 'auto' && isMobileViewport);
 
-  // If user is not authenticated, show real Login / Register page
+  // If user is not authenticated, show real Login page
   if (!user) {
     return (
       <LoginPage
         onLogin={(loggedInUser) => setUser(loggedInUser)}
         onContinueAsGuest={() => {
           setUser({
-            name: 'Guest Patient',
-            email: 'patient@fmcuteams.com',
-            avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+            name: 'Sarah Jenkins',
+            email: 'sarah.j@fmcuteams.com',
+            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
           });
         }}
       />
@@ -220,7 +190,7 @@ export const App: React.FC = () => {
             }`}
           >
             <Monitor className="w-3.5 h-3.5 text-teal-600" />
-            <span>Desktop App</span>
+            <span>Desktop Dashboard</span>
           </button>
           <button
             onClick={() => setLayoutMode('mobile')}
@@ -231,7 +201,7 @@ export const App: React.FC = () => {
             }`}
           >
             <Smartphone className="w-3.5 h-3.5 text-blue-600" />
-            <span>Mobile App</span>
+            <span>Mobile App View</span>
           </button>
         </div>
       </div>
@@ -240,97 +210,66 @@ export const App: React.FC = () => {
       {isMobileLayout ? (
         /* Mobile Full-Screen Web App (No simulated hardware frame!) */
         <div className="flex-1 w-full max-w-md mx-auto min-h-screen bg-[#F8F9FD] flex flex-col relative">
-          {mobileScreen === 'detail' ? (
-            <DetailView
-              medicine={selectedMedicine}
-              onBack={() => setMobileScreen('main')}
-              onRemove={handleRemoveMedicine}
-              onToggleTaken={handleToggleTaken}
-              onEditSchedule={(med) => setEditingMedicine(med)}
+          {mobileTab === 'home' && (
+            <HomeScreen
+              user={user}
+              agendas={agendas}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              onSelectAgenda={handleSelectAgenda}
+              onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+              onToggleComplete={handleToggleAgendaComplete}
+              onOpenCalendar={() => setMobileTab('calendar')}
+              onOpenHistory={() => setMobileTab('history')}
+              onOpenProfile={() => setMobileTab('profile')}
+              activeNavTab={mobileTab}
+              setActiveNavTab={(tab) => setMobileTab(tab as any)}
             />
-          ) : mobileScreen === 'new-reminder' ? (
-            <NewReminderView
-              onBack={() => setMobileScreen('main')}
-              onAddMedicine={handleAddMedicine}
+          )}
+          {mobileTab === 'calendar' && (
+            <CalendarScheduleView
+              agendas={agendas}
+              onBack={() => setMobileTab('home')}
+              onSelectAgenda={handleSelectAgenda}
+              onToggleComplete={handleToggleAgendaComplete}
+              onOpenNewAgenda={() => setShowNewAgendaModal(true)}
             />
-          ) : (
-            <>
-              {mobileTab === 'home' && (
-                <HomeScreen
-                  medicines={medicines}
-                  onSelectMedicine={handleSelectMedicine}
-                  onOpenNewReminder={() => setMobileScreen('new-reminder')}
-                  onToggleTaken={handleToggleTaken}
-                  onOpenCalendar={() => setMobileTab('calendar')}
-                  onOpenHistory={() => setMobileTab('history')}
-                  onOpenProfile={() => setMobileTab('profile')}
-                  activeNavTab={mobileTab}
-                  setActiveNavTab={(tab) => setMobileTab(tab as any)}
-                />
-              )}
-              {mobileTab === 'calendar' && (
-                <CalendarScheduleView
-                  medicines={medicines}
-                  onBack={() => setMobileTab('home')}
-                  onSelectMedicine={handleSelectMedicine}
-                />
-              )}
-              {mobileTab === 'history' && (
-                <HistoryView
-                  medicines={medicines}
-                  onBack={() => setMobileTab('home')}
-                />
-              )}
-              {mobileTab === 'profile' && (
-                <ProfileView
-                  user={user}
-                  medicinesCount={medicines.length}
-                  onBack={() => setMobileTab('home')}
-                  onLogout={handleLogout}
-                />
-              )}
-            </>
+          )}
+          {mobileTab === 'history' && (
+            <HistoryView
+              onBack={() => setMobileTab('home')}
+            />
+          )}
+          {mobileTab === 'profile' && (
+            <ProfileView
+              user={user}
+              medicinesCount={agendas.length}
+              onBack={() => setMobileTab('home')}
+              onLogout={handleLogout}
+            />
           )}
         </div>
       ) : (
         /* Full Desktop Web Dashboard */
         <DesktopDashboard
           user={user}
-          medicines={medicines}
-          selectedMedicine={selectedMedicine}
-          onSelectMedicine={handleSelectMedicine}
-          onOpenNewReminder={() => setShowDesktopNewReminderModal(true)}
-          onEditSchedule={(med) => setEditingMedicine(med)}
-          onRemoveMedicine={handleRemoveMedicine}
-          onToggleTaken={handleToggleTaken}
+          agendas={agendas}
+          selectedAgenda={selectedAgenda}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          onSelectAgenda={handleSelectAgenda}
+          onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+          onToggleComplete={handleToggleAgendaComplete}
           onLogout={handleLogout}
         />
       )}
 
-      {/* Desktop Modal: Add New Reminder */}
-      {showDesktopNewReminderModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="relative w-full max-w-md h-[720px] bg-white rounded-[38px] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <button
-              onClick={() => setShowDesktopNewReminderModal(false)}
-              className="absolute top-5 right-5 z-20 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <NewReminderView
-              onBack={() => setShowDesktopNewReminderModal(false)}
-              onAddMedicine={handleAddMedicine}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Edit Schedule Modal (Works for both Mobile & Desktop) */}
-      {editingMedicine && (
-        <EditScheduleModal
-          medicine={editingMedicine}
-          onClose={() => setEditingMedicine(null)}
-          onSave={handleSaveSchedule}
+      {/* New Agenda Creation Modal (Desktop & Mobile) */}
+      {showNewAgendaModal && (
+        <NewAgendaModal
+          initialDate={selectedDate}
+          onClose={() => setShowNewAgendaModal(false)}
+          onAddAgenda={handleAddNewAgenda}
         />
       )}
     </div>

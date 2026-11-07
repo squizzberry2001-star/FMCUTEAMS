@@ -1,61 +1,135 @@
 import React from 'react';
-import { ChevronLeft, ClipboardList, CheckCircle2 } from 'lucide-react';
-import { Medicine } from '../types';
+import { ChevronLeft, Store, CheckCircle2, TrendingUp, MapPin, Building2, Clock } from 'lucide-react';
 
 interface HistoryViewProps {
-  medicines: Medicine[];
   onBack: () => void;
 }
 
-export const HistoryView: React.FC<HistoryViewProps> = ({ medicines, onBack }) => {
-  const historyLogs = [
-    { name: 'DPP-4 inhibitors', time: 'Today, 13:15 PM', status: 'Taken on time', statusColor: 'text-emerald-600 bg-emerald-50' },
-    { name: 'Paracetamol XL2', time: 'Yesterday, 20:30 PM', status: 'Taken on time', statusColor: 'text-emerald-600 bg-emerald-50' },
-    { name: 'Meglitinides', time: 'Yesterday, 07:45 AM', status: 'Taken on time', statusColor: 'text-emerald-600 bg-emerald-50' },
-    { name: 'Paracetamol XL2', time: 'Nov 3, 20:10 PM', status: 'Taken late (30m)', statusColor: 'text-amber-600 bg-amber-50' },
-    { name: 'DPP-4 inhibitors', time: 'Nov 3, 12:55 PM', status: 'Taken on time', statusColor: 'text-emerald-600 bg-emerald-50' },
+export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
+  const activityLogs = [
+    {
+      storeName: 'Toko Bandung Dago',
+      activity: 'Audit Rutin & Visual Merchandising',
+      time: 'Hari ini, 09:45 WIB',
+      inspector: 'Sarah Jenkins',
+      status: 'Visit Selesai',
+      statusColor: 'text-emerald-700 bg-emerald-50 border border-emerald-200',
+    },
+    {
+      storeName: 'NSO Bandung Timur',
+      activity: 'Walkthrough Kesiapan Fisik & ME',
+      time: 'Kemarin, 14:20 WIB',
+      inspector: 'Dimas Wicaksono',
+      status: 'Fit-Out 85% OK',
+      statusColor: 'text-teal-700 bg-teal-50 border border-teal-200',
+    },
+    {
+      storeName: 'Toko Sukajadi',
+      activity: 'Inspeksi Kebersihan & Kepatuhan SOP',
+      time: 'Nov 6, 11:15 WIB',
+      inspector: 'Rian Pratama',
+      status: 'Audit Terverifikasi',
+      statusColor: 'text-emerald-700 bg-emerald-50 border border-emerald-200',
+    },
+    {
+      storeName: 'Cabang Riau Bandung',
+      activity: 'Briefing Pelayanan & Hospitality',
+      time: 'Nov 5, 16:30 WIB',
+      inspector: 'Sarah Jenkins',
+      status: 'Briefing Selesai',
+      statusColor: 'text-blue-700 bg-blue-50 border border-blue-200',
+    },
+    {
+      storeName: 'Toko Buah Batu',
+      activity: 'Verifikasi Planogram & Stocking',
+      time: 'Nov 4, 13:00 WIB',
+      inspector: 'Aan Bagus',
+      status: 'SOP Dipenuhi',
+      statusColor: 'text-emerald-700 bg-emerald-50 border border-emerald-200',
+    },
   ];
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-6 pt-6 pb-28">
-      {/* Header */}
+    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-6 pb-28 max-w-xl mx-auto w-full">
+      {/* Header Section 3: Typography Coverage Store */}
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={onBack}
-          className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-700 shadow-soft-sm active:scale-95"
+          className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-700 shadow-soft-sm active:scale-95 transition-transform"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <h2 className="text-base font-extrabold text-slate-800">Dose Adherence Log</h2>
-        <div className="w-10 h-10 rounded-full bg-[#EEF3FF] text-[#5C7CFA] flex items-center justify-center">
-          <ClipboardList className="w-5 h-5" />
+        <div className="text-center">
+          <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
+            Monitoring Jaringan Toko
+          </span>
+          <h2 className="text-lg font-black text-slate-800">Coverage Store</h2>
+        </div>
+        <div className="w-10 h-10 rounded-full bg-[#EAF8F2] text-[#2BB3A0] flex items-center justify-center shadow-soft-sm">
+          <Store className="w-5 h-5" />
         </div>
       </div>
 
-      {/* Stats Summary Card */}
-      <div className="bg-gradient-to-br from-[#2BB3A0] to-[#169888] rounded-3xl p-5 text-white shadow-pill-teal mb-6">
-        <span className="text-xs font-semibold text-teal-100 uppercase tracking-wider block">Adherence Score</span>
-        <h3 className="text-3xl font-black mt-1">94.8%</h3>
-        <p className="text-xs text-teal-100/90 mt-1">
-          Outstanding consistency! You've taken 28 of 30 scheduled doses this month.
+      {/* Stats Summary Card (Mempertahankan layout asli, typography Coverage Store) */}
+      <div className="bg-gradient-to-br from-[#2BB3A0] to-[#169888] rounded-3xl p-6 text-white shadow-pill-teal mb-6 relative overflow-hidden">
+        {/* Ambient decorative circle */}
+        <div className="absolute -right-4 -bottom-4 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none" />
+
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold text-teal-100 uppercase tracking-wider block">
+            Target Store Coverage
+          </span>
+          <span className="text-xs font-bold bg-white/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Target 90%</span>
+          </span>
+        </div>
+
+        <h3 className="text-4xl font-black mt-1">94.8%</h3>
+
+        <p className="text-xs text-teal-100/90 mt-2 leading-relaxed">
+          Pencapaian target kunjungan toko bulan ini. 28 dari 30 target cabang FMCU telah berhasil dikunjungi dan diaudit.
         </p>
+
+        {/* Progress Bar */}
+        <div className="w-full bg-black/15 rounded-full h-2 mt-4 overflow-hidden">
+          <div className="bg-white h-2 rounded-full w-[94.8%]" />
+        </div>
       </div>
 
-      {/* Activity Log */}
-      <h3 className="text-sm font-bold text-slate-800 mb-3 px-1">Recent Activity</h3>
+      {/* History Aktivitas Section */}
+      <div className="flex items-center justify-between mb-3 px-1">
+        <h3 className="text-sm font-bold text-slate-800">History Aktivitas</h3>
+        <span className="text-[11px] font-semibold text-slate-400">
+          5 Kunjungan Terakhir
+        </span>
+      </div>
+
       <div className="space-y-3">
-        {historyLogs.map((log, i) => (
-          <div key={i} className="bg-white rounded-2xl p-4 shadow-soft-card flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center flex-shrink-0">
-                <CheckCircle2 className="w-5 h-5" />
+        {activityLogs.map((log, i) => (
+          <div
+            key={i}
+            className="bg-white rounded-2xl p-4 shadow-soft-card border border-slate-100/80 flex items-center justify-between gap-3 hover:shadow-soft-md transition-all"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center flex-shrink-0">
+                <Store className="w-5 h-5 stroke-[2.2]" />
               </div>
-              <div>
-                <h4 className="text-xs font-bold text-slate-800">{log.name}</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">{log.time}</p>
+              <div className="min-w-0">
+                <h4 className="text-xs font-bold text-slate-800 truncate">{log.storeName}</h4>
+                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+                  {log.activity}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span>{log.time}</span>
+                  <span>•</span>
+                  <span>{log.inspector}</span>
+                </p>
               </div>
             </div>
-            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${log.statusColor}`}>
+
+            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${log.statusColor}`}>
               {log.status}
             </span>
           </div>
