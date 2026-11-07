@@ -19,6 +19,45 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { User } from '../types';
+import { uploadProfilePhotoToGasGDrive } from '../utils/gdriveGasSync';
+import { PageTransitionLoader } from './PageTransitionLoader';
+
+// Compress and center-crop avatar photo to 360x360 JPEG so it never exceeds localStorage quota
+const compressAvatarImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const targetSize = 360;
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const minSide = Math.min(img.width, img.height);
+          const sx = Math.max(0, (img.width - minSide) / 2);
+          const sy = Math.max(0, (img.height - minSide) / 2);
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, targetSize, targetSize);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          URL.revokeObjectURL(objectUrl);
+          resolve(dataUrl);
+        } else {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error('Canvas context unavailable'));
+        }
+      } catch (err) {
+        URL.revokeObjectURL(objectUrl);
+        reject(err);
+      }
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(objectUrl);
+      reject(err);
+    };
+    img.src = objectUrl;
+  });
+};
 
 interface ProfileViewProps {
   user: User;
@@ -49,13 +88,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState<boolean>(false);
 
   // Handle Foto Profil Change via File Picker
   const handlePhotoClick = () => {
-    fileInputRef.current?.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -64,27 +107,46 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      if (base64 && onUpdateUser) {
+    setIsUploadingAvatar(true);
+    setAvatarSuccess(null);
+
+    try {
+      const compressedBase64 = await compressAvatarImage(file);
+
+      // Update user avatar immediately with compressed 360x360 image (prevents QuotaExceededError / blank page)
+      if (onUpdateUser) {
         onUpdateUser({
           ...user,
-          avatar: base64,
-        });
-
-        setAvatarSuccess('Foto profil berhasil diperbarui!');
-        setTimeout(() => setAvatarSuccess(null), 3500);
-
-        confetti({
-          particleCount: 35,
-          spread: 45,
-          origin: { y: 0.3 },
-          colors: ['#2BB3A0', '#4E80EE'],
+          avatar: compressedBase64,
         });
       }
-    };
-    reader.readAsDataURL(file);
+
+      // Upload to Google Drive (same root folder 1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a -> new subfolder FMCU_FOTO_PROFIL_USER)
+      await Promise.all([
+        uploadProfilePhotoToGasGDrive({
+          userName: user.name,
+          userEmail: user.email,
+          base64Data: compressedBase64,
+        }),
+        new Promise((r) => setTimeout(r, 900)),
+      ]);
+
+      setAvatarSuccess('Foto profil berhasil diperbarui!');
+      setTimeout(() => setAvatarSuccess(null), 3500);
+
+      confetti({
+        particleCount: 35,
+        spread: 45,
+        origin: { y: 0.3 },
+        colors: ['#2BB3A0', '#4E80EE'],
+      });
+    } catch (err) {
+      console.error('Gagal memproses foto profil:', err);
+      alert('Gagal memproses foto profil. Silakan pilih foto lain.');
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = '';
+    }
   };
 
   // Handle Ubah Sandi Submit
@@ -147,6 +209,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full">
+      <PageTransitionLoader visible={isUploadingAvatar} delayMs={0} />
       {/* Hidden File Input for Avatar Photo */}
       <input
         type="file"

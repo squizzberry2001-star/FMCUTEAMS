@@ -220,22 +220,34 @@ export const App: React.FC = () => {
     import('./components/visit/VisitReportForm');
   }, []);
 
-  // Save master users to localStorage
+  // Save master users to localStorage safely
   useEffect(() => {
-    localStorage.setItem('fmcu_users_v2', JSON.stringify(users));
+    try {
+      localStorage.setItem('fmcu_users_v2', JSON.stringify(users));
+    } catch (e) {
+      console.warn('localStorage users quota warning:', e);
+    }
   }, [users]);
 
-  // Save master agendas to localStorage
+  // Save master agendas to localStorage safely
   useEffect(() => {
-    localStorage.setItem('fmcu_agendas_master_v3', JSON.stringify(agendas));
+    try {
+      localStorage.setItem('fmcu_agendas_master_v3', JSON.stringify(agendas));
+    } catch (e) {
+      console.warn('localStorage agendas quota warning:', e);
+    }
   }, [agendas]);
 
-  // Save logged-in session
+  // Save logged-in session safely
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('fmcu_user_session_v3', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('fmcu_user_session_v3');
+    try {
+      if (user) {
+        localStorage.setItem('fmcu_user_session_v3', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('fmcu_user_session_v3');
+      }
+    } catch (e) {
+      console.warn('localStorage session quota warning:', e);
     }
   }, [user]);
 

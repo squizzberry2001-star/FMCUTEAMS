@@ -255,3 +255,93 @@ export const deleteStoryFromGasGDrive = async (storyId: string): Promise<void> =
     // Ignore background sync error
   }
 };
+
+export const FMCU_GDRIVE_PROFILE_SUBFOLDER = 'FMCU_FOTO_PROFIL_USER';
+
+/**
+ * Upload user profile photo to a dedicated new subfolder ('FMCU_FOTO_PROFIL_USER')
+ * inside the same Google Drive folder (1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a) via Google Apps Script.
+ */
+export const uploadProfilePhotoToGasGDrive = async (params: {
+  userName: string;
+  userEmail?: string;
+  base64Data: string;
+}): Promise<{
+  synced: boolean;
+  driveFileId: string;
+  driveUrl: string;
+}> => {
+  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
+  const safeName = params.userName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const nowMs = Date.now();
+  const filename = `PROFIL_${safeName}_${nowMs}.jpg`;
+  const fallbackFileId = `GDRIVE_PROFIL_${safeName}_${nowMs}`;
+  const fallbackDriveUrl = FMCU_GDRIVE_FOLDER_URL;
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return {
+      synced: false,
+      driveFileId: fallbackFileId,
+      driveUrl: fallbackDriveUrl,
+    };
+  }
+
+  const payload = {
+    action: 'uploadPhotoToGDrive',
+    folderId: FMCU_GDRIVE_FOLDER_ID,
+    folderUrl: FMCU_GDRIVE_FOLDER_URL,
+    folderName: FMCU_GDRIVE_PROFILE_SUBFOLDER,
+    filename,
+    mimeType: 'image/jpeg',
+    visitorName: params.userName,
+    userEmail: params.userEmail || '',
+    section: 'PROFILE_PHOTO',
+    base64: params.base64Data.replace(/^data:image\/\w+;base64,/, ''),
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    const response = await fetch(gasUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.ok) {
+        return {
+          synced: true,
+          driveFileId: data.driveFileId || fallbackFileId,
+          driveUrl: data.driveUrl || fallbackDriveUrl,
+        };
+      }
+    }
+  } catch {
+    try {
+      await fetch(gasUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+      });
+      return {
+        synced: true,
+        driveFileId: fallbackFileId,
+        driveUrl: fallbackDriveUrl,
+      };
+    } catch (err) {
+      console.warn('GAS Profile Photo upload fallback error:', err);
+    }
+  }
+
+  return {
+    synced: false,
+    driveFileId: fallbackFileId,
+    driveUrl: fallbackDriveUrl,
+  };
+};
