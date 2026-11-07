@@ -1,17 +1,108 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="pillGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF9EAA"/>
-      <stop offset="100%" stop-color="#FF5D8F"/>
+    <!-- Soft Glass White Base Gradient -->
+    <linearGradient id="softGlassBase" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="48%" stop-color="#F6F9FC" />
+      <stop offset="100%" stop-color="#E6EFF6" />
     </linearGradient>
-    <linearGradient id="pillGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFEAA7"/>
-      <stop offset="100%" stop-color="#FDCB6E"/>
+
+    <!-- Subtle Ambient Glass Aura (Top-Left Mint Pearl) -->
+    <radialGradient id="glassAuraTop" cx="20%" cy="18%" r="65%">
+      <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.16" />
+      <stop offset="60%" stop-color="#38BDF8" stop-opacity="0.06" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Subtle Ambient Glass Aura (Bottom-Right Soft Ice) -->
+    <radialGradient id="glassAuraBottom" cx="85%" cy="85%" r="60%">
+      <stop offset="0%" stop-color="#60A5FA" stop-opacity="0.14" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Top Specular Frosted Glass Gloss -->
+    <linearGradient id="glassSheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="42%" stop-color="#FFFFFF" stop-opacity="0.35" />
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.0" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.25" />
     </linearGradient>
+
+    <!-- Liquid Glass Specular Rim Border -->
+    <linearGradient id="glassRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.98" />
+      <stop offset="50%" stop-color="#CBD5E1" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#94A3B8" stop-opacity="0.4" />
+    </linearGradient>
+
+    <!-- Deep Slate-Black Gradient for Typography -->
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+
+    <!-- Soft Drop Shadow for Icon Box & Text -->
+    <filter id="boxShadow" x="-8%" y="-8%" width="116%" height="116%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.10" />
+    </filter>
+    <filter id="textGlassShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#FFFFFF" flood-opacity="0.9" />
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.08" />
+    </filter>
+
+    <clipPath id="iconClip">
+      <rect x="12" y="12" width="488" height="488" rx="112" ry="112" />
+    </clipPath>
   </defs>
-  <circle cx="50" cy="50" r="46" fill="#F0FBF8"/>
-  <g transform="rotate(-35 50 50)">
-    <rect x="25" y="36" width="25" height="28" rx="14" fill="url(#pillGrad1)"/>
-    <rect x="50" y="36" width="25" height="28" rx="14" fill="url(#pillGrad2)"/>
+
+  <!-- Modern White Soft Glass Icon Container -->
+  <g filter="url(#boxShadow)">
+    <rect x="12" y="12" width="488" height="488" rx="112" ry="112" fill="url(#softGlassBase)" />
+  </g>
+
+  <!-- Internal Soft Glass Refraction Layers -->
+  <g clip-path="url(#iconClip)">
+    <rect x="12" y="12" width="488" height="488" fill="url(#glassAuraTop)" />
+    <rect x="12" y="12" width="488" height="488" fill="url(#glassAuraBottom)" />
+    <!-- Curved Top Glass Highlight -->
+    <ellipse cx="256" cy="40" rx="290" ry="175" fill="url(#glassSheen)" />
+    <!-- Inner White Glass Specular Highlight -->
+    <rect x="18" y="18" width="476" height="476" rx="106" ry="106" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-opacity="0.85" />
+  </g>
+
+  <!-- Outer Hairline Glass Border -->
+  <rect x="12" y="12" width="488" height="488" rx="112" ry="112" fill="none" stroke="url(#glassRim)" stroke-width="3.5" />
+
+  <!-- Typography Lockup Filling the Icon Box:
+       Top: FMCU (Bold Besar)
+       Bottom: TEAMS (Reguler, Spacing Kecil) -->
+  <g filter="url(#textGlassShadow)">
+    <!-- FMCU: Bold Besar di Atas, Memenuhi Lebar Box -->
+    <text
+      x="256"
+      y="258"
+      text-anchor="middle"
+      fill="url(#textGrad)"
+      font-family="'Plus Jakarta Sans', 'Inter', 'Segoe UI', Arial, sans-serif"
+      font-weight="900"
+      font-size="162"
+      letter-spacing="-4"
+      textLength="428"
+      lengthAdjust="spacingAndGlyphs"
+    >FMCU</text>
+
+    <!-- TEAMS: Reguler dengan Spacing Kecil Tepat di Bawah FMCU -->
+    <text
+      x="256"
+      y="376"
+      text-anchor="middle"
+      fill="#1E293B"
+      font-family="'Plus Jakarta Sans', 'Inter', 'Segoe UI', Arial, sans-serif"
+      font-weight="400"
+      font-size="102"
+      letter-spacing="1"
+      textLength="420"
+      lengthAdjust="spacingAndGlyphs"
+    >TEAMS</text>
   </g>
 </svg>

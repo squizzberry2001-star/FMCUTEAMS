@@ -43,7 +43,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     height: 26,
     opacity: 0,
     scale: 1,
-    isBouncing: true,
+    isBouncing: false,
     isJumping: false,
     isMorphingPill: false,
   });
@@ -356,10 +356,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       for (let i = 0; i < CHARACTERS.length; i++) {
         const el = charRefs.current[i];
         if (el) {
-          const r = el.getBoundingClientRect();
+          // Use layout offsetLeft/offsetTop + half width/height so unrevealed scale(0.85)/translateY(6px) never offsets the exact center of 'F'
           positions.push({
-            x: r.left - contRect.left + r.width / 2,
-            y: r.top - contRect.top + r.height / 2,
+            x: el.offsetLeft + el.offsetWidth / 2,
+            y: el.offsetTop + el.offsetHeight / 2,
           });
         } else {
           positions.push({ x: 0, y: contRect.height / 2 });
@@ -368,10 +368,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
       // Slot 10: anchor slot right after 'S'
       if (afterSRef.current) {
-        const r = afterSRef.current.getBoundingClientRect();
         positions.push({
-          x: r.left - contRect.left + r.width / 2,
-          y: r.top - contRect.top + r.height / 2,
+          x: afterSRef.current.offsetLeft + afterSRef.current.offsetWidth / 2,
+          y: afterSRef.current.offsetTop + afterSRef.current.offsetHeight / 2,
         });
       } else {
         const last = positions[positions.length - 1];
@@ -410,11 +409,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             ];
 
       const fPos = validPositions[0];
-      const startX = Math.max(12, fPos.x - 75);
 
-      // Phase 1: Ball drops from above outside viewport and bounces like a ball (1050ms)
+      // Phase 1: Ball drops from above directly onto the exact center of letter 'F' (fPos.x, fPos.y)
       setDotPos({
-        x: startX,
+        x: fPos.x,
         y: fPos.y,
         width: 26,
         height: 26,
@@ -425,10 +423,17 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         isMorphingPill: false,
       });
 
-      // Phase 2: After bouncing settles (1050ms), dash directly into letter 'F'
+      // Illuminate 'F' at the exact moment of first impact on 'F' (38% of 1050ms = ~395ms)
+      const tFirstImpact = setTimeout(() => {
+        if (!isMounted) return;
+        setRevealedCharIndex(0);
+      }, 395);
+      timerIds.push(tFirstImpact);
+
+      // Phase 2: After bouncing on 'F' settles (1050ms), immediately glide through remaining letters M-C-U T-E-A-M-S
       const tBounce = setTimeout(() => {
         if (!isMounted) return;
-
+        setRevealedCharIndex(0);
         setDotPos({
           x: fPos.x,
           y: fPos.y,
@@ -441,105 +446,97 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           isMorphingPill: false,
         });
 
-        // Phase 3: Arrive at 'F' after dash (240ms) and illuminate 'F'
-        const tDash = setTimeout(() => {
+        let currentIdx = 0;
+        intervalId = setInterval(() => {
           if (!isMounted) return;
-          setRevealedCharIndex(0);
 
-          // Phase 4: Reveal remaining letters sequentially at 230ms per char
-          let currentIdx = 0;
-          intervalId = setInterval(() => {
-            if (!isMounted) return;
+          currentIdx++;
+          if (currentIdx < CHARACTERS.length) {
+            const target = validPositions[currentIdx];
+            setDotPos({
+              x: target.x,
+              y: target.y,
+              width: 26,
+              height: 26,
+              opacity: 1,
+              scale: 1,
+              isBouncing: false,
+              isJumping: false,
+              isMorphingPill: false,
+            });
+            setRevealedCharIndex(currentIdx);
+          } else {
+            // Dot has just finished the last letter 'S'!
+            if (intervalId) clearInterval(intervalId);
 
-            currentIdx++;
-            if (currentIdx < CHARACTERS.length) {
-              const target = validPositions[currentIdx];
+            // Step briefly to slot right after 'S' and immediately jump to Actual Date Pill!
+            const afterSTarget = validPositions[CHARACTERS.length] || validPositions[CHARACTERS.length - 1];
+            setDotPos({
+              x: afterSTarget.x,
+              y: afterSTarget.y,
+              width: 26,
+              height: 26,
+              opacity: 1,
+              scale: 1,
+              isBouncing: false,
+              isJumping: false,
+              isMorphingPill: false,
+            });
+
+            const tImmediateJump = setTimeout(() => {
+              if (!isMounted) return;
+
+              // Measure exact position & size of the Actual Date Pill
+              const pillTarget = measureActualDatePill();
+              setSplashStage('jumping');
               setDotPos({
-                x: target.x,
-                y: target.y,
+                x: pillTarget.relX,
+                y: pillTarget.relY,
                 width: 26,
                 height: 26,
                 opacity: 1,
                 scale: 1,
                 isBouncing: false,
-                isJumping: false,
-                isMorphingPill: false,
-              });
-              setRevealedCharIndex(currentIdx);
-            } else {
-              // Dot has just finished the last letter 'S'!
-              if (intervalId) clearInterval(intervalId);
-
-              // Step briefly to slot right after 'S' and immediately jump to Actual Date Pill!
-              const afterSTarget = validPositions[CHARACTERS.length] || validPositions[CHARACTERS.length - 1];
-              setDotPos({
-                x: afterSTarget.x,
-                y: afterSTarget.y,
-                width: 26,
-                height: 26,
-                opacity: 1,
-                scale: 1,
-                isBouncing: false,
-                isJumping: false,
+                isJumping: true,
                 isMorphingPill: false,
               });
 
-              const tImmediateJump = setTimeout(() => {
+              // After jumping to the Actual Date Pill (340ms), bounce into position & transform size to match the pill!
+              const tLandAndMorph = setTimeout(() => {
                 if (!isMounted) return;
 
-                // Measure exact position & size of the Actual Date Pill
-                const pillTarget = measureActualDatePill();
-                setSplashStage('jumping');
+                const exactPill = measureActualDatePill();
+                setSplashStage('morphing');
                 setDotPos({
-                  x: pillTarget.relX,
-                  y: pillTarget.relY,
-                  width: 26,
-                  height: 26,
+                  x: exactPill.relX,
+                  y: exactPill.relY,
+                  width: exactPill.width,
+                  height: exactPill.height,
                   opacity: 1,
                   scale: 1,
                   isBouncing: false,
-                  isJumping: true,
-                  isMorphingPill: false,
+                  isJumping: false,
+                  isMorphingPill: true,
                 });
 
-                // After jumping to the Actual Date Pill (340ms), bounce into position & transform size to match the pill!
-                const tLandAndMorph = setTimeout(() => {
+                // After bounce & size transform lock with 100% precision (520ms), trigger Dissolve!
+                const tDissolve = setTimeout(() => {
                   if (!isMounted) return;
-
-                  const exactPill = measureActualDatePill();
-                  setSplashStage('morphing');
-                  setDotPos({
-                    x: exactPill.relX,
-                    y: exactPill.relY,
-                    width: exactPill.width,
-                    height: exactPill.height,
-                    opacity: 1,
-                    scale: 1,
-                    isBouncing: false,
-                    isJumping: false,
-                    isMorphingPill: true,
-                  });
-
-                  // After bounce & size transform lock with 100% precision (520ms), trigger Dissolve!
-                  const tDissolve = setTimeout(() => {
-                    if (!isMounted) return;
-                    const finalPill = measureActualDatePill();
-                    triggerDissolve(
-                      finalPill.screenX,
-                      finalPill.screenY,
-                      Math.max(finalPill.width, finalPill.height) * 0.45
-                    );
-                  }, 520);
-                  timerIds.push(tDissolve);
-                }, 340);
-                timerIds.push(tLandAndMorph);
-              }, 150);
-              timerIds.push(tImmediateJump);
-            }
-          }, 230); // 230ms per character
-        }, 240); // 240ms dash from bounce spot to 'F'
-        timerIds.push(tDash);
-      }, 1050); // 1050ms bounce duration
+                  const finalPill = measureActualDatePill();
+                  triggerDissolve(
+                    finalPill.screenX,
+                    finalPill.screenY,
+                    Math.max(finalPill.width, finalPill.height) * 0.45
+                  );
+                }, 520);
+                timerIds.push(tDissolve);
+              }, 340);
+              timerIds.push(tLandAndMorph);
+            }, 150);
+            timerIds.push(tImmediateJump);
+          }
+        }, 230); // 230ms per character
+      }, 1050); // 1050ms bounce duration on 'F'
       timerIds.push(tBounce);
     };
 
