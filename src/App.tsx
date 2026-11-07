@@ -11,6 +11,7 @@ import { AgendaDetailView } from './components/AgendaDetailView';
 import { LoginPage } from './components/LoginPage';
 import { SplashScreen } from './components/SplashScreen';
 import { PageTransitionLoader } from './components/PageTransitionLoader';
+import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { Smartphone, Monitor, Shield, ArrowLeft, MapPin, Navigation, WifiOff, RotateCw } from 'lucide-react';
 
 // Code-split heavy components to make initial splash & login load instantly on mobile
@@ -392,6 +393,7 @@ export const App: React.FC = () => {
             targetThemeColor="#F8F9FD"
           />
         )}
+        <PwaInstallPrompt readyToShow={!showSplash} />
         {gpsMandatoryModal}
         <LoginPage
           users={users}
@@ -413,6 +415,7 @@ export const App: React.FC = () => {
             targetThemeColor="#FFFFFF"
           />
         )}
+        <PwaInstallPrompt readyToShow={!showSplash} />
         <PageTransitionLoader visible={isPageTransitioning} />
         <Suspense fallback={<PageTransitionLoader visible={true} />}>
           <AdminPortal
@@ -444,6 +447,7 @@ export const App: React.FC = () => {
           targetThemeColor="#F8F9FD"
         />
       )}
+      <PwaInstallPrompt readyToShow={!showSplash} />
       {gpsMandatoryModal}
       <PageTransitionLoader visible={isPageTransitioning} />
       <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">

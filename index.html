@@ -33,6 +33,19 @@
   </head>
   <body style="background-color: #F8F9FD;">
     <div id="root"></div>
+    <script>
+      window.__fmcuDeferredPwaPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__fmcuDeferredPwaPrompt = e;
+        window.dispatchEvent(new Event('fmcu-pwa-ready'));
+      });
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {});
+        });
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
