@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
+import { getCurrentWeekDays } from './CalendarStrip';
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -11,12 +12,16 @@ const CHARACTERS = ['F', 'M', 'C', 'U', ' ', 'T', 'E', 'A', 'M', 'S'];
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({
   onComplete,
-  user = null,
   targetThemeColor = '#F8F9FD',
 }) => {
-  // Splash stages: 'animating' | 'holding' | 'dissolving' | 'completed'
+  // Splash stages:
+  // 'animating' (ball drop + letter reveal) ->
+  // 'jumping' (jump from after 'S' to Actual Date Pill position) ->
+  // 'morphing' (bounce into position + transform size to match Actual Date Pill) ->
+  // 'dissolving' (circular aperture dissolve from Actual Date Pill) ->
+  // 'completed'
   const [splashStage, setSplashStage] = useState<
-    'animating' | 'holding' | 'dissolving' | 'completed'
+    'animating' | 'jumping' | 'morphing' | 'dissolving' | 'completed'
   >('animating');
 
   const [revealedCharIndex, setRevealedCharIndex] = useState<number>(-1);
@@ -24,17 +29,23 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   const [dotPos, setDotPos] = useState<{
     x: number;
     y: number;
+    width: number;
+    height: number;
     opacity: number;
     scale: number;
     isBouncing: boolean;
-    isFloating: boolean;
+    isJumping: boolean;
+    isMorphingPill: boolean;
   }>({
     x: 0,
     y: 0,
+    width: 26,
+    height: 26,
     opacity: 0,
     scale: 1,
     isBouncing: true,
-    isFloating: false,
+    isJumping: false,
+    isMorphingPill: false,
   });
 
   const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
@@ -45,7 +56,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   const animFrameIdRef = useRef<number | null>(null);
   const isDissolvingRef = useRef(false);
 
-  // Pre-request GPS during Splash for Actual IN & OUT recording
+  const weekDays = getCurrentWeekDays();
+  const todayItem = weekDays.find((d) => d.isToday) || weekDays[0];
+
+  // Pre-request GPS silently during Splash for Actual IN & OUT recording
   useEffect(() => {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -108,20 +122,68 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     };
   }, [targetThemeColor]);
 
-  // Circular Aperture Portal Reveal:
-  // Starts directly at the dot, cutting open the black canvas in an expanding circle
-  // with a glowing teal-white halo, revealing the underlying destination view from the dot.
-  const triggerDissolve = () => {
+  // Measure the exact DOM bounding box of the Actual Date Pill (live or fallback mirror)
+  const measureActualDatePill = () => {
+    const contEl = lettersContainerRef.current;
+    const contRect = contEl?.getBoundingClientRect();
+
+    const livePill =
+      (document.querySelector('[data-splash-target="actual-date-pill"]') as HTMLElement | null) ||
+      (document.querySelector('[data-selected-date-pill="true"]') as HTMLElement | null) ||
+      (document.querySelector('[data-splash-fallback-pill="actual-date-pill"]') as HTMLElement | null);
+
+    if (livePill && contRect) {
+      const r = livePill.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        const screenCenterX = r.left + r.width / 2;
+        const screenCenterY = r.top + r.height / 2;
+        return {
+          relX: screenCenterX - contRect.left,
+          relY: screenCenterY - contRect.top,
+          screenX: screenCenterX,
+          screenY: screenCenterY,
+          width: r.width,
+          height: r.height,
+        };
+      }
+    }
+
+    const fallbackScreenX = window.innerWidth / 2;
+    const fallbackScreenY = Math.min(205, window.innerHeight * 0.25);
+    return {
+      relX: contRect ? fallbackScreenX - contRect.left : 0,
+      relY: contRect ? fallbackScreenY - contRect.top : -120,
+      screenX: fallbackScreenX,
+      screenY: fallbackScreenY,
+      width: 46,
+      height: 74,
+    };
+  };
+
+  // Circular Aperture Portal Reveal centered on the Actual Date Pill
+  const triggerDissolve = (customOriginX?: number, customOriginY?: number, customInitRadius?: number) => {
     if (isDissolvingRef.current || splashStage === 'completed') return;
     isDissolvingRef.current = true;
 
     setSplashStage('dissolving');
 
-    // Measure exact screen origin coordinates of the floating dot
-    const ballEl = dotBallRef.current || afterSRef.current;
+    // Measure exact screen origin coordinates of the morphed pill / Actual Date Pill
+    const pillTarget = measureActualDatePill();
+    const ballEl = dotBallRef.current;
     const rect = ballEl?.getBoundingClientRect();
-    const originX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-    const originY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+
+    const originX =
+      typeof customOriginX === 'number'
+        ? customOriginX
+        : rect && rect.width > 0
+        ? rect.left + rect.width / 2
+        : pillTarget.screenX;
+    const originY =
+      typeof customOriginY === 'number'
+        ? customOriginY
+        : rect && rect.height > 0
+        ? rect.top + rect.height / 2
+        : pillTarget.screenY;
 
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -147,7 +209,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       return;
     }
 
-    // Maximum distance from the dot to the farthest corner of the viewport
+    // Maximum distance from the Actual Date Pill to the farthest corner of the viewport
     const cornerDistances = [
       Math.hypot(originX, originY),
       Math.hypot(w - originX, originY),
@@ -155,24 +217,31 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       Math.hypot(w - originX, h - originY),
     ];
     const maxRadius = Math.max(...cornerDistances) + 120;
-    const initialRadius = 14; // exact radius of 26px dot
-    const duration = 400; // Fast & snappy aperture dissolve (400ms)
+    const initialRadius = customInitRadius || Math.max(pillTarget.width, pillTarget.height) / 2;
+    const duration = 420; // Fast & silky aperture dissolve from the Actual Date Pill
     const startTime = performance.now();
     let themeSwitched = false;
 
-    // Immediately draw Frame 0 with soft feather from dot so there is zero flash
+    // Immediately draw Frame 0 with soft feather around the pill so there is zero flash
     ctx.save();
     ctx.scale(dpr, dpr);
     ctx.fillStyle = '#000000';
     ctx.fillRect(-20, -20, w + 40, h + 40);
     ctx.globalCompositeOperation = 'destination-out';
-    const initGrad = ctx.createRadialGradient(originX, originY, 0, originX, originY, initialRadius + 20);
+    const initGrad = ctx.createRadialGradient(
+      originX,
+      originY,
+      0,
+      originX,
+      originY,
+      initialRadius + 24
+    );
     initGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
-    initGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.7)');
+    initGrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.75)');
     initGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = initGrad;
     ctx.beginPath();
-    ctx.arc(originX, originY, initialRadius + 22, 0, Math.PI * 2);
+    ctx.arc(originX, originY, initialRadius + 26, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
@@ -185,7 +254,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       const currentRadius = initialRadius + ease * (maxRadius - initialRadius);
 
       // Midpoint theme-color switch for mobile status bar (Dynamic Island / notch)
-      if (progress >= 0.20 && !themeSwitched) {
+      if (progress >= 0.18 && !themeSwitched) {
         themeSwitched = true;
         const metaTheme = document.querySelector('meta[name="theme-color"]');
         if (metaTheme) metaTheme.setAttribute('content', targetThemeColor);
@@ -213,11 +282,11 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         const r1 = currentRadius + feather;
 
         const grad = ctx.createRadialGradient(originX, originY, r0, originX, originY, r1);
-        grad.addColorStop(0, 'rgba(0, 0, 0, 1)'); // completely transparent destination
+        grad.addColorStop(0, 'rgba(0, 0, 0, 1)');
         grad.addColorStop(0.35, 'rgba(0, 0, 0, 0.92)');
         grad.addColorStop(0.68, 'rgba(0, 0, 0, 0.45)');
         grad.addColorStop(0.90, 'rgba(0, 0, 0, 0.12)');
-        grad.addColorStop(1, 'rgba(0, 0, 0, 0)'); // uncarved black
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
         ctx.fillStyle = grad;
         ctx.beginPath();
@@ -231,7 +300,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           const glowGrad = ctx.createRadialGradient(originX, originY, r0, originX, originY, r1);
           glowGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
           glowGrad.addColorStop(0.4, `rgba(255, 255, 255, ${0.35 * auraAlpha})`);
-          glowGrad.addColorStop(0.68, `rgba(45, 212, 191, ${0.45 * auraAlpha})`);
+          glowGrad.addColorStop(0.68, `rgba(255, 126, 152, ${0.42 * auraAlpha})`);
           glowGrad.addColorStop(1, 'rgba(45, 212, 191, 0)');
 
           ctx.fillStyle = glowGrad;
@@ -266,12 +335,15 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   }, []);
 
   // 2. High-Performance Mobile Animation Sequence:
-  // - Pre-measures all character positions ONCE (zero layout thrashing during animation)
-  // - Hardware-accelerated GPU translate3d trajectory
-  // - Bouncing ball drop (1050ms) -> Dash to 'F' (240ms) -> Letters (230ms/char) -> 2s float after 'S'
+  // - Phase 1: Bouncing ball drop (1050ms)
+  // - Phase 2: Dash to 'F' (240ms)
+  // - Phase 3: Reveal F-M-C-U T-E-A-M-S sequentially (230ms/char)
+  // - Phase 4: Immediately after last letter 'S', jump directly to Actual Date Pill position (340ms)
+  // - Phase 5: Bounce into position & transform size to match Actual Date Pill with 100% precision (520ms)
+  // - Phase 6: Trigger circular aperture dissolve from the Actual Date Pill (420ms)
   useEffect(() => {
     let isMounted = true;
-    let timerIds: ReturnType<typeof setTimeout>[] = [];
+    const timerIds: ReturnType<typeof setTimeout>[] = [];
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
     const measurePositions = (): { x: number; y: number }[] | null => {
@@ -344,10 +416,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       setDotPos({
         x: startX,
         y: fPos.y,
+        width: 26,
+        height: 26,
         opacity: 1,
         scale: 1,
         isBouncing: true,
-        isFloating: false,
+        isJumping: false,
+        isMorphingPill: false,
       });
 
       // Phase 2: After bouncing settles (1050ms), dash directly into letter 'F'
@@ -357,10 +432,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         setDotPos({
           x: fPos.x,
           y: fPos.y,
+          width: 26,
+          height: 26,
           opacity: 1,
           scale: 1,
           isBouncing: false,
-          isFloating: false,
+          isJumping: false,
+          isMorphingPill: false,
         });
 
         // Phase 3: Arrive at 'F' after dash (240ms) and illuminate 'F'
@@ -374,45 +452,93 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             if (!isMounted) return;
 
             currentIdx++;
-            if (currentIdx < validPositions.length) {
+            if (currentIdx < CHARACTERS.length) {
               const target = validPositions[currentIdx];
               setDotPos({
                 x: target.x,
                 y: target.y,
+                width: 26,
+                height: 26,
                 opacity: 1,
                 scale: 1,
                 isBouncing: false,
-                isFloating: false,
+                isJumping: false,
+                isMorphingPill: false,
               });
-
-              if (currentIdx < CHARACTERS.length) {
-                setRevealedCharIndex(currentIdx);
-              }
+              setRevealedCharIndex(currentIdx);
             } else {
+              // Dot has just finished the last letter 'S'!
               if (intervalId) clearInterval(intervalId);
 
-              // Dot has arrived right after 'S' and stops there!
-              setSplashStage('holding');
+              // Step briefly to slot right after 'S' and immediately jump to Actual Date Pill!
+              const afterSTarget = validPositions[CHARACTERS.length] || validPositions[CHARACTERS.length - 1];
+              setDotPos({
+                x: afterSTarget.x,
+                y: afterSTarget.y,
+                width: 26,
+                height: 26,
+                opacity: 1,
+                scale: 1,
+                isBouncing: false,
+                isJumping: false,
+                isMorphingPill: false,
+              });
 
-              // Activate weightless organic floating levitation!
-              setDotPos((prev) => ({
-                ...prev,
-                isFloating: true,
-              }));
+              const tImmediateJump = setTimeout(() => {
+                if (!isMounted) return;
 
-              // Pause briefly (950ms) with floating motion before fast optical aperture reveal
-              const tHold = setTimeout(() => {
-                if (isMounted) {
-                  triggerDissolve();
-                }
-              }, 950);
-              timerIds.push(tHold);
+                // Measure exact position & size of the Actual Date Pill
+                const pillTarget = measureActualDatePill();
+                setSplashStage('jumping');
+                setDotPos({
+                  x: pillTarget.relX,
+                  y: pillTarget.relY,
+                  width: 26,
+                  height: 26,
+                  opacity: 1,
+                  scale: 1,
+                  isBouncing: false,
+                  isJumping: true,
+                  isMorphingPill: false,
+                });
+
+                // After jumping to the Actual Date Pill (340ms), bounce into position & transform size to match the pill!
+                const tLandAndMorph = setTimeout(() => {
+                  if (!isMounted) return;
+
+                  const exactPill = measureActualDatePill();
+                  setSplashStage('morphing');
+                  setDotPos({
+                    x: exactPill.relX,
+                    y: exactPill.relY,
+                    width: exactPill.width,
+                    height: exactPill.height,
+                    opacity: 1,
+                    scale: 1,
+                    isBouncing: false,
+                    isJumping: false,
+                    isMorphingPill: true,
+                  });
+
+                  // After bounce & size transform lock with 100% precision (520ms), trigger Dissolve!
+                  const tDissolve = setTimeout(() => {
+                    if (!isMounted) return;
+                    const finalPill = measureActualDatePill();
+                    triggerDissolve(
+                      finalPill.screenX,
+                      finalPill.screenY,
+                      Math.max(finalPill.width, finalPill.height) * 0.45
+                    );
+                  }, 520);
+                  timerIds.push(tDissolve);
+                }, 340);
+                timerIds.push(tLandAndMorph);
+              }, 150);
+              timerIds.push(tImmediateJump);
             }
           }, 230); // 230ms per character
-
         }, 240); // 240ms dash from bounce spot to 'F'
         timerIds.push(tDash);
-
       }, 1050); // 1050ms bounce duration
       timerIds.push(tBounce);
     };
@@ -432,10 +558,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   if (splashStage === 'completed') return null;
 
   const isDissolving = splashStage === 'dissolving';
+  const isJumpingOrLater =
+    splashStage === 'jumping' || splashStage === 'morphing' || splashStage === 'dissolving';
+  const isPillMorphed = splashStage === 'morphing' || splashStage === 'dissolving';
 
   return (
     <div
-      onClick={triggerDissolve}
+      onClick={() => triggerDissolve()}
       className="fixed inset-0 z-[9999] flex items-center justify-center cursor-pointer select-none touch-none overscroll-none"
       style={{
         position: 'fixed',
@@ -450,7 +579,45 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       }}
       title="Ketuk untuk langsung membuka portal"
     >
-      {/* Hardware-Accelerated 2D Canvas for Iris Reveal from the Dot */}
+      {/* Invisible Layout Mirror of HomeScreen CalendarStrip (Fallback when HomeScreen is not mounted underneath) */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 pointer-events-none opacity-0 flex flex-col px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] max-w-md mx-auto w-full select-none -z-10"
+      >
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <div className="text-[26px] font-extrabold leading-[1.15]">
+              Your Weekly
+              <br />
+              Schedule
+            </div>
+            <div className="text-xs font-semibold mt-1">Selamat Pagi!</div>
+          </div>
+          <div className="w-10 h-10 rounded-full" />
+        </div>
+        <div className="pt-[max(0.5rem,env(safe-area-inset-top,16px))] pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[11px] font-extrabold">Kalender Mingguan</span>
+            <span className="text-[11px] font-bold px-2.5 py-0.5">Bulan Tahun</span>
+          </div>
+          <div className="flex items-center justify-between gap-1.5 py-2">
+            {weekDays.map((item) => (
+              <div
+                key={item.dateString}
+                data-splash-fallback-pill={item.isToday ? 'actual-date-pill' : undefined}
+                className={`flex flex-col items-center justify-center flex-1 min-w-[42px] ${
+                  item.isToday ? 'py-3.5 rounded-full transform -translate-y-0.5' : 'py-3 rounded-full'
+                }`}
+              >
+                <span className="text-base font-bold leading-tight">{item.num}</span>
+                <span className="text-[10px] font-semibold mt-0.5">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Hardware-Accelerated 2D Canvas for Iris Reveal from the Actual Date Pill */}
       <canvas
         ref={canvasRef}
         className="fixed inset-0 pointer-events-none z-10"
@@ -464,17 +631,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         }}
       />
 
-      {/* Typography & Dot Stage (z-20, sits above the portal canvas) */}
-      <div
-        className="relative z-20 flex flex-col items-center justify-center px-6 py-8 overflow-visible select-none"
-        style={{
-          opacity: isDissolving ? 0 : 1,
-          transform: isDissolving ? 'scale(1.04) translate3d(0, -4px, 0)' : 'scale(1) translate3d(0, 0, 0)',
-          filter: isDissolving ? 'blur(5px)' : 'none',
-          transition: 'opacity 280ms cubic-bezier(0.25, 1, 0.5, 1), transform 350ms cubic-bezier(0.25, 1, 0.5, 1), filter 250ms ease-out',
-          willChange: 'opacity, transform, filter',
-        }}
-      >
+      {/* Typography & Dot Stage (z-20, sits above the portal canvas; ZERO parent transform distortion so pill coordinates are 100% exact) */}
+      <div className="relative z-20 flex flex-col items-center justify-center px-6 py-8 overflow-visible select-none">
         {/* Typography & Ball Coordinate Grid */}
         <div
           ref={lettersContainerRef}
@@ -485,41 +643,81 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             className="absolute top-0 left-0 pointer-events-none z-30"
             style={{
               transform: `translate3d(${dotPos.x}px, ${dotPos.y}px, 0)`,
-              transition:
-                dotPos.isBouncing
-                  ? 'none'
-                  : 'transform 225ms cubic-bezier(0.22, 1, 0.36, 1)',
+              transition: dotPos.isBouncing
+                ? 'none'
+                : dotPos.isJumping
+                ? 'transform 340ms cubic-bezier(0.22, 1, 0.36, 1)'
+                : dotPos.isMorphingPill
+                ? 'transform 120ms ease-out'
+                : 'transform 225ms cubic-bezier(0.22, 1, 0.36, 1)',
               willChange: 'transform',
               opacity: isDissolving ? 0 : dotPos.opacity,
+              ...(isDissolving
+                ? { transition: 'opacity 220ms cubic-bezier(0.25, 1, 0.5, 1)' }
+                : {}),
             }}
           >
-            {/* INNER BALL (Handles bouncing animation, floating levitation, and soft bloom) */}
+            {/* INNER BALL / PILL (Handles drop bounce, jump arc, and bounce + size transform into Actual Date Pill) */}
             <div
               ref={dotBallRef}
-              className={`rounded-full ${
+              className={`rounded-full flex flex-col items-center justify-center overflow-hidden ${
                 dotPos.isBouncing
                   ? 'animate-ball-drop-bounce'
-                  : dotPos.isFloating && !isDissolving
-                  ? 'animate-ball-floating'
+                  : dotPos.isJumping
+                  ? 'animate-ball-jump-arc'
+                  : dotPos.isMorphingPill
+                  ? 'animate-pill-bounce-morph'
                   : ''
               }`}
               style={{
-                width: '26px',
-                height: '26px',
+                width: `${dotPos.width}px`,
+                height: `${dotPos.height}px`,
                 transform:
-                  dotPos.isBouncing || dotPos.isFloating
+                  dotPos.isBouncing || dotPos.isJumping || dotPos.isMorphingPill
                     ? undefined
                     : `translate(-50%, -50%) scale(${dotPos.scale})`,
-                background: '#FFFFFF',
-                boxShadow:
-                  '0 0 16px 3px #FFFFFF, 0 0 32px 8px rgba(45,212,191,0.85), 0 0 55px 16px rgba(56,189,248,0.4)',
-                willChange: 'transform',
+                background: isPillMorphed
+                  ? 'linear-gradient(180deg, #FF7E98 0%, #FF5376 100%)'
+                  : '#FFFFFF',
+                boxShadow: isPillMorphed
+                  ? '0 10px 25px -4px rgba(255, 107, 139, 0.55), 0 0 24px 4px rgba(255, 126, 152, 0.45)'
+                  : '0 0 16px 3px #FFFFFF, 0 0 32px 8px rgba(45,212,191,0.85), 0 0 55px 16px rgba(56,189,248,0.4)',
+                transition:
+                  'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1), background 260ms ease-out, box-shadow 260ms ease-out',
+                willChange: 'transform, width, height',
               }}
-            />
+            >
+              {/* Exact Date Number & Day Label matching CalendarStrip Actual Date Pill */}
+              <div
+                className="flex flex-col items-center justify-center"
+                style={{
+                  opacity: isPillMorphed ? 1 : 0,
+                  transform: isPillMorphed ? 'scale(1)' : 'scale(0.5)',
+                  transition: 'opacity 200ms ease-out 110ms, transform 240ms cubic-bezier(0.22, 1, 0.36, 1) 110ms',
+                }}
+              >
+                <span className="text-base font-bold leading-tight text-white">
+                  {todayItem.num}
+                </span>
+                <span className="text-[10px] font-semibold mt-0.5 text-white/95">
+                  {todayItem.label}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Typography "FMCU TEAMS" with GPU-Optimized Seamless Text-Shadow */}
-          <div className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans overflow-visible">
+          <div
+            className="flex items-center text-4xl sm:text-6xl md:text-7xl font-black tracking-[0.16em] sm:tracking-[0.24em] font-sans overflow-visible"
+            style={{
+              opacity: isJumpingOrLater ? 0 : 1,
+              filter: isJumpingOrLater ? 'blur(5px)' : 'none',
+              transform: isJumpingOrLater ? 'scale(0.97)' : 'scale(1)',
+              transition:
+                'opacity 260ms cubic-bezier(0.25, 1, 0.5, 1), filter 260ms ease-out, transform 260ms ease-out',
+              willChange: 'opacity, filter, transform',
+            }}
+          >
             {CHARACTERS.map((char, idx) => {
               const isRevealed = idx <= revealedCharIndex;
               const isCurrent = idx === revealedCharIndex;
@@ -560,7 +758,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
               );
             })}
 
-            {/* Anchor Slot right AFTER letter 'S' on TEAMS (where the dot stops) */}
+            {/* Anchor Slot right AFTER letter 'S' on TEAMS */}
             <span
               ref={afterSRef}
               className="w-4 sm:w-6 h-8 inline-flex items-center justify-center select-none"

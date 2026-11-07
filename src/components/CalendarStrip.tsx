@@ -21,7 +21,10 @@ export const getCurrentWeekDays = () => {
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     days.push({
       dateObj: d,
       dateString: dateStr,
@@ -44,6 +47,8 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({ selectedDate, onSe
         return (
           <button
             key={item.dateString}
+            data-splash-target={item.isToday ? 'actual-date-pill' : undefined}
+            data-selected-date-pill={isSelected ? 'true' : undefined}
             onClick={() => onSelectDate(item.dateString)}
             className={`flex flex-col items-center justify-center transition-all duration-300 flex-1 min-w-[42px] ${
               isSelected
