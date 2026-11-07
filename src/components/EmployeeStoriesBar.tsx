@@ -288,7 +288,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     [activeStories, currentUserId, currentUserName]
   );
 
-  // Other employees' active stories grouped by userName (no dummy stories)
+  // Other employees' active stories grouped by userName, ALWAYS sorted by the user who uploaded LAST (most recent createdAtMs first)
   const otherUserGroups = React.useMemo(() => {
     const map = new Map<
       string,
@@ -297,6 +297,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         userName: string;
         userRole: string;
         userAvatar: string;
+        latestCreatedAtMs: number;
         slides: StorySlide[];
       }
     >();
@@ -318,16 +319,24 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
           userName: s.userName,
           userRole: s.userRole,
           userAvatar: s.userAvatar,
+          latestCreatedAtMs: s.createdAtMs || 0,
           slides: [],
         });
       }
       const group = map.get(key)!;
+      if ((s.createdAtMs || 0) > group.latestCreatedAtMs) {
+        group.latestCreatedAtMs = s.createdAtMs || 0;
+      }
+      if (s.userAvatar) {
+        group.userAvatar = s.userAvatar;
+      }
       if (group.slides.length < MAX_STORIES_PER_DAY) {
         group.slides.push(s);
       }
     });
 
-    return Array.from(map.values());
+    // Sort groups so the user who uploaded most recently is ALWAYS first (leftmost)
+    return Array.from(map.values()).sort((a, b) => b.latestCreatedAtMs - a.latestCreatedAtMs);
   }, [activeStories, currentUserId, currentUserName]);
 
   // Compute user's Actual Agendas for today (for Auto Agenda Actual caption)
@@ -646,7 +655,11 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   const openEmployeeStoryGroup = (index: number) => {
     const group = otherUserGroups[index];
     if (!group || group.slides.length === 0) return;
-    const firstUnviewedIdx = group.slides.findIndex((s) => !viewedStoryIds.includes(s.id));
+    const firstUnviewedIdx = group.slides.findIndex(
+      (s) =>
+        !viewedStoryIds.includes(s.id) &&
+        !(s.views || []).some((v) => v.toLowerCase() === currentUserName.toLowerCase())
+    );
     setActiveViewerGroupIdx(index);
     setActiveSlideIdx(firstUnviewedIdx >= 0 ? firstUnviewedIdx : 0);
     setSlideProgress(0);
@@ -1054,12 +1067,20 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
             </span>
           </div>
 
-          {/* 2. Other Employees' Active Story Circles (Only shown when real stories exist) */}
+          {/* 2. Other Employees' Active Story Circles (Sorted by Latest Upload First + Colored Circle for New Story) */}
           {otherUserGroups.map((group, idx) => {
-            const hasUnviewed = group.slides.some((s) => !viewedStoryIds.includes(s.id));
+            const hasUnviewed = group.slides.some(
+              (s) =>
+                !viewedStoryIds.includes(s.id) &&
+                !(s.views || []).some(
+                  (v) => v.toLowerCase() === currentUserName.toLowerCase()
+                )
+            );
             const firstName = group.userName.split(' ')[0];
             // Requirement 7: Small badge below story only displays 1 most-reacted emoji
             const topGroupEmoji = getTopReactedEmoji(group.slides);
+            const latestSlidePreview =
+              group.slides[group.slides.length - 1]?.imageUrl || group.userAvatar;
 
             return (
               <button
@@ -1069,17 +1090,18 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 className="flex flex-col items-center flex-shrink-0 w-[68px] group cursor-pointer"
               >
                 <div className="relative">
+                  {/* Outer Story Ring: Vibrant Colored Circle when Story is New (hasUnviewed), Gray when already viewed */}
                   <div
-                    className={`w-16 h-16 rounded-full p-[2.5px] transition-all duration-300 group-hover:scale-105 group-active:scale-95 ${
+                    className={`w-16 h-16 rounded-full p-[3px] transition-all duration-300 group-hover:scale-105 group-active:scale-95 ${
                       hasUnviewed
-                        ? 'bg-gradient-to-tr from-[#FEDA77] via-[#DD2A7B] to-[#8134AF] shadow-sm'
+                        ? 'bg-gradient-to-tr from-[#FEDA77] via-[#FF2E93] to-[#8134AF] shadow-[0_0_12px_rgba(221,42,123,0.42)]'
                         : 'bg-slate-300/80'
                     }`}
                   >
                     <div className="w-full h-full rounded-full bg-white p-[2px] overflow-hidden flex items-center justify-center">
-                      {group.userAvatar ? (
+                      {group.userAvatar || latestSlidePreview ? (
                         <img
-                          src={group.userAvatar}
+                          src={group.userAvatar || latestSlidePreview}
                           alt={group.userName}
                           className="w-full h-full rounded-full object-cover"
                         />
@@ -1097,6 +1119,14 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     </div>
                   </div>
 
+                  {/* New Story Colored Circle Dot Indicator at Top-Right */}
+                  {hasUnviewed && (
+                    <span
+                      className="absolute top-0 right-0 w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-emerald-400 to-teal-500 ring-2 ring-[#F8F9FD] shadow-sm pointer-events-none"
+                      title="Story Baru Belum Dilihat"
+                    />
+                  )}
+
                   {/* Requirement 7: Small badge at bottom center displaying ONLY the 1 most-reacted emoji */}
                   {topGroupEmoji && (
                     <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white/95 backdrop-blur-xs border border-slate-200/80 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
@@ -1107,7 +1137,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
                 <span
                   className={`text-[10px] mt-1.5 truncate w-full text-center leading-tight ${
-                    hasUnviewed ? 'font-bold text-slate-800' : 'font-medium text-slate-500'
+                    hasUnviewed ? 'font-extrabold text-slate-900' : 'font-medium text-slate-500'
                   }`}
                 >
                   {firstName}
