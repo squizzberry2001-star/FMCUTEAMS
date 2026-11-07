@@ -158,63 +158,33 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     <div
       ref={scrollContainerRef}
       onScroll={checkScroll}
-      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-0 pb-28 max-w-xl mx-auto w-full relative select-none"
+      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full relative select-none"
     >
-      {/* ============================================================
-          UNIFIED BORDERLESS LIQUID GLASS STICKY HEADER
-          - "Plong" & Borderless: No thick box, no bottom border, no box shadow
-          - Crystalline glass: bg-[#F8F9FD]/85 backdrop-blur-xl when scrolled
-          - Safe area protected: clears iPhone notch/Dynamic Island (5.27)
-          - Compacts gracefully on scroll so agendas have maximum viewport space
-          ============================================================ */}
-      <div
-        className={`sticky top-0 z-30 -mx-5 px-5 sm:-mx-6 sm:px-6 pt-[max(0.85rem,env(safe-area-inset-top,20px))] transition-all duration-300 ${
-          isScrolled
-            ? 'bg-[#F8F9FD]/85 backdrop-blur-xl pb-2'
-            : 'bg-[#F8F9FD] pb-3'
-        }`}
-      >
-        {/* Head Title "Your Weekly Schedule" & Time-based Greeting & Notification Bell */}
-        <div className={`flex items-center justify-between transition-all duration-300 ${isScrolled ? 'mb-1.5' : 'mb-3.5'}`}>
-          <div className="flex-1 min-w-0 pr-3">
-            <h1
-              className={`font-black text-slate-900 tracking-tight transition-all duration-300 ${
-                isScrolled
-                  ? 'text-lg sm:text-xl leading-tight'
-                  : 'text-[24px] sm:text-[26px] leading-[1.15]'
-              }`}
-            >
-              Your Weekly Schedule
-            </h1>
-            <div
-              className={`transition-all duration-300 overflow-hidden ${
-                isScrolled
-                  ? 'max-h-0 opacity-0 -mt-0.5 pointer-events-none'
-                  : 'max-h-6 opacity-100 mt-1'
-              }`}
-            >
-              <p className="text-xs text-slate-500 font-semibold truncate">
-                Selamat {getTimeGreeting()}, {fullName}! 👋
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => alert(`Notifikasi: Ada ${displayedAgendas.length} agenda terjadwal untuk tanggal ${selectedDate}.`)}
-            className={`rounded-full iphone-glass-icon-btn flex items-center justify-center text-[#2BB3A0] hover:scale-105 active:scale-95 transition-all relative flex-shrink-0 cursor-pointer group ${
-              isScrolled ? 'w-8 h-8' : 'w-10 h-10'
-            }`}
-            title="Notifikasi Agenda"
-          >
-            <Bell className={`stroke-[2.2] group-hover:scale-110 transition-transform ${isScrolled ? 'w-4 h-4' : 'w-5 h-5'}`} />
-            <span className={`rounded-full bg-[#2BB3A0] absolute border-2 border-white ring-2 ring-[#EAF8F2] ${
-              isScrolled ? 'w-2 h-2 top-1.5 right-1.5' : 'w-2.5 h-2.5 top-2.5 right-2.5'
-            }`} />
-          </button>
+      {/* Section 1 Item 1: Head Title "Your Weekly Schedule" & Time-based Greeting */}
+      <div className="flex items-start justify-between mb-5">
+        <div>
+          <h1 className="text-[26px] font-extrabold text-slate-900 leading-[1.15] tracking-tight">
+            Your Weekly<br />Schedule
+          </h1>
+          <p className="text-xs text-slate-500 font-semibold mt-1">
+            Selamat {getTimeGreeting()}, {fullName}! 👋
+          </p>
         </div>
 
+        <button
+          onClick={() => alert(`Notifikasi: Ada ${displayedAgendas.length} agenda terjadwal untuk tanggal ${selectedDate}.`)}
+          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all relative flex-shrink-0 cursor-pointer group"
+          title="Notifikasi Agenda"
+        >
+          <Bell className="w-5 h-5 stroke-[2.2] text-black group-hover:scale-110 transition-transform" />
+          <span className="w-2.5 h-2.5 rounded-full bg-black absolute top-2.5 right-2.5 border-2 border-white ring-2 ring-[#EAF8F2]" />
+        </button>
+      </div>
+
+      {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
+      <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-2 pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 transition-all">
         {/* Section 1 Item 3: Bulan dan Tahun Aktual di pojok kanan atas tepat di atas calendar strip */}
-        <div className={`flex items-center justify-between px-1 transition-all duration-300 ${isScrolled ? 'mb-1.5' : 'mb-2'}`}>
+        <div className="flex items-center justify-between mb-2 px-1">
           <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
             Kalender Mingguan
           </span>
@@ -225,12 +195,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         {/* Section 1 Item 2: Horizontal Calendar Strip */}
-        <div className="mb-2">
-          <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} />
-        </div>
+        <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} />
 
         {/* Section 1 Item 4: Sub section tab filter & Counter */}
-        <div className="mt-2.5 pt-2.5 border-t border-slate-200/40 space-y-2">
+        <div className="mt-3.5 pt-3 border-t border-slate-200/60 space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-5">
               {(['Today', 'Week', 'Month'] as const).map((period) => {

@@ -730,28 +730,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       )}
 
       {/* 
-        Frosted Status Bar Blur Overlay (Borderless & Plong)
-        - Memberikan efek blur halus saat konten menyentuh/melewati status bar mobile
-        - Tanpa batas garis/border (borderless), membaur anggun ke bawah
-      */}
-      <div
-        className="fixed top-0 left-0 right-0 pointer-events-none select-none z-30"
-        style={{
-          height: 'max(3.25rem, env(safe-area-inset-top, 48px))',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          background: 'linear-gradient(to bottom, rgba(248, 249, 253, 0.85) 0%, rgba(248, 249, 253, 0.4) 65%, transparent 100%)',
-          maskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
-          WebkitMaskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
-        }}
-      />
-
-      {/* 
         Floating Top Corner Buttons (Kiri Atas: Home circle, Kanan Atas: PDF circle)
         Menghilang saat scroll ke bawah, muncul kembali saat scroll ke atas
       */}
       <div
-        className={`fixed top-3 sm:top-4 left-0 right-0 max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between pointer-events-none select-none z-40 transition-all duration-300 ease-out ${
+        className={`fixed top-[max(1rem,env(safe-area-inset-top,16px))] left-0 right-0 max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between pointer-events-none select-none z-40 transition-all duration-300 ease-out ${
           showTopButtons ? 'translate-y-0 opacity-100' : '-translate-y-16 opacity-0'
         }`}
       >
@@ -783,7 +766,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </button>
       </div>
 
-      <div className="max-w-6xl mx-auto p-3.5 sm:p-6 pt-16 sm:pt-14 space-y-5">
+      <div className="max-w-6xl mx-auto p-3.5 sm:p-6 pt-[max(4.5rem,calc(env(safe-area-inset-top,24px)+3.25rem))] space-y-5">
         {/* ============================================================
             STICKY TOP GEOFENCE & LIVE CHECK-IN BANNER (C:\FMCUVISITREPORT)
             ============================================================ */}
