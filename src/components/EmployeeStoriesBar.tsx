@@ -11,8 +11,24 @@ import {
   RefreshCw,
   Send,
   CalendarCheck,
+  Cloud,
+  ExternalLink,
+  CheckCircle2,
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
+import {
+  FMCU_GDRIVE_FOLDER_ID,
+  FMCU_GDRIVE_FOLDER_URL,
+  getGasWebAppUrl,
+  setGasWebAppUrl,
+  saveStoriesToIdb,
+  loadStoriesFromIdb,
+  uploadStoryToGasGDrive,
+  fetchActiveStoriesFromGasGDrive,
+  syncStoryReactionToGasGDrive,
+  syncStoryViewToGasGDrive,
+  deleteStoryFromGasGDrive,
+} from '../utils/gdriveGasSync';
 
 export interface StorySlide {
   id: string;
@@ -27,6 +43,10 @@ export interface StorySlide {
   dateKey: string; // YYYY-MM-DD
   createdAtMs: number; // Epoch ms when story was created
   expiresAtMs: number; // Epoch ms when story expires (createdAtMs + 24 hours)
+  driveFileId?: string;
+  driveFolderId?: string;
+  driveUrl?: string;
+  gdriveSynced?: boolean;
   /** Map of emoji -> array of userNames who reacted (max 1 reaction per user per slide) */
   reactions: Record<string, string[]>;
   /** Array of other userNames who have viewed this story slide */
@@ -96,7 +116,7 @@ const getTopReactedEmoji = (slides: StorySlide[]): string | null => {
   return topEmoji;
 };
 
-// Compress uploaded/captured image for smooth persistence
+// Compress uploaded/captured image for smooth GDrive upload & local cache
 const compressStoryImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -154,7 +174,6 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   // Initialize stories without any dummy seed data & purge expired (>24h) stories
   const [stories, setStories] = useState<StorySlide[]>(() => {
     try {
-      // Remove legacy dummy stories key if present
       localStorage.removeItem(LEGACY_STORAGE_KEY);
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -186,26 +205,61 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     return [];
   });
 
-  // Auto-disappear check every 30 seconds (Instagram 24 hours expiration)
+  // Load high-res stories from IndexedDB & Google Drive GAS on mount + periodic 24h prune
   useEffect(() => {
-    const pruneExpired = () => {
+    let mounted = true;
+
+    const loadAndSync = async () => {
+      const nowMs = Date.now();
+      const idbStories = await loadStoriesFromIdb();
+      if (mounted && idbStories && idbStories.length > 0) {
+        const validIdb = idbStories.filter((s) => isStoryActive24h(s, nowMs));
+        setStories((prev) => {
+          const map = new Map<string, StorySlide>();
+          [...validIdb, ...prev.filter((s) => isStoryActive24h(s, nowMs))].forEach((item) => {
+            if (!map.has(item.id)) map.set(item.id, item);
+          });
+          return Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs);
+        });
+      }
+
+      const remoteStories = await fetchActiveStoriesFromGasGDrive();
+      if (mounted && remoteStories && remoteStories.length > 0) {
+        const validRemote = remoteStories.filter((s) => isStoryActive24h(s, nowMs));
+        setStories((prev) => {
+          const map = new Map<string, StorySlide>();
+          [...validRemote, ...prev.filter((s) => isStoryActive24h(s, nowMs))].forEach((item) => {
+            if (!map.has(item.id)) map.set(item.id, item);
+          });
+          return Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs);
+        });
+      }
+    };
+
+    loadAndSync();
+
+    const timer = setInterval(() => {
       const nowMs = Date.now();
       setStories((prev) => {
         const active = prev.filter((s) => isStoryActive24h(s, nowMs));
         return active.length === prev.length ? prev : active;
       });
+      loadAndSync();
+    }, 30000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
     };
-    pruneExpired();
-    const timer = setInterval(pruneExpired, 30000);
-    return () => clearInterval(timer);
   }, []);
 
-  // Save active stories to localStorage
+  // Save active stories to IndexedDB & localStorage
   useEffect(() => {
+    saveStoriesToIdb(stories);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
     } catch (e) {
-      console.warn('Story storage full:', e);
+      console.warn('Story localStorage full, persisted in IndexedDB & GDrive:', e);
     }
   }, [stories]);
 
@@ -291,7 +345,6 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
   const buildAutoAgendaCaption = (): { caption: string; storeTag: string } => {
     if (myTodayAgendas.length > 0) {
-      // Pick the agenda closest to current time
       const now = new Date();
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
       let bestAgenda = myTodayAgendas[0];
@@ -351,8 +404,14 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   const [draftStoreTag, setDraftStoreTag] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState<boolean>(false);
+  const [isUploadingToGDrive, setIsUploadingToGDrive] = useState<boolean>(false);
   const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
   const [isCameraStreamActive, setIsCameraStreamActive] = useState<boolean>(false);
+
+  // Google Apps Script GDrive Config Popover
+  const [showGDriveConfig, setShowGDriveConfig] = useState<boolean>(false);
+  const [gasUrlInput, setGasUrlInput] = useState<string>(() => getGasWebAppUrl());
+  const [gasSavedNotice, setGasSavedNotice] = useState<boolean>(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -377,7 +436,6 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     setUploadError(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      // Fallback to native file input with camera capture
       cameraInputRef.current?.click();
       return;
     }
@@ -400,7 +458,6 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     } catch (err) {
       console.warn('Live camera unavailable, falling back to native camera input:', err);
       setIsCameraStreamActive(false);
-      // Automatically open native camera picker as fallback
       cameraInputRef.current?.click();
     }
   };
@@ -469,7 +526,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
   const currentSlide = currentViewerSlides[activeSlideIdx] || null;
 
-  // Mark current slide as viewed & record viewer name if viewing another user's story
+  // Mark current slide as viewed & record viewer name if viewing another user's story (+ sync to GDrive GAS)
   useEffect(() => {
     if (!currentSlide) return;
 
@@ -477,7 +534,6 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       setViewedStoryIds((prev) => [...prev, currentSlide.id]);
     }
 
-    // Record view from other users on the story slide itself
     const isOwnSlide =
       currentSlide.userId === currentUserId ||
       currentSlide.userName.toLowerCase() === currentUserName.toLowerCase();
@@ -495,6 +551,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               : s
           )
         );
+        syncStoryViewToGasGDrive({
+          storyId: currentSlide.id,
+          viewerName: currentUserName,
+        });
       }
     }
   }, [currentSlide?.id, currentUserId, currentUserName]);
@@ -532,6 +592,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     if (e) e.stopPropagation();
     setUploadError(null);
     setDraftImage('');
+    setShowGDriveConfig(false);
 
     const autoAgenda = buildAutoAgendaCaption();
     setDraftCaption(autoAgenda.caption);
@@ -554,6 +615,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     setShowUploadModal(false);
     setDraftImage('');
     setUploadError(null);
+    setShowGDriveConfig(false);
   };
 
   const openEmployeeStoryGroup = (index: number) => {
@@ -668,11 +730,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }
   };
 
-  // Requirement 1: React max 1x per story slide, but user can switch/change emoji freely
+  // Requirement 1: React max 1x per story slide, but user can switch/change emoji freely (+ sync to GDrive GAS)
   const handleSelectReaction = (emoji: string) => {
     if (!currentSlide) return;
 
-    // Trigger floating emoji burst
     const burstId = Date.now() + Math.random();
     const randomLeft = 22 + Math.floor(Math.random() * 56);
     setFloatingBursts((prev) => [...prev, { id: burstId, emoji, left: randomLeft }]);
@@ -689,7 +750,6 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
           (name) => name.toLowerCase() === currentUserName.toLowerCase()
         );
 
-        // First, remove currentUserName from ALL emojis on this slide (enforces max 1 reaction per user)
         const cleanedReactions: Record<string, string[]> = {};
         Object.entries(slide.reactions || {}).forEach(([em, usersList]) => {
           const filtered = usersList.filter(
@@ -700,8 +760,6 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
           }
         });
 
-        // If user clicked a DIFFERENT emoji (or hadn't reacted yet), set their 1 reaction to this emoji.
-        // If they tapped the exact same emoji again, it toggles off.
         if (!alreadyPickedThisEmoji) {
           cleanedReactions[emoji] = [...(cleanedReactions[emoji] || []), currentUserName];
         }
@@ -712,6 +770,12 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         };
       })
     );
+
+    syncStoryReactionToGasGDrive({
+      storyId: currentSlide.id,
+      emoji,
+      userName: currentUserName,
+    });
   };
 
   // Handle selecting/capturing photo from native camera input fallback
@@ -733,7 +797,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }
   };
 
-  const handlePublishStory = (e: React.FormEvent) => {
+  // Publish Story & Upload to Google Drive Folder (1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a) via Google Apps Script
+  const handlePublishStory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (myActiveStories.length >= MAX_STORIES_PER_DAY) {
       setUploadError(
@@ -746,6 +811,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       return;
     }
 
+    setIsUploadingToGDrive(true);
     const nowMs = Date.now();
     const autoFallback = buildAutoAgendaCaption();
     const newStory: StorySlide = {
@@ -761,11 +827,32 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       dateKey: todayKey,
       createdAtMs: nowMs,
       expiresAtMs: nowMs + STORY_TTL_MS,
+      driveFolderId: FMCU_GDRIVE_FOLDER_ID,
+      driveUrl: FMCU_GDRIVE_FOLDER_URL,
+      gdriveSynced: false,
       reactions: {},
       views: [],
     };
 
+    // Optimistic insert so story appears immediately
     setStories((prev) => [newStory, ...prev]);
+
+    // Upload to Google Drive via Google Apps Script in background/await
+    const gdriveRes = await uploadStoryToGasGDrive(newStory);
+    setStories((prev) =>
+      prev.map((s) =>
+        s.id === newStory.id
+          ? {
+              ...s,
+              driveFileId: gdriveRes.driveFileId,
+              driveUrl: gdriveRes.driveUrl,
+              gdriveSynced: gdriveRes.synced,
+            }
+          : s
+      )
+    );
+
+    setIsUploadingToGDrive(false);
     stopCameraStream();
     setDraftImage('');
     setDraftCaption('');
@@ -781,11 +868,18 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
   const handleDeleteOwnStory = (storyId: string) => {
     setStories((prev) => prev.filter((s) => s.id !== storyId));
+    deleteStoryFromGasGDrive(storyId);
     if (currentViewerSlides.length <= 1) {
       closeViewer();
     } else {
       setActiveSlideIdx((prev) => Math.max(0, prev - 1));
     }
+  };
+
+  const handleSaveGasUrl = () => {
+    setGasWebAppUrl(gasUrlInput);
+    setGasSavedNotice(true);
+    setTimeout(() => setGasSavedNotice(false), 2000);
   };
 
   const remainingQuota = Math.max(0, MAX_STORIES_PER_DAY - myActiveStories.length);
@@ -1091,9 +1185,9 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               {activeViewerGroupIdx === -1 && showViewersList && (
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute top-3 right-3 z-30 w-56 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-white/15 p-3 text-white shadow-xl"
+                  className="absolute top-3 right-3 z-30 w-60 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-white/15 p-3 text-white shadow-xl space-y-2"
                 >
-                  <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-white/10">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
                     <span className="text-[11px] font-bold flex items-center gap-1.5">
                       <Eye className="w-3.5 h-3.5 text-teal-400" />
                       <span>Dilihat oleh ({(currentSlide.views || []).length})</span>
@@ -1122,6 +1216,19 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                       ))}
                     </ul>
                   )}
+
+                  <a
+                    href={currentSlide.driveUrl || FMCU_GDRIVE_FOLDER_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[10px] text-teal-300 hover:underline font-medium"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Cloud className="w-3 h-3" />
+                      <span>Tersimpan di Google Drive</span>
+                    </span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 </div>
               )}
 
@@ -1256,12 +1363,22 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                   Buat Story Kunjungan Aktual
                 </h3>
                 <p className="text-[10px] text-white/70 font-light">
-                  Kuota 24 Jam: {myActiveStories.length}/{MAX_STORIES_PER_DAY} • Otomatis hilang 24 jam
+                  Kuota 24 Jam: {myActiveStories.length}/{MAX_STORIES_PER_DAY} • Auto GDrive & 24 Jam
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowGDriveConfig((prev) => !prev)}
+                className="px-2.5 py-1.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                title="Konfigurasi Penyimpanan Google Drive (Google Apps Script)"
+              >
+                <Cloud className="w-3.5 h-3.5" />
+                <span>GDrive</span>
+              </button>
+
               {!draftImage && remainingQuota > 0 && (
                 <button
                   type="button"
@@ -1283,6 +1400,47 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Google Drive GAS Configuration Drawer (when clicking 'GDrive' pill) */}
+          {showGDriveConfig && (
+            <div className="mx-4 mb-2 p-3.5 rounded-2xl bg-slate-900/95 border border-white/15 z-40 space-y-2.5 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold text-emerald-300 flex items-center gap-1.5">
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>Penyimpanan Google Drive (Apps Script)</span>
+                </span>
+                <a
+                  href={FMCU_GDRIVE_FOLDER_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] font-bold text-teal-300 hover:underline inline-flex items-center gap-1"
+                >
+                  <span>Buka Folder GDrive</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+              <p className="text-[10px] text-white/70 font-light leading-relaxed">
+                Folder ID Target: <code className="text-emerald-300 font-mono">{FMCU_GDRIVE_FOLDER_ID}</code>
+              </p>
+              <div className="flex gap-1.5">
+                <input
+                  type="url"
+                  value={gasUrlInput}
+                  onChange={(e) => setGasUrlInput(e.target.value)}
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  className="flex-1 px-2.5 py-1.5 rounded-xl bg-black/60 border border-white/20 text-[10px] text-white focus:outline-none focus:border-teal-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveGasUrl}
+                  className="px-3 py-1.5 rounded-xl bg-teal-500 text-slate-950 text-[10px] font-extrabold flex items-center gap-1 cursor-pointer"
+                >
+                  {gasSavedNotice ? <CheckCircle2 className="w-3.5 h-3.5" /> : null}
+                  <span>{gasSavedNotice ? 'Tersimpan' : 'Simpan URL'}</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Main Full-Screen Camera Viewfinder OR Captured Photo + Auto Agenda Caption Editor */}
           {remainingQuota <= 0 ? (
@@ -1357,7 +1515,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                       Ketuk untuk Membuka Kamera Perangkat
                     </p>
                     <p className="text-[11px] font-light text-white/60 max-w-xs">
-                      Ambil foto aktivitas kunjungan aktual Anda untuk dibagikan ke Story Tim FMCU.
+                      Foto otomatis tersimpan ke Google Drive Folder FMCU & hilang otomatis setelah 24 jam.
                     </p>
                   </div>
                 )}
@@ -1462,11 +1620,15 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
                     <button
                       type="submit"
-                      disabled={isProcessingPhoto}
-                      className="flex-1 py-3 px-5 rounded-full bg-gradient-to-r from-[#DD2A7B] via-[#E1306C] to-[#F58529] hover:brightness-110 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition cursor-pointer"
+                      disabled={isProcessingPhoto || isUploadingToGDrive}
+                      className="flex-1 py-3 px-5 rounded-full bg-gradient-to-r from-[#DD2A7B] via-[#E1306C] to-[#F58529] hover:brightness-110 disabled:opacity-60 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition cursor-pointer"
                     >
                       <Send className="w-3.5 h-3.5" />
-                      <span>Bagikan Story ({myActiveStories.length + 1}/{MAX_STORIES_PER_DAY})</span>
+                      <span>
+                        {isUploadingToGDrive
+                          ? 'Menyimpan ke GDrive...'
+                          : `Bagikan Story (${myActiveStories.length + 1}/${MAX_STORIES_PER_DAY})`}
+                      </span>
                     </button>
                   </div>
                 )}

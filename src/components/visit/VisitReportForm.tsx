@@ -165,7 +165,10 @@ const loadPhotosFromIdb = async (key: string): Promise<any | null> => {
   }
 };
 
-// Default GAS WebApp Endpoint for automatic Google Drive storage
+// Default GAS WebApp Endpoint & Target GDrive Folder (1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a)
+const FMCU_GDRIVE_FOLDER_ID = '1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
+const FMCU_GDRIVE_FOLDER_URL =
+  'https://drive.google.com/drive/u/3/folders/1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
 const DEFAULT_GAS_GDRIVE_URL =
   'https://script.google.com/macros/s/AKfycbzFMCU_VisitReport_GDrive_AutoStorage/exec';
 
@@ -180,7 +183,7 @@ const uploadPhotoToGasGDrive = async (params: {
 }): Promise<{ driveFileId: string; driveUrl: string; synced: boolean }> => {
   const gasUrl = localStorage.getItem('fmcu_gas_webapp_url') || DEFAULT_GAS_GDRIVE_URL;
   const driveFileId = `GDRIVE_${params.storeCode}_${Date.now()}`;
-  const driveUrl = `https://drive.google.com/drive/search?q=${encodeURIComponent(params.filename)}`;
+  const driveUrl = FMCU_GDRIVE_FOLDER_URL;
 
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return { driveFileId, driveUrl, synced: false };
@@ -195,6 +198,8 @@ const uploadPhotoToGasGDrive = async (params: {
       },
       body: JSON.stringify({
         action: 'uploadPhotoToGDrive',
+        folderId: FMCU_GDRIVE_FOLDER_ID,
+        folderUrl: FMCU_GDRIVE_FOLDER_URL,
         folderName: `FMCU_VISIT_${params.storeCode}_${params.storeName}`,
         filename: params.filename,
         mimeType: 'image/jpeg',
