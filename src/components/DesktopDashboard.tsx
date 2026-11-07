@@ -49,14 +49,23 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenu, setActiveMenu] = useState('dashboard');
 
-  // Menentukan nama hari dalam Bahasa Indonesia
-  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-  const currentDayName = dayNames[new Date().getDay()];
+  // Waktu sapaan berdasarkan jam aktual (Pagi, Siang, Sore, Malam)
+  const getTimeGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 4 && hour < 11) return 'Pagi';
+    if (hour >= 11 && hour < 15) return 'Siang';
+    if (hour >= 15 && hour < 18) return 'Sore';
+    return 'Malam';
+  };
 
-  // Mengambil nama depan user
-  const rawName = user.name || 'Sarah Jenkins';
-  const cleanName = rawName.replace(/^Dr\.\s*/i, '').trim();
-  const firstName = cleanName.split(' ')[0] || 'User';
+  const fullName = user.name || 'Sarah Jenkins';
+
+  const monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  const now = new Date();
+  const currentMonthYear = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
 
   const filteredAgendas = agendas.filter((item) => {
     const matchesSearch =
@@ -173,10 +182,10 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         <div className="flex items-center justify-between gap-4 mb-7">
           <div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Your Daily Schedule
+              Your Weekly Schedule
             </h1>
             <p className="text-xs text-slate-500 font-semibold mt-1">
-              Selamat {currentDayName}, {firstName}! 👋
+              Selamat {getTimeGreeting()}, {fullName}! 👋
             </p>
           </div>
 
@@ -274,9 +283,15 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         <div className="bg-white rounded-[28px] p-5 shadow-soft-card mb-7">
           <div className="flex items-center justify-between mb-3 px-1">
             <h3 className="text-sm font-bold text-slate-800">Kalender Mingguan</h3>
-            <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-3 py-1 rounded-full">
-              Tanggal Terpilih: {selectedDate}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-teal-800 bg-teal-50 px-3 py-1 rounded-full border border-teal-200/80 flex items-center gap-1.5">
+                <CalendarIcon className="w-3.5 h-3.5 text-teal-600" />
+                <span>{currentMonthYear}</span>
+              </span>
+              <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                Terpilih: {selectedDate}
+              </span>
+            </div>
           </div>
           <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} />
         </div>

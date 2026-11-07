@@ -86,7 +86,7 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
             </span>
           </div>
 
-          <h4 className={`font-bold text-[15px] leading-tight truncate mt-1 group-hover:text-teal-700 transition-colors ${
+          <h4 className={`font-bold text-[13px] leading-snug line-clamp-1 mt-0.5 group-hover:text-teal-700 transition-colors ${
             agenda.completed ? 'text-slate-500 line-through' : 'text-slate-800'
           }`}>
             {agenda.title}

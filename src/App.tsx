@@ -8,6 +8,8 @@ import { HistoryView } from './components/HistoryView';
 import { ProfileView } from './components/ProfileView';
 import { DesktopDashboard } from './components/DesktopDashboard';
 import { NewAgendaModal } from './components/NewAgendaModal';
+import { AgendaDetailView } from './components/AgendaDetailView';
+import { BottomNavbar } from './components/BottomNavbar';
 import { LoginPage } from './components/LoginPage';
 import { Smartphone, Monitor } from 'lucide-react';
 
@@ -56,6 +58,9 @@ export const App: React.FC = () => {
   // Mobile navigation active tab
   const [mobileTab, setMobileTab] = useState<'home' | 'calendar' | 'history' | 'profile'>('home');
 
+  // Mobile sub-screen: 'main' (normal tabs) or 'detail' (agenda detail page)
+  const [mobileScreen, setMobileScreen] = useState<'main' | 'detail'>('main');
+
   // Modal State for New Agenda
   const [showNewAgendaModal, setShowNewAgendaModal] = useState(false);
 
@@ -92,6 +97,7 @@ export const App: React.FC = () => {
   // Handlers
   const handleSelectAgenda = (agenda: ScheduleAgenda) => {
     setSelectedAgenda(agenda);
+    setMobileScreen('detail'); // Navigasi ke Halaman Detail Agenda
   };
 
   const handleToggleAgendaComplete = (id: string, e?: React.MouseEvent) => {
@@ -145,13 +151,19 @@ export const App: React.FC = () => {
   if (!user) {
     return (
       <LoginPage
-        onLogin={(loggedInUser) => setUser(loggedInUser)}
+        onLogin={(loggedInUser) => {
+          setUser(loggedInUser);
+          setMobileTab('home'); // Otomatis langsung masuk di section 1 (Weekly Schedule)
+          setMobileScreen('main');
+        }}
         onContinueAsGuest={() => {
           setUser({
             name: 'Sarah Jenkins',
             email: 'sarah.j@fmcuteams.com',
             avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
           });
+          setMobileTab('home'); // Otomatis langsung masuk di section 1 (Weekly Schedule)
+          setMobileScreen('main');
         }}
       />
     );
@@ -210,43 +222,79 @@ export const App: React.FC = () => {
       {isMobileLayout ? (
         /* Mobile Full-Screen Web App (No simulated hardware frame!) */
         <div className="flex-1 w-full max-w-md mx-auto min-h-screen bg-[#F8F9FD] flex flex-col relative">
-          {mobileTab === 'home' && (
-            <HomeScreen
-              user={user}
-              agendas={agendas}
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-              onSelectAgenda={handleSelectAgenda}
-              onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+          {mobileScreen === 'detail' ? (
+            /* Halaman Detail Agenda ketika user klik list agenda */
+            <AgendaDetailView
+              agenda={selectedAgenda}
+              onBack={() => setMobileScreen('main')}
               onToggleComplete={handleToggleAgendaComplete}
-              onOpenCalendar={() => setMobileTab('calendar')}
-              onOpenHistory={() => setMobileTab('history')}
-              onOpenProfile={() => setMobileTab('profile')}
-              activeNavTab={mobileTab}
-              setActiveNavTab={(tab) => setMobileTab(tab as any)}
             />
-          )}
-          {mobileTab === 'calendar' && (
-            <CalendarScheduleView
-              agendas={agendas}
-              onBack={() => setMobileTab('home')}
-              onSelectAgenda={handleSelectAgenda}
-              onToggleComplete={handleToggleAgendaComplete}
-              onOpenNewAgenda={() => setShowNewAgendaModal(true)}
-            />
-          )}
-          {mobileTab === 'history' && (
-            <HistoryView
-              onBack={() => setMobileTab('home')}
-            />
-          )}
-          {mobileTab === 'profile' && (
-            <ProfileView
-              user={user}
-              medicinesCount={agendas.length}
-              onBack={() => setMobileTab('home')}
-              onLogout={handleLogout}
-            />
+          ) : (
+            <>
+              {/* Section 1: Your Weekly Schedule */}
+              {mobileTab === 'home' && (
+                <HomeScreen
+                  user={user}
+                  agendas={agendas}
+                  selectedDate={selectedDate}
+                  onSelectDate={setSelectedDate}
+                  onSelectAgenda={handleSelectAgenda}
+                  onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+                  onToggleComplete={handleToggleAgendaComplete}
+                  onOpenCalendar={() => setMobileTab('calendar')}
+                  onOpenHistory={() => setMobileTab('history')}
+                  onOpenProfile={() => setMobileTab('profile')}
+                  activeNavTab={mobileTab}
+                  setActiveNavTab={(tab) => setMobileTab(tab as any)}
+                />
+              )}
+
+              {/* Section 2: Jadwal Agenda Kerja (Master Calendar) */}
+              {mobileTab === 'calendar' && (
+                <div className="flex-1 flex flex-col pb-20">
+                  <CalendarScheduleView
+                    agendas={agendas}
+                    onBack={() => setMobileTab('home')}
+                    onSelectAgenda={handleSelectAgenda}
+                    onToggleComplete={handleToggleAgendaComplete}
+                    onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+                  />
+                  <BottomNavbar
+                    activeTab={mobileTab}
+                    onSelectTab={(tab) => setMobileTab(tab)}
+                  />
+                </div>
+              )}
+
+              {/* Section 3: Coverage Store & History Aktivitas */}
+              {mobileTab === 'history' && (
+                <div className="flex-1 flex flex-col pb-20">
+                  <HistoryView
+                    onBack={() => setMobileTab('home')}
+                  />
+                  <BottomNavbar
+                    activeTab={mobileTab}
+                    onSelectTab={(tab) => setMobileTab(tab)}
+                  />
+                </div>
+              )}
+
+              {/* Section 4: Akun & Profil */}
+              {mobileTab === 'profile' && (
+                <div className="flex-1 flex flex-col pb-20">
+                  <ProfileView
+                    user={user}
+                    medicinesCount={agendas.length}
+                    onBack={() => setMobileTab('home')}
+                    onLogout={handleLogout}
+                  />
+                  <BottomNavbar
+                    activeTab={mobileTab}
+                    onSelectTab={(tab) => setMobileTab(tab)}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (
