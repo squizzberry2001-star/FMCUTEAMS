@@ -45,21 +45,19 @@ export const PageTransitionLoader: React.FC<PageTransitionLoaderProps> = ({
       {/* Blur Background Frosted Layer over the Page Silhouette */}
       <div className="absolute inset-0 bg-[#F8F9FD]/55 backdrop-blur-md" />
 
-      {/* Center Mini Bouncing Text "FMCU....." */}
-      <div className="relative z-10 px-4 py-2 rounded-full bg-white/80 backdrop-blur-xl border border-white/90 shadow-lg flex items-center justify-center">
-        <div className="flex items-baseline font-black text-[12px] tracking-[0.14em] text-slate-900">
-          {FMCU_BOUNCE_CHARS.map((char, idx) => (
-            <span
-              key={idx}
-              className="animate-fmcu-char"
-              style={{
-                animationDelay: `${idx * 85}ms`,
-              }}
-            >
-              {char}
-            </span>
-          ))}
-        </div>
+      {/* Center Mini Bouncing Text "FMCU....." (Text Only, No Container Background) */}
+      <div className="relative z-10 flex items-baseline font-black text-[12px] tracking-[0.14em] text-slate-900">
+        {FMCU_BOUNCE_CHARS.map((char, idx) => (
+          <span
+            key={idx}
+            className="animate-fmcu-char"
+            style={{
+              animationDelay: `${idx * 85}ms`,
+            }}
+          >
+            {char}
+          </span>
+        ))}
       </div>
     </div>
   );
