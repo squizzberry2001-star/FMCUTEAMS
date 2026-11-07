@@ -67,7 +67,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   return (
     <div className="flex flex-col h-full min-h-screen bg-[#F8F9FD] select-none">
       {/* Top Header */}
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
+      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-100 px-5 pt-[max(0.875rem,env(safe-area-inset-top,14px))] pb-3.5 flex items-center justify-between">
         <button
           onClick={onBack}
           className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-700 active:scale-95 transition-transform"
