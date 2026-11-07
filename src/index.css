@@ -280,3 +280,41 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #CBD5E1;
 }
+
+/* Running Text Marquee for AI Attention Banner */
+@keyframes fmcuMarquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: fmcuMarquee 22s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Symmetrical Mobile Date & Time Input Normalization (iOS Safari & Android Chrome) */
+input[type="date"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+}

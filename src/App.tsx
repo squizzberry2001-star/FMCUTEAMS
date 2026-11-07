@@ -10,7 +10,7 @@ import { NewAgendaModal } from './components/NewAgendaModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
 import { LoginPage } from './components/LoginPage';
 import { SplashScreen } from './components/SplashScreen';
-import { Smartphone, Monitor, Shield, ArrowLeft } from 'lucide-react';
+import { Smartphone, Monitor, Shield, ArrowLeft, MapPin, Navigation, WifiOff, RotateCw } from 'lucide-react';
 
 // Code-split heavy components to make initial splash & login load instantly on mobile
 const AdminPortal = lazy(() =>
@@ -75,9 +75,83 @@ export const App: React.FC = () => {
     return !sessionStorage.getItem('fmcu_session_splash_shown');
   });
 
+  // Mandatory GPS Gate State on initial web load / splash completion
+  const [gpsVerified, setGpsVerified] = useState<boolean>(() => {
+    return (
+      sessionStorage.getItem('fmcu_gps_verified') === 'true' ||
+      sessionStorage.getItem('fmcu_gps_offline_mode') === 'true'
+    );
+  });
+  const [isCheckingGps, setIsCheckingGps] = useState<boolean>(false);
+  const [gpsErrorMsg, setGpsErrorMsg] = useState<string | null>(null);
+
+  const requestMandatoryGps = () => {
+    setIsCheckingGps(true);
+    setGpsErrorMsg(null);
+    if (!('geolocation' in navigator)) {
+      setIsCheckingGps(false);
+      setGpsErrorMsg('Perangkat/Browser tidak mendukung sensor GPS. Gunakan Mode Manual Offline.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(5);
+        const lng = pos.coords.longitude.toFixed(5);
+        const now = new Date();
+        const wibTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
+        try {
+          localStorage.setItem('fmcu_live_gps', `${lat}, ${lng} (Akurat)`);
+          localStorage.setItem('fmcu_initial_checkin_time', wibTime);
+          sessionStorage.setItem('fmcu_gps_verified', 'true');
+          sessionStorage.removeItem('fmcu_gps_offline_mode');
+        } catch (e) {
+          console.warn(e);
+        }
+        setGpsVerified(true);
+        setIsCheckingGps(false);
+      },
+      (err) => {
+        setIsCheckingGps(false);
+        if (!navigator.onLine) {
+          setGpsErrorMsg('Terdeteksi OFFLINE / Tanpa Jaringan. Silakan aktifkan GPS atau masuk ke Mode Manual IN/OUT.');
+        } else if (err.code === 1) {
+          setGpsErrorMsg('Izin Lokasi GPS ditolak. Harap izinkan akses lokasi (Allow Location) pada browser/HP Anda.');
+        } else {
+          setGpsErrorMsg('Sinyal GPS lemah atau belum dinyalakan di pengaturan perangkat Anda.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+    );
+  };
+
+  const handleEnableOfflineManualGps = () => {
+    try {
+      sessionStorage.setItem('fmcu_gps_offline_mode', 'true');
+      localStorage.setItem('fmcu_live_gps', 'Mode Manual / Offline');
+    } catch (e) {
+      console.warn(e);
+    }
+    setGpsVerified(true);
+  };
+
+  useEffect(() => {
+    if (!gpsVerified) {
+      requestMandatoryGps();
+    }
+  }, []);
+
   const handleSplashComplete = () => {
     setShowSplash(false);
     sessionStorage.setItem('fmcu_session_splash_shown', 'true');
+    if (
+      sessionStorage.getItem('fmcu_gps_verified') === 'true' ||
+      sessionStorage.getItem('fmcu_gps_offline_mode') === 'true'
+    ) {
+      setGpsVerified(true);
+    } else {
+      requestMandatoryGps();
+    }
   };
 
   // Synchronize mobile status bar & theme-color seamless canvas (#F8F9FD) when splash is off
@@ -250,6 +324,59 @@ export const App: React.FC = () => {
   const isMobileLayout =
     layoutMode === 'mobile' || (layoutMode === 'auto' && isMobileViewport);
 
+  // Mandatory GPS Activation Gate Modal (shown on initial web load / splash completion if GPS is not yet enabled)
+  const gpsMandatoryModal = !showSplash && !gpsVerified && (
+    <div className="fixed inset-0 z-[9000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-in fade-in duration-200">
+      <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center mx-auto shadow-lg relative">
+          <Navigation className="w-8 h-8 animate-bounce" />
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white animate-ping" />
+        </div>
+
+        <div className="space-y-1.5">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200">
+            <MapPin className="w-3 h-3" />
+            Sistem Wajib GPS Aktif
+          </span>
+          <h3 className="text-lg font-black text-slate-900">
+            Aktifkan Lokasi GPS Anda
+          </h3>
+          <p className="text-xs text-slate-500 leading-relaxed font-medium">
+            Untuk merekam waktu & presensi <strong className="text-slate-800">Actual IN</strong> dan <strong className="text-slate-800">Actual OUT</strong> kunjungan toko secara valid, Anda wajib menyalakan layanan lokasi GPS perangkat.
+          </p>
+        </div>
+
+        {gpsErrorMsg && (
+          <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold text-left flex items-start gap-2">
+            <WifiOff className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <span>{gpsErrorMsg}</span>
+          </div>
+        )}
+
+        <div className="space-y-2 pt-1">
+          <button
+            type="button"
+            onClick={requestMandatoryGps}
+            disabled={isCheckingGps}
+            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-black text-xs shadow-md transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <RotateCw className={`w-4 h-4 ${isCheckingGps ? 'animate-spin' : ''}`} />
+            <span>{isCheckingGps ? 'Mendeteksi Titik GPS...' : 'Nyalakan & Izinkan GPS Sekarang'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleEnableOfflineManualGps}
+            className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <WifiOff className="w-3.5 h-3.5 text-slate-500" />
+            <span>Susah Sinyal / Offline? Masuk Mode Manual IN/OUT</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   // 1. If not authenticated, render Login Page
   if (!user) {
     return (
@@ -261,6 +388,7 @@ export const App: React.FC = () => {
             targetThemeColor="#F8F9FD"
           />
         )}
+        {gpsMandatoryModal}
         <LoginPage
           users={users}
           onLogin={handleLogin}
@@ -311,6 +439,7 @@ export const App: React.FC = () => {
           targetThemeColor="#F8F9FD"
         />
       )}
+      {gpsMandatoryModal}
       <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
       {/* Admin Preview Floating Header */}
       {user.isAdmin && adminPreviewMode && (

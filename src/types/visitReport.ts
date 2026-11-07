@@ -42,6 +42,8 @@ export interface VisitReportData {
   actualIn?: string;
   actualOut?: string;
   liveGps?: string;
+  actualInSubmitted?: boolean;
+  isManualCheckIn?: boolean;
   
   // Section 1: General Info & QSC
   storeFrontPhoto: string;
@@ -58,6 +60,10 @@ export interface VisitReportData {
   // QSC Sheets (Slide 2)
   qscSheetTop: string;
   qscSheetBottom: string;
+  qscTopDriveUrl?: string;
+  qscBottomDriveUrl?: string;
+  gasSyncStatus?: 'idle' | 'syncing' | 'synced' | 'offline-queued';
+  lastSyncedAt?: string;
 
   // Store Crew on Duty (Slide 3)
   crews: StoreCrew[];
