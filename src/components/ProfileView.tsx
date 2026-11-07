@@ -146,7 +146,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.25rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full">
+    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-6 pb-28 max-w-xl mx-auto w-full">
       {/* Hidden File Input for Avatar Photo */}
       <input
         type="file"
