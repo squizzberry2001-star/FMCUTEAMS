@@ -9,6 +9,7 @@ import { ProfileView } from './components/ProfileView';
 import { NewAgendaModal } from './components/NewAgendaModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
 import { LoginPage } from './components/LoginPage';
+import { SplashScreen } from './components/SplashScreen';
 import { Smartphone, Monitor, Shield, ArrowLeft } from 'lucide-react';
 
 // Code-split heavy components to make initial splash & login load instantly on mobile
@@ -66,6 +67,18 @@ export const App: React.FC = () => {
 
   // Admin Preview Mode: Ketika admin ingin melihat pratinjau tampilan sisi user
   const [adminPreviewMode, setAdminPreviewMode] = useState(false);
+
+  // Splash Screen Lifecycle:
+  // Muncul saat aplikasi baru pertama kali dibuka / cold start (dimatikan lalu dibuka kembali), baik sebelum maupun sesudah login.
+  // Tidak muncul jika aplikasi sedang berjalan di latar belakang (sessionStorage aktif).
+  const [showSplash, setShowSplash] = useState<boolean>(() => {
+    return !sessionStorage.getItem('fmcu_session_splash_shown');
+  });
+
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+    sessionStorage.setItem('fmcu_session_splash_shown', 'true');
+  };
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
@@ -215,37 +228,46 @@ export const App: React.FC = () => {
   // 1. If not authenticated, render Login Page
   if (!user) {
     return (
-      <LoginPage
-        users={users}
-        onLogin={handleLogin}
-      />
+      <>
+        {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
+        <LoginPage
+          users={users}
+          onLogin={handleLogin}
+          onReplaySplash={() => setShowSplash(true)}
+        />
+      </>
     );
   }
 
   // 2. If logged in as ADMIN and not in preview mode, render dedicated Admin Portal
   if (user.isAdmin && !adminPreviewMode) {
     return (
-      <Suspense fallback={<div className="min-h-screen w-full bg-[#F8F9FD] flex items-center justify-center" />}>
-        <AdminPortal
-          adminUser={user}
-          agendas={agendas}
-          users={users}
-          onAddAgenda={handleAddNewAgenda}
-          onUpdateAgenda={handleUpdateAgenda}
-          onDeleteAgenda={handleDeleteAgenda}
-          onImportExcel={handleImportExcel}
-          onSwitchToUserView={() => setAdminPreviewMode(true)}
-          onLogout={handleLogout}
-          onAddUser={handleAddUser}
-          onResetUserPassword={handleResetUserPassword}
-        />
-      </Suspense>
+      <>
+        {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
+        <Suspense fallback={<div className="min-h-screen w-full bg-[#F8F9FD] flex items-center justify-center" />}>
+          <AdminPortal
+            adminUser={user}
+            agendas={agendas}
+            users={users}
+            onAddAgenda={handleAddNewAgenda}
+            onUpdateAgenda={handleUpdateAgenda}
+            onDeleteAgenda={handleDeleteAgenda}
+            onImportExcel={handleImportExcel}
+            onSwitchToUserView={() => setAdminPreviewMode(true)}
+            onLogout={handleLogout}
+            onAddUser={handleAddUser}
+            onResetUserPassword={handleResetUserPassword}
+          />
+        </Suspense>
+      </>
     );
   }
 
   // 3. User View (Field Staff View or Admin in Preview Mode)
   return (
-    <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
+    <>
+      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
+      <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
       {/* Admin Preview Floating Header */}
       {user.isAdmin && adminPreviewMode && (
         <div className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between text-xs sticky top-0 z-50 shadow-md">
@@ -415,6 +437,7 @@ export const App: React.FC = () => {
         />
       )}
     </div>
+    </>
   );
 };
 
