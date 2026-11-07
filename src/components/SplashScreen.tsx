@@ -58,10 +58,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       document.documentElement.style.backgroundColor = '#F8F9FD';
       document.body.style.backgroundColor = '#F8F9FD';
     } else {
-      metaTheme.setAttribute('content', '#070B14');
+      metaTheme.setAttribute('content', '#000000');
       metaApple.setAttribute('content', 'black-translucent');
-      document.documentElement.style.backgroundColor = '#070B14';
-      document.body.style.backgroundColor = '#070B14';
+      document.documentElement.style.backgroundColor = '#000000';
+      document.body.style.backgroundColor = '#000000';
     }
   }, [splashStage]);
 
@@ -273,22 +273,22 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   return (
     <div
       onClick={triggerDissolve}
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-[#070B14] cursor-pointer transition-opacity duration-700 select-none touch-none overscroll-none ${
+      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-[#000000] cursor-pointer transition-opacity duration-700 select-none touch-none overscroll-none ${
         splashStage === 'dissolving' ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
       style={{
         height: '100dvh',
         minHeight: '100vh',
-        backgroundColor: '#070B14',
+        backgroundColor: '#000000',
       }}
       title="Ketuk untuk langsung membuka portal"
     >
-      {/* Lightweight GPU-friendly radial gradients (Zero GPU blur passes) */}
+      {/* Pure AMOLED Pitch Black: Tight subtle central glow strictly behind text, zero bleed to status bar */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(circle at 50% 25%, rgba(45, 212, 191, 0.12) 0%, transparent 55%), radial-gradient(circle at 80% 75%, rgba(37, 99, 235, 0.08) 0%, transparent 45%), radial-gradient(circle at 20% 65%, rgba(16, 185, 129, 0.07) 0%, transparent 45%)',
+            'radial-gradient(circle at 50% 50%, rgba(45, 212, 191, 0.08) 0%, transparent 40%)',
         }}
       />
 

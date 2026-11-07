@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Eye,
   EyeOff,
   Lock,
+  User as UserIcon,
   Shield,
   ArrowRight,
+  ChevronDown,
+  Check,
   AlertCircle,
   RotateCcw,
   CheckCircle2,
+  Users,
 } from 'lucide-react';
 import { User } from '../types';
 import { ADMIN_PASSWORD, ADMIN_USER, initialUsers } from '../data/mockData';
@@ -25,11 +29,83 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
   onReplaySplash,
 }) => {
+  // Staff users list (36 names from Excel)
+  const staffUsers = users.filter((u) => !u.isAdmin);
+  const defaultStaff = staffUsers[0] || {
+    name: 'Septiana Indasari',
+    email: 'septiana.indasari@fmcuteams.com',
+    role: 'Field Supervisor FMCU',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    password: '0000',
+  };
+
+  // Login Mode: DEFAULT is 'member' (Anggota), changes to 'admin' when admin button clicked
+  const [loginMode, setLoginMode] = useState<'member' | 'admin'>('member');
+
+  // Member / Staff Form State
+  const [selectedStaff, setSelectedStaff] = useState<User>(defaultStaff);
+  const [staffSearchQuery, setStaffSearchQuery] = useState(defaultStaff.name);
+  const [staffPassword, setStaffPassword] = useState('0000');
+  const [showStaffDropdown, setShowStaffDropdown] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
   // Admin Form State
   const [adminPasswordInput, setAdminPasswordInput] = useState('607090');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Filter staff list according to user typing
+  const filteredStaff = staffUsers.filter((u) =>
+    u.name.toLowerCase().includes(staffSearchQuery.toLowerCase())
+  );
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowStaffDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectStaff = (u: User) => {
+    setSelectedStaff(u);
+    setStaffSearchQuery(u.name);
+    setStaffPassword(u.password || '0000');
+    setShowStaffDropdown(false);
+    setErrorMessage(null);
+  };
+
+  // Member Submit Handler
+  const handleMemberSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    const foundUser = staffUsers.find(
+      (u) => u.name.toLowerCase() === staffSearchQuery.trim().toLowerCase()
+    );
+
+    if (!foundUser) {
+      setErrorMessage(`Nama "${staffSearchQuery}" belum terdaftar. Silakan pilih dari 36 nama karyawan.`);
+      setIsSubmitting(false);
+      return;
+    }
+
+    const expectedPassword = foundUser.password || '0000';
+    if (staffPassword !== expectedPassword) {
+      setErrorMessage('Password salah! Password default adalah 0000 (atau gunakan sandi akun Anda).');
+      setIsSubmitting(false);
+      return;
+    }
+
+    onLogin(foundUser);
+  };
 
   // Admin Submit Handler
   const handleAdminSubmit = (e: React.FormEvent) => {
@@ -44,7 +120,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
-    // Admin authentication success
     const adminAccount = users.find((u) => u.isAdmin) || ADMIN_USER;
     onLogin(adminAccount);
   };
@@ -76,117 +151,312 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       <div className="absolute top-1/2 right-1/4 w-64 h-64 bg-[#E8EEFF]/70 rounded-full blur-3xl pointer-events-none -z-0" />
 
       {/* =========================================================================
-          FIXED VIEWPORT LOGIN FORM (EXCLUSIVELY ADMIN FMCU)
-          - Form login is completely fixed: cannot be dragged up or down.
-          - Only ONE button: "Masuk sebagai Admin FMCU" (employee buttons removed).
+          FIXED VIEWPORT LOGIN FORM CARD
+          - Default: Form Anggota (36 Staff Selection)
+          - Switches to Form Admin FMCU when admin button is clicked
+          - Completely fixed: no vertical pulling or rubber-banding
           ========================================================================= */}
-      <div className="relative z-10 w-full max-w-[420px] bg-white/95 backdrop-blur-2xl rounded-[36px] p-6 sm:p-8 shadow-soft-card border border-white/80 animate-in fade-in duration-500">
+      <div className="relative z-10 w-full max-w-[420px] bg-white/95 backdrop-blur-2xl rounded-[36px] p-6 sm:p-7 shadow-soft-card border border-white/80 animate-in fade-in duration-300">
         {/* Top 3D Hero Illustration */}
-        <div className="flex flex-col items-center justify-center -mt-2 mb-4">
+        <div className="flex flex-col items-center justify-center -mt-2 mb-3">
           <div className="relative group cursor-pointer transition-transform duration-300 hover:scale-105">
-            <ParacetamolHero3D className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-sm" />
+            <ParacetamolHero3D className="w-22 h-22 sm:w-24 sm:h-24 drop-shadow-sm" />
           </div>
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EAF8F2] text-[#2BB3A0] text-xs font-bold tracking-wide mt-1">
-            <Shield className="w-3.5 h-3.5 text-[#2BB3A0]" />
-            <span>PORTAL RESMI ADMIN</span>
+            {loginMode === 'member' ? (
+              <>
+                <Users className="w-3.5 h-3.5 text-[#2BB3A0]" />
+                <span>PORTAL ANGGOTA TIM</span>
+              </>
+            ) : (
+              <>
+                <Shield className="w-3.5 h-3.5 text-[#2BB3A0]" />
+                <span>PORTAL RESMI ADMIN</span>
+              </>
+            )}
           </div>
 
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight mt-1.5 text-center">
-            Admin FMCU
+          <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-1 text-center">
+            {loginMode === 'member' ? 'Login Anggota FMCU' : 'Admin FMCU'}
           </h1>
           <p className="text-xs text-slate-400 font-medium text-center mt-0.5 max-w-xs">
-            Akses kendali penuh Master Schedule, Audit Lapangan QSC, Radar GPS & Laporan PDF
+            {loginMode === 'member'
+              ? 'Pilih nama Anda dari 36 user jadwal untuk masuk ke agenda'
+              : 'Akses kendali penuh Master Schedule, Audit Toko & Laporan'}
           </p>
         </div>
 
         {/* Error Notification Alert */}
         {errorMessage && (
-          <div className="mb-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2 animate-in fade-in slide-in-from-top-1">
+          <div className="mb-3.5 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2 animate-in fade-in slide-in-from-top-1">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>{errorMessage}</span>
           </div>
         )}
 
-        {/* ADMIN LOGIN FORM (ONLY ONE BUTTON - NO EMPLOYEE TAB/BUTTON) */}
-        <form onSubmit={handleAdminSubmit} className="space-y-4">
-          {/* Admin Account Header Card */}
-          <div className="p-3 bg-gradient-to-r from-teal-50/90 to-blue-50/90 border border-teal-200/70 rounded-2xl flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 flex items-center justify-center text-white shadow-sm flex-shrink-0">
-              <Shield className="w-5 h-5" />
+        {/* -------------------------------------------------------------------------
+            1. FORM ANGGOTA (DEFAULT VIEW)
+            ------------------------------------------------------------------------- */}
+        {loginMode === 'member' ? (
+          <form onSubmit={handleMemberSubmit} className="space-y-3.5">
+            {/* Nama Anggota (Autocomplete Dropdown dari 36 nama Excel) */}
+            <div className="relative" ref={dropdownRef}>
+              <label className="block text-xs text-slate-600 font-bold mb-1 flex items-center justify-between">
+                <span>Nama Anggota Tim</span>
+                <span className="text-[10px] text-teal-600 font-semibold">{staffUsers.length} Terdaftar</span>
+              </label>
+
+              <div className="relative flex items-center">
+                <div className="absolute left-3.5 flex items-center pointer-events-none">
+                  {selectedStaff.avatar ? (
+                    <img
+                      src={selectedStaff.avatar}
+                      alt={selectedStaff.name}
+                      className="w-5 h-5 rounded-full object-cover ring-1 ring-slate-200"
+                    />
+                  ) : (
+                    <UserIcon className="w-4 h-4 text-slate-400" />
+                  )}
+                </div>
+
+                <input
+                  type="text"
+                  value={staffSearchQuery}
+                  onChange={(e) => {
+                    setStaffSearchQuery(e.target.value);
+                    setShowStaffDropdown(true);
+                  }}
+                  onFocus={() => setShowStaffDropdown(true)}
+                  placeholder="Ketik atau pilih nama Anda..."
+                  required
+                  className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-11 pr-10 py-2.5 text-[16px] sm:text-xs font-bold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all placeholder:font-normal placeholder:text-slate-400"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowStaffDropdown(!showStaffDropdown)}
+                  className="absolute right-3 text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showStaffDropdown ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {/* Dropdown 36 Anggota */}
+              {showStaffDropdown && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-40 max-h-48 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex justify-between items-center">
+                    <span>Pilih Dari 36 Karyawan Lapangan</span>
+                  </div>
+                  {filteredStaff.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-slate-400 font-medium">
+                      Nama tidak cocok. Pastikan memilih salah satu nama jadwal.
+                    </div>
+                  ) : (
+                    filteredStaff.map((u) => {
+                      const isCurrent = u.name.toLowerCase() === staffSearchQuery.toLowerCase();
+                      return (
+                        <button
+                          key={u.id || u.name}
+                          type="button"
+                          onClick={() => handleSelectStaff(u)}
+                          className={`w-full px-3 py-2 flex items-center justify-between text-left hover:bg-teal-50/70 transition-colors cursor-pointer ${
+                            isCurrent ? 'bg-teal-50/50' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <img
+                              src={u.avatar}
+                              alt={u.name}
+                              className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-200 flex-shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <span className="block text-xs font-bold text-slate-800 truncate">
+                                {u.name}
+                              </span>
+                              <span className="block text-[10px] text-slate-400 truncate font-medium">
+                                {u.role || 'Staff Lapangan FMCU'}
+                              </span>
+                            </div>
+                          </div>
+                          {isCurrent && <Check className="w-4 h-4 text-teal-600 flex-shrink-0 ml-2" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-black text-slate-800">Administrator FMCU</span>
-                <span className="text-[9px] font-bold bg-teal-600 text-white px-1.5 py-0.2 rounded-full uppercase">
-                  Super Admin
+
+            {/* Password Anggota (Default 0000) */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-slate-600 font-bold">Password Anggota</label>
+                <span className="text-[10px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/60">
+                  Default: 0000
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium truncate">admin@fmcuteams.com</p>
-            </div>
-            <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
-          </div>
 
-          {/* Password Admin Input (607090) */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-slate-600 font-bold">
-                Kode Otorisasi Keamanan
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={staffPassword}
+                  onChange={(e) => setStaffPassword(e.target.value)}
+                  placeholder="••••"
+                  required
+                  className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-11 py-2.5 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-wider"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Remember Me */}
+            <div className="flex items-center text-xs pt-0.5">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded text-teal-600 border-slate-300 focus:ring-teal-500 cursor-pointer"
+                />
+                <span className="text-slate-500 font-medium text-[11px]">Ingat akun saya di perangkat ini</span>
               </label>
+            </div>
+
+            {/* Submit Button Anggota */}
+            <div className="pt-1">
               <button
-                type="button"
-                onClick={() => setAdminPasswordInput('607090')}
-                className="text-[10px] text-teal-700 font-bold bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200/60 transition-colors cursor-pointer"
-                title="Klik untuk mengisi kode resmi"
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
               >
-                Kode Resmi: 607090
+                <span>Masuk ke Jadwal Saya</span>
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
 
-            <div className="relative flex items-center">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={adminPasswordInput}
-                onChange={(e) => setAdminPasswordInput(e.target.value)}
-                placeholder="Masukkan 607090"
-                required
-                autoFocus
-                className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-11 py-3 text-[16px] sm:text-xs font-bold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-widest placeholder:tracking-normal placeholder:font-normal"
-              />
-
+            {/* SWITCH TO ADMIN BUTTON ("form akan berubah jika tombol admin di klik") */}
+            <div className="pt-1">
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                onClick={() => {
+                  setLoginMode('admin');
+                  setErrorMessage(null);
+                  setAdminPasswordInput('607090');
+                }}
+                className="w-full py-2.5 px-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-700 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <Shield className="w-4 h-4 text-teal-600" />
+                <span>Masuk sebagai Admin FMCU</span>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
               </button>
             </div>
-          </div>
+          </form>
+        ) : (
+          /* -------------------------------------------------------------------------
+              2. FORM ADMIN FMCU (ACTIVATED ON ADMIN BUTTON CLICK)
+              ------------------------------------------------------------------------- */
+          <form onSubmit={handleAdminSubmit} className="space-y-4">
+            {/* Admin Account Header Card */}
+            <div className="p-3 bg-gradient-to-r from-teal-50/90 to-blue-50/90 border border-teal-200/70 rounded-2xl flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 flex items-center justify-center text-white shadow-sm flex-shrink-0">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-black text-slate-800">Administrator FMCU</span>
+                  <span className="text-[9px] font-bold bg-teal-600 text-white px-1.5 py-0.2 rounded-full uppercase">
+                    Super Admin
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium truncate">admin@fmcuteams.com</p>
+              </div>
+              <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
+            </div>
 
-          {/* THE SINGLE PRIMARY SUBMISSION BUTTON: "Admin FMCU" */}
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-3.5 rounded-full bg-gradient-to-r from-teal-600 via-teal-700 to-slate-800 text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
-            >
-              <Shield className="w-4 h-4 stroke-[2.5]" />
-              <span>Masuk sebagai Admin FMCU</span>
-              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-            </button>
-          </div>
-        </form>
+            {/* Password Admin Input (607090) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-slate-600 font-bold">Kode Otorisasi Keamanan</label>
+                <button
+                  type="button"
+                  onClick={() => setAdminPasswordInput('607090')}
+                  className="text-[10px] text-teal-700 font-bold bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200/60 transition-colors cursor-pointer"
+                  title="Klik untuk mengisi kode resmi"
+                >
+                  Kode Resmi: 607090
+                </button>
+              </div>
+
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={adminPasswordInput}
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  placeholder="Masukkan 607090"
+                  required
+                  autoFocus
+                  className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-11 py-2.5 text-[16px] sm:text-xs font-bold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-widest placeholder:tracking-normal placeholder:font-normal"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Submit Button Admin */}
+            <div className="pt-1">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3.5 rounded-full bg-gradient-to-r from-teal-600 via-teal-700 to-slate-800 text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
+              >
+                <Shield className="w-4 h-4 stroke-[2.5]" />
+                <span>Masuk sebagai Admin FMCU</span>
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+              </button>
+            </div>
+
+            {/* SWITCH BACK TO MEMBER BUTTON */}
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('member');
+                  setErrorMessage(null);
+                }}
+                className="w-full py-2 px-3 rounded-2xl text-slate-500 hover:text-slate-800 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5 text-slate-400" />
+                <span>← Kembali ke Form Anggota Tim</span>
+              </button>
+            </div>
+          </form>
+        )}
 
         {/* Replay Splash Action */}
         {onReplaySplash && (
-          <div className="mt-5 pt-3.5 border-t border-slate-100/90 flex flex-col items-center justify-center gap-1.5">
+          <div className="mt-4 pt-3 border-t border-slate-100/90 flex flex-col items-center justify-center gap-1">
             <button
               type="button"
               onClick={onReplaySplash}
-              className="text-xs text-slate-400 hover:text-teal-700 font-semibold transition-colors flex items-center justify-center gap-1.5 py-1 cursor-pointer"
+              className="text-xs text-slate-400 hover:text-teal-700 font-semibold transition-colors flex items-center justify-center gap-1.5 py-0.5 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-teal-600" />
               <span>✨ Putar Ulang Animasi Splash</span>
