@@ -45,8 +45,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   const animFrameIdRef = useRef<number | null>(null);
   const isDissolvingRef = useRef(false);
 
-  const [gpsStatus, setGpsStatus] = useState<'requesting' | 'active' | 'denied'>('requesting');
-
   // Pre-request GPS during Splash for Actual IN & OUT recording
   useEffect(() => {
     if ('geolocation' in navigator) {
@@ -63,15 +61,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           } catch (e) {
             console.warn(e);
           }
-          setGpsStatus('active');
         },
         () => {
-          setGpsStatus('denied');
+          // Handled by mandatory GPS gate on App load
         },
         { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
       );
-    } else {
-      setGpsStatus('denied');
     }
   }, []);
 
@@ -570,31 +565,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
               ref={afterSRef}
               className="w-4 sm:w-6 h-8 inline-flex items-center justify-center select-none"
             />
-          </div>
-        </div>
-
-        {/* Bottom GPS Record Status Indicator on Splash */}
-        <div
-          className="fixed bottom-10 left-0 right-0 flex justify-center pointer-events-none transition-opacity duration-300"
-          style={{ opacity: splashStage === 'dissolving' ? 0 : 0.85 }}
-        >
-          <div className="px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-2 text-[11px] font-bold text-teal-200">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                gpsStatus === 'active'
-                  ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
-                  : gpsStatus === 'denied'
-                  ? 'bg-amber-400 animate-ping'
-                  : 'bg-teal-400 animate-ping'
-              }`}
-            />
-            <span>
-              {gpsStatus === 'active'
-                ? 'GPS Aktif • Siap Record Actual IN & OUT'
-                : gpsStatus === 'denied'
-                ? 'Wajib Aktifkan GPS untuk Actual IN & OUT'
-                : 'Memverifikasi GPS untuk Record Actual IN & OUT...'}
-            </span>
           </div>
         </div>
       </div>
