@@ -10,12 +10,14 @@ import { encryptText, decryptText } from './crypto';
 const STORAGE_KEY_GAS_URL = 'fmcu_gas_webapp_url';
 const STORAGE_KEY_SECRET = 'fmcu_secret_encryption_key';
 
+const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbxAU3BtImhT2UQic0cLYpOG5WgZ8Ch0CGi0KrUrIA0Aa85DKOlb1Ihh85sXXUh8c4M3/exec";
+
 // Ambil URL Google Apps Script yang tersimpan
 export function getGasUrl(): string {
   return (
     localStorage.getItem(STORAGE_KEY_GAS_URL) ||
     ((import.meta as any).env?.VITE_GAS_WEBAPP_URL as string) ||
-    ''
+    DEFAULT_GAS_URL
   );
 }
 
