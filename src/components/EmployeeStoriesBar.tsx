@@ -382,6 +382,11 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   const [slideProgress, setSlideProgress] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [showViewersList, setShowViewersList] = useState<boolean>(false);
+  const [showReactorsList, setShowReactorsList] = useState<boolean>(false);
+  const [cardFlipState, setCardFlipState] = useState<{
+    dir: 'next' | 'prev' | null;
+    key: number;
+  }>({ dir: null, key: 0 });
 
   // Gesture tracking for Story Viewer (Tap vs Hold vs Swipe)
   const gestureRef = useRef<{
@@ -646,6 +651,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     setActiveSlideIdx(firstUnviewedIdx >= 0 ? firstUnviewedIdx : 0);
     setSlideProgress(0);
     setShowViewersList(false);
+    setShowReactorsList(false);
+    setCardFlipState({ dir: null, key: 0 });
   };
 
   const closeViewer = () => {
@@ -653,6 +660,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     setActiveSlideIdx(0);
     setSlideProgress(0);
     setShowViewersList(false);
+    setShowReactorsList(false);
+    setCardFlipState({ dir: null, key: 0 });
   };
 
   const handleNextSlide = (isFromAutoTimer: boolean = false) => {
@@ -662,11 +671,13 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     lastNavTimeRef.current = now;
 
     setShowViewersList(false);
+    setShowReactorsList(false);
     if (activeSlideIdx < currentViewerSlides.length - 1) {
       setActiveSlideIdx((prev) => prev + 1);
       setSlideProgress(0);
     } else if (activeViewerGroupIdx === -1) {
       if (otherUserGroups.length > 0) {
+        setCardFlipState({ dir: 'next', key: now });
         setActiveViewerGroupIdx(0);
         setActiveSlideIdx(0);
         setSlideProgress(0);
@@ -675,6 +686,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         closeViewer();
       }
     } else if (activeViewerGroupIdx < otherUserGroups.length - 1) {
+      setCardFlipState({ dir: 'next', key: now });
       setActiveViewerGroupIdx((prev) => (prev !== null ? prev + 1 : null));
       setActiveSlideIdx(0);
       setSlideProgress(0);
@@ -691,16 +703,19 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     lastNavTimeRef.current = now;
 
     setShowViewersList(false);
+    setShowReactorsList(false);
     if (activeSlideIdx > 0) {
       setActiveSlideIdx((prev) => prev - 1);
       setSlideProgress(0);
     } else if (activeViewerGroupIdx > 0) {
       const prevGroupIdx = activeViewerGroupIdx - 1;
       const prevSlides = otherUserGroups[prevGroupIdx]?.slides || [];
+      setCardFlipState({ dir: 'prev', key: now });
       setActiveViewerGroupIdx(prevGroupIdx);
       setActiveSlideIdx(Math.max(0, prevSlides.length - 1));
       setSlideProgress(0);
     } else if (activeViewerGroupIdx === 0 && myActiveStories.length > 0) {
+      setCardFlipState({ dir: 'prev', key: now });
       setActiveViewerGroupIdx(-1);
       setActiveSlideIdx(Math.max(0, myActiveStories.length - 1));
       setSlideProgress(0);
@@ -1107,9 +1122,21 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
           MODAL 1: FULL-SCREEN INSTAGRAM STORY VIEWER
           ========================================================================= */}
       {activeViewerGroupIdx !== null && currentSlide && (
-        <div className="fixed inset-0 z-[9500] bg-black flex flex-col items-center justify-between p-2 sm:p-4 select-none animate-in fade-in duration-150">
-          {/* Story Container (Instagram 9:16 Mobile Frame) */}
-          <div className="relative w-full max-w-md h-full flex flex-col justify-between overflow-hidden">
+        <div
+          className="fixed inset-0 z-[9500] bg-black flex flex-col items-center justify-between p-2 sm:p-4 select-none animate-in fade-in duration-150"
+          style={{ perspective: '1200px' }}
+        >
+          {/* Story Container (Instagram 9:16 Mobile Frame with Lightweight 3D Flipping Card on User Switch) */}
+          <div
+            key={`story-group-${activeViewerGroupIdx}-${cardFlipState.key}`}
+            className={`relative w-full max-w-md h-full flex flex-col justify-between overflow-hidden ${
+              cardFlipState.dir === 'next'
+                ? 'story-card-flip-next'
+                : cardFlipState.dir === 'prev'
+                ? 'story-card-flip-prev'
+                : ''
+            }`}
+          >
             {/* 1. Segmented Progress Bars + User Header */}
             <div className="pt-[max(0.5rem,env(safe-area-inset-top,12px))] px-2 z-20 space-y-2.5">
               {/* Progress Bars */}
@@ -1177,6 +1204,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          setShowReactorsList(false);
                           setShowViewersList((prev) => !prev);
                         }}
                         className="px-2.5 py-1 rounded-full bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
@@ -1252,7 +1280,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               {activeViewerGroupIdx === -1 && showViewersList && (
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute top-3 right-3 z-30 w-60 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-white/15 p-3 text-white shadow-xl space-y-2"
+                  className="absolute top-3 right-3 z-30 w-64 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-white/15 p-3 text-white shadow-xl space-y-2"
                 >
                   <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
                     <span className="text-[11px] font-bold flex items-center gap-1.5">
@@ -1262,7 +1290,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowViewersList(false)}
-                      className="text-white/60 hover:text-white"
+                      className="text-white/60 hover:text-white cursor-pointer"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -1273,14 +1301,28 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     </p>
                   ) : (
                     <ul className="space-y-1 max-h-32 overflow-y-auto">
-                      {(currentSlide.views || []).map((viewerName, i) => (
-                        <li
-                          key={viewerName + i}
-                          className="text-[11px] font-medium text-white/90 truncate"
-                        >
-                          • {viewerName}
-                        </li>
-                      ))}
+                      {(currentSlide.views || []).map((viewerName, i) => {
+                        const viewerEmoji = Object.entries(currentSlide.reactions || {}).find(
+                          ([, list]) =>
+                            list.some((u) => u.toLowerCase() === viewerName.toLowerCase())
+                        )?.[0];
+                        return (
+                          <li
+                            key={viewerName + i}
+                            className="text-[11px] font-medium text-white/90 flex items-center justify-between gap-2"
+                          >
+                            <span className="truncate">• {viewerName}</span>
+                            {viewerEmoji && (
+                              <span
+                                className="text-xs shrink-0 bg-white/10 px-1.5 py-0.5 rounded-full"
+                                title={`Memberikan reaksi ${viewerEmoji}`}
+                              >
+                                {viewerEmoji}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
 
@@ -1296,6 +1338,69 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     </span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
+                </div>
+              )}
+
+              {/* Reactors Detail Popover ("Informasi Siapa Saja yang Memberikan React") */}
+              {showReactorsList && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute bottom-14 left-3 right-3 z-30 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-white/15 p-3.5 text-white shadow-2xl space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-150"
+                >
+                  <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
+                    <span className="text-xs font-extrabold flex items-center gap-1.5">
+                      <Heart className="w-3.5 h-3.5 text-pink-400 fill-pink-400" />
+                      <span>
+                        Daftar Pemberi Reaksi (
+                        {Object.values(currentSlide.reactions).reduce(
+                          (acc, arr) => acc + arr.length,
+                          0
+                        )}
+                        )
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowReactorsList(false)}
+                      className="text-white/60 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {Object.entries(currentSlide.reactions).filter(
+                    ([, usersList]) => usersList.length > 0
+                  ).length === 0 ? (
+                    <p className="text-[11px] text-white/60 font-light py-1">
+                      Belum ada rekan kerja yang memberikan reaksi pada story ini.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {Object.entries(currentSlide.reactions)
+                        .filter(([, usersList]) => usersList.length > 0)
+                        .flatMap(([emoji, usersList]) =>
+                          usersList.map((reactorName) => ({ emoji, reactorName }))
+                        )
+                        .map((item, idx) => (
+                          <li
+                            key={`${item.reactorName}-${item.emoji}-${idx}`}
+                            className="flex items-center justify-between bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/10"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 font-black text-[10px] flex items-center justify-center shrink-0">
+                                {item.reactorName.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="text-[11px] font-bold text-white/95 truncate">
+                                {item.reactorName}
+                              </span>
+                            </div>
+                            <span className="text-sm shrink-0 bg-white/10 px-2 py-0.5 rounded-full">
+                              {item.emoji}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
                 </div>
               )}
 
@@ -1349,60 +1454,100 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               )}
             </div>
 
-            {/* 3. BELOW STORY PHOTO: Emoji Reactions Count Display & Quick Emoji Reaction Bar */}
+            {/* 3. BELOW STORY PHOTO: Emoji Reactions Count Display, Who Reacted Info & Quick Emoji Reaction Bar */}
             <div
               className="pb-[max(0.5rem,env(safe-area-inset-bottom,12px))] px-1 space-y-2 z-20"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Active Emoji Reactions & Counts Directly Below Story Photo */}
-              <div className="flex items-center justify-between gap-2 bg-white/10 backdrop-blur-md px-3 py-2 rounded-2xl border border-white/15">
-                <div className="flex items-center gap-1.5 flex-wrap min-h-[24px]">
-                  {Object.entries(currentSlide.reactions).filter(
-                    ([, usersList]) => usersList.length > 0
-                  ).length === 0 ? (
-                    <span className="text-[11px] text-white/60 font-light flex items-center gap-1">
-                      <Heart className="w-3.5 h-3.5 text-pink-400" />
-                      <span>Belum ada reaksi emot</span>
-                    </span>
-                  ) : (
-                    Object.entries(currentSlide.reactions)
-                      .filter(([, usersList]) => usersList.length > 0)
-                      .map(([emoji, usersList]) => {
-                        const iReacted = usersList.some(
-                          (u) => u.toLowerCase() === currentUserName.toLowerCase()
-                        );
-                        return (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => {
-                              if (activeViewerGroupIdx !== -1) {
-                                handleSelectReaction(emoji);
-                              }
-                            }}
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all active:scale-90 cursor-pointer ${
-                              iReacted
-                                ? 'bg-gradient-to-r from-pink-500/80 to-rose-500/80 text-white border border-pink-300 shadow-sm'
-                                : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
-                            }`}
-                            title={`Direaksi oleh: ${usersList.join(', ')}`}
-                          >
-                            <span>{emoji}</span>
-                            <span>{usersList.length}</span>
-                          </button>
-                        );
-                      })
-                  )}
+              {/* Active Emoji Reactions, Counts & Who Reacted Summary Directly Below Story Photo */}
+              <div className="bg-white/10 backdrop-blur-md px-3 py-2 rounded-2xl border border-white/15 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap min-h-[24px]">
+                    {Object.entries(currentSlide.reactions).filter(
+                      ([, usersList]) => usersList.length > 0
+                    ).length === 0 ? (
+                      <span className="text-[11px] text-white/60 font-light flex items-center gap-1">
+                        <Heart className="w-3.5 h-3.5 text-pink-400" />
+                        <span>Belum ada reaksi emot</span>
+                      </span>
+                    ) : (
+                      Object.entries(currentSlide.reactions)
+                        .filter(([, usersList]) => usersList.length > 0)
+                        .map(([emoji, usersList]) => {
+                          const iReacted = usersList.some(
+                            (u) => u.toLowerCase() === currentUserName.toLowerCase()
+                          );
+                          return (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => {
+                                if (activeViewerGroupIdx !== -1) {
+                                  handleSelectReaction(emoji);
+                                } else {
+                                  setShowViewersList(false);
+                                  setShowReactorsList((prev) => !prev);
+                                }
+                              }}
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all active:scale-90 cursor-pointer ${
+                                iReacted
+                                  ? 'bg-gradient-to-r from-pink-500/80 to-rose-500/80 text-white border border-pink-300 shadow-sm'
+                                  : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
+                              }`}
+                              title={`Direaksi oleh: ${usersList.join(', ')}`}
+                            >
+                              <span>{emoji}</span>
+                              <span>{usersList.length}</span>
+                            </button>
+                          );
+                        })
+                    )}
+                  </div>
+
+                  {/* Total Reaction Counter (Clickable to view full list of who reacted) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowViewersList(false);
+                      setShowReactorsList((prev) => !prev);
+                    }}
+                    className="text-[10px] font-bold text-teal-300 hover:text-teal-200 bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-full shrink-0 transition-colors cursor-pointer"
+                    title="Klik untuk melihat daftar siapa saja yang memberikan react"
+                  >
+                    {Object.values(currentSlide.reactions).reduce(
+                      (acc, arr) => acc + arr.length,
+                      0
+                    )}{' '}
+                    Reaksi • Detail
+                  </button>
                 </div>
 
-                {/* Total Reaction Counter */}
-                <span className="text-[10px] font-bold text-white/80 shrink-0">
-                  {Object.values(currentSlide.reactions).reduce(
-                    (acc, arr) => acc + arr.length,
-                    0
-                  )}{' '}
-                  Reaksi
-                </span>
+                {/* Inline Summary of Who Reacted ("berikan informasi siapa saja yang memberikan react") */}
+                {Object.entries(currentSlide.reactions).some(
+                  ([, usersList]) => usersList.length > 0
+                ) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowViewersList(false);
+                      setShowReactorsList((prev) => !prev);
+                    }}
+                    className="w-full text-left pt-1 border-t border-white/10 flex items-center justify-between gap-2 text-[10px] text-white/85 hover:text-white cursor-pointer"
+                  >
+                    <span className="truncate font-normal">
+                      <strong className="font-semibold text-teal-300">Direaksi oleh: </strong>
+                      {Object.entries(currentSlide.reactions)
+                        .filter(([, usersList]) => usersList.length > 0)
+                        .flatMap(([emoji, usersList]) =>
+                          usersList.map((name) => `${emoji} ${name}`)
+                        )
+                        .join(' • ')}
+                    </span>
+                    <span className="text-[9px] text-teal-300 font-semibold shrink-0 underline">
+                      {showReactorsList ? 'Tutup' : 'Lihat Semua'}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Requirement 1: When viewing ANOTHER user's story, allow reacting (1x per user, changeable) */}
