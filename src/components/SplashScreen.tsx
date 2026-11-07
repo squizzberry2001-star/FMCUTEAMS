@@ -39,7 +39,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
   const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const afterSRef = useRef<HTMLSpanElement>(null);
+  const dotBallRef = useRef<HTMLDivElement>(null);
   const lettersContainerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animFrameIdRef = useRef<number | null>(null);
   const isDissolvingRef = useRef(false);
 
   // Synchronize mobile status bar / theme-color / AMOLED pitch black during splash
@@ -65,6 +68,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     document.body.style.setProperty('color-scheme', 'dark');
 
     return () => {
+      if (animFrameIdRef.current) {
+        cancelAnimationFrame(animFrameIdRef.current);
+      }
       // Ensure on unmount status bar & document background match the active app theme
       const mTheme = document.querySelector('meta[name="theme-color"]');
       if (mTheme) mTheme.setAttribute('content', targetThemeColor);
@@ -77,33 +83,137 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     };
   }, [targetThemeColor]);
 
-  // Silky-Smooth Organic Cross-Dissolve:
-  // Instead of an artificial harsh white flash, the AMOLED black canvas smoothly cross-fades
-  // (opacity 1 -> 0 over 850ms) while the glowing typography and dot softly blur & melt,
-  // revealing the underlying destination view (dashboard or login form) with absolute seamlessness.
+  // Circular Aperture Portal Reveal:
+  // Starts directly at the dot, cutting open the black canvas in an expanding circle
+  // with a glowing teal-white halo, revealing the underlying destination view from the dot.
   const triggerDissolve = () => {
     if (isDissolvingRef.current || splashStage === 'completed') return;
     isDissolvingRef.current = true;
 
     setSplashStage('dissolving');
 
-    // At the midpoint of the dissolve (380ms), seamlessly blend the mobile status bar & body background
-    setTimeout(() => {
-      const metaTheme = document.querySelector('meta[name="theme-color"]');
-      if (metaTheme) metaTheme.setAttribute('content', targetThemeColor);
-      const metaApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-      if (metaApple) metaApple.setAttribute('content', 'default');
-      document.documentElement.style.setProperty('background-color', targetThemeColor, 'important');
-      document.documentElement.style.setProperty('color-scheme', 'light');
-      document.body.style.setProperty('background-color', targetThemeColor, 'important');
-      document.body.style.setProperty('color-scheme', 'light');
-    }, 380);
+    // Measure exact screen origin coordinates of the floating dot
+    const ballEl = dotBallRef.current || afterSRef.current;
+    const rect = ballEl?.getBoundingClientRect();
+    const originX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const originY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
 
-    // Complete dissolve at 850ms, then unmount splash
-    setTimeout(() => {
-      setSplashStage('completed');
-      onComplete();
-    }, 850);
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      setTimeout(() => {
+        setSplashStage('completed');
+        onComplete();
+      }, 850);
+      return;
+    }
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setTimeout(() => {
+        setSplashStage('completed');
+        onComplete();
+      }, 850);
+      return;
+    }
+
+    // Maximum distance from the dot to the farthest corner of the viewport
+    const cornerDistances = [
+      Math.hypot(originX, originY),
+      Math.hypot(w - originX, originY),
+      Math.hypot(originX, h - originY),
+      Math.hypot(w - originX, h - originY),
+    ];
+    const maxRadius = Math.max(...cornerDistances) + 60;
+    const initialRadius = 14; // exact radius of 26px dot
+    const duration = 850;
+    const startTime = performance.now();
+    let themeSwitched = false;
+
+    // Immediately draw Frame 0 synchronously so there is zero flash
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(originX, originY, initialRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    const renderFrame = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+
+      // Ease-out quartic curve: fast energetic burst from dot, graceful majestic finish
+      const ease = 1 - Math.pow(1 - progress, 3.8);
+      const currentRadius = initialRadius + ease * (maxRadius - initialRadius);
+
+      // Midpoint theme-color switch for mobile status bar (Dynamic Island / notch)
+      if (progress >= 0.38 && !themeSwitched) {
+        themeSwitched = true;
+        const metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) metaTheme.setAttribute('content', targetThemeColor);
+        const metaApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+        if (metaApple) metaApple.setAttribute('content', 'default');
+        document.documentElement.style.setProperty('background-color', targetThemeColor, 'important');
+        document.documentElement.style.setProperty('color-scheme', 'light');
+        document.body.style.setProperty('background-color', targetThemeColor, 'important');
+        document.body.style.setProperty('color-scheme', 'light');
+      }
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      if (progress < 1) {
+        // Step 1: Draw solid AMOLED black canvas
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(-20, -20, w + 40, h + 40);
+
+        // Step 2: Cut open the circular portal starting from the dot
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(originX, originY, currentRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Step 3: Draw radiant luminous halo on the expanding aperture rim
+        const rimAlpha = Math.max(0, 1 - progress * 0.9);
+        if (rimAlpha > 0) {
+          ctx.globalCompositeOperation = 'source-over';
+
+          // Outer cyan aura
+          ctx.beginPath();
+          ctx.arc(originX, originY, currentRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(45, 212, 191, ${0.9 * rimAlpha})`;
+          ctx.lineWidth = 10;
+          ctx.stroke();
+
+          // Inner white laser edge
+          ctx.beginPath();
+          ctx.arc(originX, originY, currentRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${0.98 * rimAlpha})`;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+        animFrameIdRef.current = requestAnimationFrame(renderFrame);
+      } else {
+        // Portal has fully expanded past all screen corners!
+        ctx.clearRect(0, 0, w, h);
+        ctx.restore();
+        setSplashStage('completed');
+        onComplete();
+      }
+    };
+
+    animFrameIdRef.current = requestAnimationFrame(renderFrame);
   };
 
   // 1. Bulletproof Watchdog: If anything stalls on low-end mobile devices, force dissolve after 8.5s!
@@ -252,7 +362,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                 isFloating: true,
               }));
 
-              // Pause for 2 seconds (2000ms) with floating motion before optical dissolve
+              // Pause for 2 seconds (2000ms) with floating motion before optical aperture reveal
               const tHold = setTimeout(() => {
                 if (isMounted) {
                   triggerDissolve();
@@ -288,32 +398,42 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   return (
     <div
       onClick={triggerDissolve}
-      className="fixed z-[9999] flex items-center justify-center bg-[#000000] cursor-pointer select-none touch-none overscroll-none"
+      className="fixed inset-0 z-[9999] flex items-center justify-center cursor-pointer select-none touch-none overscroll-none"
       style={{
         position: 'fixed',
-        top: '-20vh',
-        bottom: '-20vh',
-        left: '-15vw',
-        right: '-15vw',
-        width: '130vw',
-        height: '140vh',
-        backgroundColor: '#000000',
-        opacity: isDissolving ? 0 : 1,
-        transition: 'opacity 850ms cubic-bezier(0.22, 1, 0.36, 1)',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: isDissolving ? 'transparent' : '#000000',
         pointerEvents: isDissolving ? 'none' : 'auto',
       }}
       title="Ketuk untuk langsung membuka portal"
     >
-      {/* Dissolve Content Wrapper: Softly blurs, scales slightly, and fades out in sync */}
-      <div
-        className="relative flex flex-col items-center justify-center px-6 py-8 overflow-visible select-none"
+      {/* Hardware-Accelerated 2D Canvas for Iris Reveal from the Dot */}
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 pointer-events-none z-10"
         style={{
-          transform: isDissolving ? 'scale(1.04)' : 'scale(1)',
-          filter: isDissolving ? 'blur(10px)' : 'blur(0px)',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          display: isDissolving ? 'block' : 'none',
+        }}
+      />
+
+      {/* Typography & Dot Stage (z-20, sits above the portal canvas) */}
+      <div
+        className="relative z-20 flex flex-col items-center justify-center px-6 py-8 overflow-visible select-none"
+        style={{
           opacity: isDissolving ? 0 : 1,
-          transition:
-            'transform 850ms cubic-bezier(0.22, 1, 0.36, 1), filter 850ms cubic-bezier(0.22, 1, 0.36, 1), opacity 850ms cubic-bezier(0.22, 1, 0.36, 1)',
-          willChange: 'transform, filter, opacity',
+          transform: isDissolving ? 'scale(1.02)' : 'scale(1)',
+          transition: 'opacity 260ms ease-out, transform 260ms ease-out',
+          willChange: 'opacity, transform',
         }}
       >
         {/* Typography & Ball Coordinate Grid */}
@@ -331,11 +451,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                   ? 'none'
                   : 'transform 225ms cubic-bezier(0.22, 1, 0.36, 1)',
               willChange: 'transform',
-              opacity: dotPos.opacity,
+              opacity: isDissolving ? 0 : dotPos.opacity,
             }}
           >
             {/* INNER BALL (Handles bouncing animation, floating levitation, and soft bloom) */}
             <div
+              ref={dotBallRef}
               className={`rounded-full ${
                 dotPos.isBouncing
                   ? 'animate-ball-drop-bounce'
@@ -347,19 +468,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
                 width: '26px',
                 height: '26px',
                 transform:
-                  isDissolving
-                    ? 'translate(-50%, -50%) scale(2.2)'
-                    : dotPos.isBouncing || dotPos.isFloating
+                  dotPos.isBouncing || dotPos.isFloating
                     ? undefined
                     : `translate(-50%, -50%) scale(${dotPos.scale})`,
-                transition: isDissolving
-                  ? 'transform 850ms cubic-bezier(0.22, 1, 0.36, 1), opacity 850ms cubic-bezier(0.22, 1, 0.36, 1)'
-                  : 'none',
-                opacity: isDissolving ? 0 : 1,
                 background: '#FFFFFF',
                 boxShadow:
                   '0 0 16px 3px #FFFFFF, 0 0 32px 8px rgba(45,212,191,0.85), 0 0 55px 16px rgba(56,189,248,0.4)',
-                willChange: 'transform, opacity',
+                willChange: 'transform',
               }}
             />
           </div>
