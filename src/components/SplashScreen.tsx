@@ -7,10 +7,10 @@ interface SplashScreenProps {
 const CHARACTERS = ['F', 'M', 'C', 'U', ' ', 'T', 'E', 'A', 'M', 'S'];
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
-  // Splash stages: 'animating-letters' | 'dissolving' | 'completed'
-  const [splashStage, setSplashStage] = useState<'animating-letters' | 'dissolving' | 'completed'>(
-    'animating-letters'
-  );
+  // Splash stages: 'animating-letters' | 'expanding-dot' | 'dissolving-flash' | 'completed'
+  const [splashStage, setSplashStage] = useState<
+    'animating-letters' | 'expanding-dot' | 'dissolving-flash' | 'completed'
+  >('animating-letters');
 
   const [revealedCharIndex, setRevealedCharIndex] = useState<number>(-1);
 
@@ -52,7 +52,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       document.head.appendChild(metaApple);
     }
 
-    if (splashStage === 'dissolving' || splashStage === 'completed') {
+    if (splashStage === 'dissolving-flash' || splashStage === 'completed') {
       metaTheme.setAttribute('content', '#F8F9FD');
       metaApple.setAttribute('content', 'default');
       document.documentElement.style.backgroundColor = '#F8F9FD';
@@ -65,25 +65,40 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     }
   }, [splashStage]);
 
-  // Trigger dot expansion and dissolve into destination screen
+  // Two-Step Optical Dissolve:
+  // Step 1: Dot visibly expands into a massive radiant white supernova, bathing the screen in pure white light (600ms)
+  // Step 2: The white light veil melts and dissolves smoothly into the login form (750ms)
   const triggerDissolve = () => {
     if (isDissolvingRef.current || splashStage === 'completed') return;
     isDissolvingRef.current = true;
-    setSplashStage('dissolving');
 
+    // Phase A: Expanding White Dot Supernova
+    setSplashStage('expanding-dot');
     setDotPos((prev) => ({
       ...prev,
-      scale: 90,
+      scale: 120,
       isExpanding: true,
       isBouncing: false,
       isFloating: false,
     }));
 
-    // Complete dissolve after 850ms, then notify parent
+    // Phase B: Once screen is bathed in radiant light, dissolve the white light into the destination page
     setTimeout(() => {
-      setSplashStage('completed');
-      onComplete();
-    }, 850);
+      setSplashStage('dissolving-flash');
+
+      const metaTheme = document.querySelector('meta[name="theme-color"]');
+      if (metaTheme) metaTheme.setAttribute('content', '#F8F9FD');
+      const metaApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (metaApple) metaApple.setAttribute('content', 'default');
+      document.documentElement.style.backgroundColor = '#F8F9FD';
+      document.body.style.backgroundColor = '#F8F9FD';
+
+      // Phase C: Complete dissolve, unmount splash
+      setTimeout(() => {
+        setSplashStage('completed');
+        onComplete();
+      }, 750);
+    }, 600);
   };
 
   // 1. Bulletproof Watchdog: If anything stalls on low-end mobile devices, force dissolve after 8.5s!
@@ -100,13 +115,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   // 2. High-Performance Mobile Animation Sequence:
   // - Pre-measures all character positions ONCE (zero layout thrashing during animation)
   // - Hardware-accelerated GPU translate3d trajectory
-  // - Bouncing ball drop (1050ms) -> Dash to 'F' (240ms) -> Letters (230ms/char) -> 3s hold after 'S'
+  // - Bouncing ball drop (1050ms) -> Dash to 'F' (240ms) -> Letters (230ms/char) -> 2s float after 'S'
   useEffect(() => {
     let isMounted = true;
     let timerIds: ReturnType<typeof setTimeout>[] = [];
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    // Helper: calculate relative (x, y) coordinates of each letter inside container
     const measurePositions = (): { x: number; y: number }[] | null => {
       const contEl = lettersContainerRef.current;
       if (!contEl) return null;
@@ -142,20 +156,17 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       return positions;
     };
 
-    // Retry measuring with requestAnimationFrame until layout is painted, or fallback safely
     let attempts = 0;
     const initAndRun = () => {
       if (!isMounted) return;
 
       const pos = measurePositions();
-      // If layout not ready yet, retry up to 10 frames
       if ((!pos || pos[0].x <= 0) && attempts < 10) {
         attempts++;
         requestAnimationFrame(initAndRun);
         return;
       }
 
-      // Fallback safe coordinates if extreme low-end device fails measurement
       const validPositions =
         pos && pos[0].x > 0
           ? pos
@@ -206,8 +217,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
           if (!isMounted) return;
           setRevealedCharIndex(0);
 
-          // Phase 4: Reveal remaining letters sequentially at slower pace (230ms per char)
-          // Uses PRE-CALCULATED positions -> zero layout reflow!
+          // Phase 4: Reveal remaining letters sequentially at 230ms per char
           let currentIdx = 0;
           intervalId = setInterval(() => {
             if (!isMounted) return;
@@ -238,7 +248,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
                 isFloating: true,
               }));
 
-              // Pause for 2 seconds (2000ms) as requested by user
+              // Pause for 2 seconds (2000ms) with floating motion before optical dissolve
               const tHold = setTimeout(() => {
                 if (isMounted) {
                   triggerDissolve();
@@ -255,7 +265,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       timerIds.push(tBounce);
     };
 
-    // Start with a slight delay for smooth component mount
     const tInit = setTimeout(() => {
       requestAnimationFrame(initAndRun);
     }, 40);
@@ -273,8 +282,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   return (
     <div
       onClick={triggerDissolve}
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-[#000000] cursor-pointer transition-opacity duration-700 select-none touch-none overscroll-none ${
-        splashStage === 'dissolving' ? 'opacity-0 pointer-events-none' : 'opacity-100'
+      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-[#000000] cursor-pointer select-none touch-none overscroll-none transition-opacity duration-700 ease-out ${
+        splashStage === 'dissolving-flash' ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
       style={{
         height: '100dvh',
@@ -289,6 +298,18 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         style={{
           background:
             'radial-gradient(circle at 50% 50%, rgba(45, 212, 191, 0.08) 0%, transparent 40%)',
+        }}
+      />
+
+      {/* Optical White Light Dissolve Veil: Rises as the white dot blooms, bathing screen in pure white light */}
+      <div
+        className={`fixed inset-0 pointer-events-none z-35 transition-opacity duration-600 ease-in ${
+          splashStage === 'expanding-dot' || splashStage === 'dissolving-flash'
+            ? 'opacity-95'
+            : 'opacity-0'
+        }`}
+        style={{
+          backgroundColor: '#FFFFFF',
         }}
       />
 
@@ -310,7 +331,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             opacity: dotPos.opacity,
           }}
         >
-          {/* INNER BALL (Handles bouncing animation, floating levitation, bloom, and dissolve expansion) */}
+          {/* INNER BALL (Handles bouncing animation, floating levitation, bloom, and dramatic dissolve supernova) */}
           <div
             className={`rounded-full ${
               dotPos.isBouncing
@@ -327,11 +348,11 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
                   ? undefined
                   : `translate(-50%, -50%) scale(${dotPos.scale})`,
               transition: dotPos.isExpanding
-                ? 'transform 850ms cubic-bezier(0.4, 0, 0.2, 1)'
+                ? 'transform 650ms cubic-bezier(0.25, 1, 0.35, 1)'
                 : 'none',
               background: '#FFFFFF',
               boxShadow: dotPos.isExpanding
-                ? '0 0 100px 40px #FFFFFF, 0 0 220px 80px rgba(45,212,191,0.9)'
+                ? '0 0 160px 80px #FFFFFF, 0 0 350px 150px #FFFFFF, 0 0 600px 250px rgba(45,212,191,0.85)'
                 : '0 0 16px 3px #FFFFFF, 0 0 32px 8px rgba(45,212,191,0.85), 0 0 55px 16px rgba(56,189,248,0.4)',
               willChange: 'transform',
             }}
