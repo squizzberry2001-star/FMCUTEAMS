@@ -77,13 +77,33 @@ const getCurrentWibTime = () => {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
 };
 
+const getSlideTimestampMs = (slide: StorySlide): number => {
+  const numeric = Number(slide?.createdAtMs);
+  if (!isNaN(numeric) && numeric > 0) return numeric;
+  if (typeof slide?.id === 'string' && slide.id.startsWith('story-')) {
+    const parsed = Number(slide.id.replace('story-', '').split('-')[0]);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 0;
+};
+
+/**
+ * Format user name for story circle: full name if 1-2 words, or first 2 words if longer.
+ */
+const getTwoWordStoryName = (fullName: string): string => {
+  const words = (fullName || 'User FMCU').trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 2) return words.join(' ');
+  return `${words[0]} ${words[1]}`;
+};
+
 const isStoryActive24h = (slide: StorySlide, nowMs: number = Date.now()): boolean => {
   if (!slide || slide.id.startsWith('seed-story-')) return false;
+  const createdMs = getSlideTimestampMs(slide);
   const expiresAt =
-    typeof slide.expiresAtMs === 'number'
+    typeof slide.expiresAtMs === 'number' && !isNaN(slide.expiresAtMs)
       ? slide.expiresAtMs
-      : typeof slide.createdAtMs === 'number'
-      ? slide.createdAtMs + STORY_TTL_MS
+      : createdMs > 0
+      ? createdMs + STORY_TTL_MS
       : 0;
   return expiresAt > nowMs;
 };
@@ -284,11 +304,11 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
             s.userId === currentUserId ||
             s.userName.toLowerCase() === currentUserName.toLowerCase()
         )
-        .sort((a, b) => a.createdAtMs - b.createdAtMs),
+        .sort((a, b) => getSlideTimestampMs(a) - getSlideTimestampMs(b)),
     [activeStories, currentUserId, currentUserName]
   );
 
-  // Other employees' active stories grouped by userName, ALWAYS sorted by the user who uploaded LAST (most recent createdAtMs first)
+  // Other employees' active stories grouped by userName, ALWAYS sorted by the user who uploaded LAST (most recent createdAtMs first from left to right)
   const otherUserGroups = React.useMemo(() => {
     const map = new Map<
       string,
@@ -303,7 +323,9 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     >();
 
     // Sort oldest-to-newest so each user's slides play in sequence 1 -> 2 -> 3
-    const chronological = [...activeStories].sort((a, b) => a.createdAtMs - b.createdAtMs);
+    const chronological = [...activeStories].sort(
+      (a, b) => getSlideTimestampMs(a) - getSlideTimestampMs(b)
+    );
 
     chronological.forEach((s) => {
       if (
@@ -313,19 +335,20 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         return;
       }
       const key = s.userName.toLowerCase();
+      const slideTs = getSlideTimestampMs(s);
       if (!map.has(key)) {
         map.set(key, {
           userId: s.userId,
           userName: s.userName,
           userRole: s.userRole,
           userAvatar: s.userAvatar,
-          latestCreatedAtMs: s.createdAtMs || 0,
+          latestCreatedAtMs: slideTs,
           slides: [],
         });
       }
       const group = map.get(key)!;
-      if ((s.createdAtMs || 0) > group.latestCreatedAtMs) {
-        group.latestCreatedAtMs = s.createdAtMs || 0;
+      if (slideTs > group.latestCreatedAtMs) {
+        group.latestCreatedAtMs = slideTs;
       }
       if (s.userAvatar) {
         group.userAvatar = s.userAvatar;
@@ -998,76 +1021,105 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         className="hidden"
       />
 
-      {/* Horizontal Instagram-Style Circle Stories Strip */}
-      <div className="w-full mb-3.5 -mx-1 px-1">
-        <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar py-1.5">
-          {/* 1. Leftmost Button: User Story Silhouette + '+' Badge at Bottom-Right */}
-          <div className="flex flex-col items-center flex-shrink-0 w-[68px]">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={openOwnStoriesOrUpload}
-                className={`w-16 h-16 rounded-full p-[2.5px] transition-transform active:scale-95 cursor-pointer ${
-                  myActiveStories.length > 0
-                    ? 'bg-gradient-to-tr from-[#FEDA77] via-[#DD2A7B] to-[#8134AF] shadow-sm'
-                    : 'bg-gradient-to-tr from-slate-200 via-slate-300 to-slate-200'
-                }`}
-                title="Cerita Anda (Maks 3x / 24 Jam)"
-              >
-                <div className="w-full h-full rounded-full bg-white p-[2px] flex items-center justify-center overflow-hidden relative">
-                  {myActiveStories.length > 0 ? (
-                    <img
-                      src={myActiveStories[0].imageUrl}
-                      alt={currentUserName}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    /* Silhouette Profile Picture User when no story uploaded yet */
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-slate-100 to-slate-200 flex items-center justify-center relative overflow-hidden">
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="w-9 h-9 text-slate-400/90 translate-y-1"
-                        fill="currentColor"
-                      >
-                        <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z" />
-                      </svg>
+      {/* Horizontal Instagram-Style Circle Stories Strip (No Left/Right Padding, Latest Upload First from Left, Curved 2-Word Name on Circle) */}
+      <div className="mb-3 -mx-5 sm:-mx-6 px-0">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 px-0">
+          {/* 1. Leftmost Button: User Story Silhouette + '+' Badge + Curved Name along Circle */}
+          {(() => {
+            const myDisplayName = getTwoWordStoryName(currentUserName);
+            const myFontSize =
+              myDisplayName.length > 14 ? '6.4' : myDisplayName.length > 11 ? '7.0' : '7.5';
+            const myLatestThumb =
+              myActiveStories.length > 0
+                ? myActiveStories[myActiveStories.length - 1].imageUrl
+                : '';
+
+            return (
+              <div className="relative flex-shrink-0 w-[80px] h-[84px] flex items-center justify-center">
+                {/* Curved Circular Name SVG Hugging the Story Circle */}
+                <svg
+                  viewBox="0 0 84 88"
+                  className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-visible"
+                >
+                  <defs>
+                    <path id="story-arc-self" d="M 5.5,37 A 36.5,36.5 0 0,0 78.5,37" fill="none" />
+                  </defs>
+                  <text
+                    fill="#1e293b"
+                    fontSize={myFontSize}
+                    fontWeight="800"
+                    letterSpacing="0.35px"
+                  >
+                    <textPath href="#story-arc-self" startOffset="50%" textAnchor="middle">
+                      {myDisplayName.toUpperCase()}
+                    </textPath>
+                  </text>
+                </svg>
+
+                {/* Main Story Circle Avatar centered at (42, 37) */}
+                <div className="absolute top-[6px] left-1/2 -translate-x-1/2">
+                  <button
+                    type="button"
+                    onClick={openOwnStoriesOrUpload}
+                    className={`w-[60px] h-[60px] rounded-full p-[3px] transition-transform active:scale-95 cursor-pointer ${
+                      myActiveStories.length > 0
+                        ? 'bg-gradient-to-tr from-[#FEDA77] via-[#FF2E93] to-[#8134AF] shadow-[0_0_12px_rgba(221,42,123,0.38)]'
+                        : 'bg-gradient-to-tr from-slate-200 via-slate-300 to-slate-200'
+                    }`}
+                    title={`${currentUserName} (Maks 3x / 24 Jam)`}
+                  >
+                    <div className="w-full h-full rounded-full bg-white p-[2px] flex items-center justify-center overflow-hidden relative">
+                      {myLatestThumb ? (
+                        <img
+                          src={myLatestThumb}
+                          alt={currentUserName}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        /* Silhouette Profile Picture User when no story uploaded yet */
+                        <div className="w-full h-full rounded-full bg-gradient-to-b from-slate-100 to-slate-200 flex items-center justify-center relative overflow-hidden">
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="w-8 h-8 text-slate-400/90 translate-y-1"
+                            fill="currentColor"
+                          >
+                            <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z" />
+                          </svg>
+                        </div>
+                      )}
                     </div>
+                  </button>
+
+                  {/* Small Top-Reacted Single Emoji Badge at Top-Left (if own story has reactions) */}
+                  {myTopEmoji && (
+                    <span className="absolute -top-0.5 -left-1 w-5 h-5 rounded-full bg-white border border-slate-200 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
+                      {myTopEmoji}
+                    </span>
                   )}
+
+                  {/* Instagram '+' Badge at Bottom-Right of Circle -> Auto Open Camera */}
+                  <button
+                    type="button"
+                    onClick={handleOpenCameraAndCaptionModal}
+                    className={`absolute bottom-0 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#F8F9FD] shadow-md transition-transform active:scale-90 cursor-pointer ${
+                      remainingQuota > 0
+                        ? 'bg-gradient-to-tr from-[#0095F6] to-[#2563EB] text-white'
+                        : 'bg-slate-400 text-white'
+                    }`}
+                    title={
+                      remainingQuota > 0
+                        ? `Buka Kamera & Buat Story (${remainingQuota} kuota tersisa)`
+                        : 'Kuota Story Hari Ini Penuh (3/3)'
+                    }
+                  >
+                    <Plus className="w-3 h-3 stroke-[3]" />
+                  </button>
                 </div>
-              </button>
+              </div>
+            );
+          })()}
 
-              {/* Small Top-Reacted Single Emoji Badge at Bottom-Left (if own story has reactions) */}
-              {myTopEmoji && (
-                <span className="absolute -bottom-1 left-0 w-5 h-5 rounded-full bg-white border border-slate-200 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
-                  {myTopEmoji}
-                </span>
-              )}
-
-              {/* Instagram '+' Badge at Bottom-Right -> Auto Open Camera */}
-              <button
-                type="button"
-                onClick={handleOpenCameraAndCaptionModal}
-                className={`absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full flex items-center justify-center border-2 border-[#F8F9FD] shadow-md transition-transform active:scale-90 cursor-pointer ${
-                  remainingQuota > 0
-                    ? 'bg-gradient-to-tr from-[#0095F6] to-[#2563EB] text-white'
-                    : 'bg-slate-400 text-white'
-                }`}
-                title={
-                  remainingQuota > 0
-                    ? `Buka Kamera & Buat Story (${remainingQuota} kuota tersisa)`
-                    : 'Kuota Story Hari Ini Penuh (3/3)'
-                }
-              >
-                <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              </button>
-            </div>
-
-            <span className="text-[10px] font-bold text-slate-700 mt-1.5 truncate w-full text-center leading-tight">
-              Cerita Anda
-            </span>
-          </div>
-
-          {/* 2. Other Employees' Active Story Circles (Sorted by Latest Upload First + Colored Circle for New Story) */}
+          {/* 2. Other Employees' Active Story Circles (Sorted by Latest Upload First from Left + Colored Circle for New Story + Curved 2-Word Name) */}
           {otherUserGroups.map((group, idx) => {
             const hasUnviewed = group.slides.some(
               (s) =>
@@ -1076,8 +1128,11 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                   (v) => v.toLowerCase() === currentUserName.toLowerCase()
                 )
             );
-            const firstName = group.userName.split(' ')[0];
-            // Requirement 7: Small badge below story only displays 1 most-reacted emoji
+            const twoWordName = getTwoWordStoryName(group.userName);
+            const nameFontSize =
+              twoWordName.length > 14 ? '6.4' : twoWordName.length > 11 ? '7.0' : '7.5';
+            const arcId = `story-arc-user-${idx}`;
+            // Requirement 7: Small badge only displays 1 most-reacted emoji
             const topGroupEmoji = getTopReactedEmoji(group.slides);
             const latestSlidePreview =
               group.slides[group.slides.length - 1]?.imageUrl || group.userAvatar;
@@ -1087,12 +1142,33 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 key={group.userId + idx}
                 type="button"
                 onClick={() => openEmployeeStoryGroup(idx)}
-                className="flex flex-col items-center flex-shrink-0 w-[68px] group cursor-pointer"
+                className="relative flex-shrink-0 w-[80px] h-[84px] flex items-center justify-center group cursor-pointer"
+                title={group.userName}
               >
-                <div className="relative">
+                {/* Curved Circular Name SVG Hugging the Story Circle */}
+                <svg
+                  viewBox="0 0 84 88"
+                  className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-visible"
+                >
+                  <defs>
+                    <path id={arcId} d="M 5.5,37 A 36.5,36.5 0 0,0 78.5,37" fill="none" />
+                  </defs>
+                  <text
+                    fill={hasUnviewed ? '#0f172a' : '#64748b'}
+                    fontSize={nameFontSize}
+                    fontWeight={hasUnviewed ? '800' : '600'}
+                    letterSpacing="0.35px"
+                  >
+                    <textPath href={`#${arcId}`} startOffset="50%" textAnchor="middle">
+                      {twoWordName.toUpperCase()}
+                    </textPath>
+                  </text>
+                </svg>
+
+                <div className="absolute top-[6px] left-1/2 -translate-x-1/2">
                   {/* Outer Story Ring: Vibrant Colored Circle when Story is New (hasUnviewed), Gray when already viewed */}
                   <div
-                    className={`w-16 h-16 rounded-full p-[3px] transition-all duration-300 group-hover:scale-105 group-active:scale-95 ${
+                    className={`w-[60px] h-[60px] rounded-full p-[3px] transition-all duration-300 group-hover:scale-105 group-active:scale-95 ${
                       hasUnviewed
                         ? 'bg-gradient-to-tr from-[#FEDA77] via-[#FF2E93] to-[#8134AF] shadow-[0_0_12px_rgba(221,42,123,0.42)]'
                         : 'bg-slate-300/80'
@@ -1109,7 +1185,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                         <div className="w-full h-full rounded-full bg-gradient-to-b from-slate-100 to-slate-200 flex items-center justify-center overflow-hidden">
                           <svg
                             viewBox="0 0 24 24"
-                            className="w-9 h-9 text-slate-400/90 translate-y-1"
+                            className="w-8 h-8 text-slate-400/90 translate-y-1"
                             fill="currentColor"
                           >
                             <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z" />
@@ -1127,21 +1203,13 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     />
                   )}
 
-                  {/* Requirement 7: Small badge at bottom center displaying ONLY the 1 most-reacted emoji */}
+                  {/* Requirement 7: Small badge displaying ONLY the 1 most-reacted emoji */}
                   {topGroupEmoji && (
-                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white/95 backdrop-blur-xs border border-slate-200/80 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
+                    <span className="absolute -top-0.5 -left-1 w-5 h-5 rounded-full bg-white/95 backdrop-blur-xs border border-slate-200/80 shadow-xs text-[11px] flex items-center justify-center pointer-events-none">
                       {topGroupEmoji}
                     </span>
                   )}
                 </div>
-
-                <span
-                  className={`text-[10px] mt-1.5 truncate w-full text-center leading-tight ${
-                    hasUnviewed ? 'font-extrabold text-slate-900' : 'font-medium text-slate-500'
-                  }`}
-                >
-                  {firstName}
-                </span>
               </button>
             );
           })}
@@ -1153,7 +1221,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
           ========================================================================= */}
       {activeViewerGroupIdx !== null && currentSlide && (
         <div
-          className="fixed inset-0 z-[9500] bg-black flex flex-col items-center justify-between p-2 sm:p-4 select-none animate-in fade-in duration-150"
+          className="fixed inset-0 z-[9500] bg-black flex flex-col items-center justify-between px-0 py-1 sm:p-4 select-none animate-in fade-in duration-150"
           style={{ perspective: '1200px' }}
         >
           {/* Story Container (Instagram 9:16 Mobile Frame with Lightweight 3D Flipping Card on User Switch) */}
