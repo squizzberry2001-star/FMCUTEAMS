@@ -421,6 +421,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <LogOut className="w-4 h-4" />
         <span>Keluar dari FMCU TEAMS</span>
       </button>
+
+      {/* Minimalist Page Footer */}
+      <footer className="mt-auto pt-8 pb-4 text-center">
+        <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
+          Pengembang Web
+        </span>
+      </footer>
     </div>
   );
 };

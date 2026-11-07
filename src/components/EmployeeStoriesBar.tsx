@@ -26,6 +26,7 @@ import {
   syncStoryViewToGasGDrive,
   deleteStoryFromGasGDrive,
 } from '../utils/gdriveGasSync';
+import { PageTransitionLoader } from './PageTransitionLoader';
 
 export interface StorySlide {
   id: string;
@@ -363,7 +364,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         }
       });
 
-      const caption = `${bestAgenda.title} — ${bestAgenda.location} (${bestAgenda.time} WIB)`;
+      const actualTime = getCurrentWibTime();
+      const caption = `${bestAgenda.title} — ${bestAgenda.location} (${actualTime})`;
       const storeTag = bestAgenda.location || bestAgenda.category || 'FMCU Field Activity';
       return { caption, storeTag };
     }
@@ -652,23 +654,17 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         setActiveViewerGroupIdx(0);
         setActiveSlideIdx(0);
         setSlideProgress(0);
-      } else if (isFromAutoTimer) {
-        closeViewer();
       } else {
-        // Manual tap right on last own slide when no other user groups exist: loop back to first slide instead of exiting
-        setActiveSlideIdx(0);
-        setSlideProgress(0);
+        // Auto-close when tapping right on the very last story slide
+        closeViewer();
       }
     } else if (activeViewerGroupIdx < otherUserGroups.length - 1) {
       setActiveViewerGroupIdx((prev) => (prev !== null ? prev + 1 : null));
       setActiveSlideIdx(0);
       setSlideProgress(0);
-    } else if (isFromAutoTimer) {
-      closeViewer();
     } else {
-      // Manual tap right on the last slide of last group: loop back to first slide of current group instead of exiting
-      setActiveSlideIdx(0);
-      setSlideProgress(0);
+      // Auto-close when tapping right on the very last story slide
+      closeViewer();
     }
   };
 
@@ -857,10 +853,14 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     };
 
     // Optimistic insert so story appears immediately
+    const newSlideIndex = myActiveStories.length;
     setStories((prev) => [newStory, ...prev]);
 
-    // Upload to Google Drive via Google Apps Script in background/await
-    const gdriveRes = await uploadStoryToGasGDrive(newStory);
+    // Upload to Google Drive via Google Apps Script + show loading animation
+    const [gdriveRes] = await Promise.all([
+      uploadStoryToGasGDrive(newStory),
+      new Promise((resolve) => setTimeout(resolve, 1400)),
+    ]);
     setStories((prev) =>
       prev.map((s) =>
         s.id === newStory.id
@@ -883,7 +883,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     // Immediately open viewer to show the newly posted story
     setTimeout(() => {
       setActiveViewerGroupIdx(-1);
-      setActiveSlideIdx(0);
+      setActiveSlideIdx(newSlideIndex);
       setSlideProgress(0);
     }, 80);
   };
@@ -1357,6 +1357,9 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         </div>
       )}
 
+      {/* Loading Animation when sharing story */}
+      <PageTransitionLoader visible={isUploadingToGDrive} delayMs={0} />
+
       {/* =========================================================================
           MODAL 2: FULL-SCREEN AUTO CAMERA & EDIT CAPTION AUTO AGENDA ACTUAL PAGE
           ========================================================================= */}
@@ -1498,8 +1501,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                         <span>Auto Agenda:</span>
                       </span>
                       {myTodayAgendas.slice(0, 4).map((ag) => {
-                        const agText = `${ag.title} — ${ag.location} (${ag.time} WIB)`;
-                        const isSelected = draftCaption === agText;
+                        const agText = `${ag.title} — ${ag.location} (${getCurrentWibTime()})`;
+                        const isSelected = draftCaption.startsWith(`${ag.title} — ${ag.location}`);
                         return (
                           <button
                             key={ag.id}
@@ -1586,9 +1589,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     >
                       <Send className="w-3.5 h-3.5" />
                       <span>
-                        {isUploadingToGDrive
-                          ? 'Menyimpan ke GDrive...'
-                          : `Bagikan Story (${myActiveStories.length + 1}/${MAX_STORIES_PER_DAY})`}
+                        {`Bagikan Story (${myActiveStories.length + 1}/${MAX_STORIES_PER_DAY})`}
                       </span>
                     </button>
                   </div>

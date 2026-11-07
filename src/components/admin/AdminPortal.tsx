@@ -976,6 +976,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Minimalist Page Footer */}
+        <footer className="pt-8 pb-4 text-center">
+          <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
+            Pengembang Web
+          </span>
+        </footer>
       </main>
 
       {/* 4. Modal Buat / Edit Agenda */}

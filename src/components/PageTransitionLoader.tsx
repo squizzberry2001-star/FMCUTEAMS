@@ -33,7 +33,7 @@ export const PageTransitionLoader: React.FC<PageTransitionLoaderProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[80] pointer-events-none select-none flex items-center justify-center overflow-hidden animate-in fade-in duration-150"
+      className="fixed inset-0 z-[9800] pointer-events-none select-none flex items-center justify-center overflow-hidden animate-in fade-in duration-150"
       aria-live="polite"
       aria-busy="true"
     >

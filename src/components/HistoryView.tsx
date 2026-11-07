@@ -135,6 +135,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
           </div>
         ))}
       </div>
+
+      {/* Minimalist Page Footer */}
+      <footer className="mt-auto pt-8 pb-4 text-center">
+        <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
+          Pengembang Web
+        </span>
+      </footer>
     </div>
   );
 };

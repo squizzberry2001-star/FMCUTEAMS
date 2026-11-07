@@ -312,6 +312,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           )}
         </div>
 
+      {/* Minimalist Page Footer */}
+      <footer className="mt-auto pt-8 pb-4 text-center">
+        <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
+          Pengembang Web
+        </span>
+      </footer>
+
       {/* Navbar: Hapus tombol +, auto mengecil scale 0.91 saat scroll, auto reset saat section ditekan */}
       <BottomNavbar
         activeTab={activeNavTab as NavTabType}

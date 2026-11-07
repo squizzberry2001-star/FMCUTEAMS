@@ -32,26 +32,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 }) => {
   // Staff users list (36 names from Excel)
   const staffUsers = users.filter((u) => !u.isAdmin);
-  const defaultStaff = staffUsers[0] || {
-    name: 'Septiana Indasari',
-    email: 'septiana.indasari@fmcuteams.com',
-    role: 'Field Supervisor FMCU',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    password: '0000',
-  };
 
   // Login Mode: DEFAULT is 'member' (Anggota), changes to 'admin' when admin button clicked
   const [loginMode, setLoginMode] = useState<'member' | 'admin'>('member');
 
-  // Member / Staff Form State
-  const [selectedStaff, setSelectedStaff] = useState<User>(defaultStaff);
-  const [staffSearchQuery, setStaffSearchQuery] = useState(defaultStaff.name);
-  const [staffPassword, setStaffPassword] = useState('0000');
+  // Member / Staff Form State (Default Kosong)
+  const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
   const [showStaffDropdown, setShowStaffDropdown] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
-  // Admin Form State
-  const [adminPasswordInput, setAdminPasswordInput] = useState('607090');
+  // Admin Form State (Default Kosong)
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,7 +70,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const handleSelectStaff = (u: User) => {
     setSelectedStaff(u);
     setStaffSearchQuery(u.name);
-    setStaffPassword(u.password || '0000');
     setShowStaffDropdown(false);
     setErrorMessage(null);
   };
@@ -104,7 +96,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     const expectedPassword = foundUser.password || '0000';
     if (staffPassword !== expectedPassword) {
       setTimeout(() => {
-        setErrorMessage('Password salah! Password default adalah 0000 (atau gunakan sandi akun Anda).');
+        setErrorMessage('Password salah! Silakan periksa kembali password akun Anda.');
         setIsSubmitting(false);
       }, 600);
       return;
@@ -227,7 +219,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
               <div className="relative flex items-center">
                 <div className="absolute left-3.5 flex items-center pointer-events-none">
-                  {selectedStaff.avatar ? (
+                  {selectedStaff &&
+                  selectedStaff.avatar &&
+                  selectedStaff.name.toLowerCase() === staffSearchQuery.trim().toLowerCase() ? (
                     <img
                       src={selectedStaff.avatar}
                       alt={selectedStaff.name}
@@ -243,10 +237,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   value={staffSearchQuery}
                   onChange={(e) => {
                     setStaffSearchQuery(e.target.value);
+                    if (
+                      selectedStaff &&
+                      e.target.value.trim().toLowerCase() !== selectedStaff.name.toLowerCase()
+                    ) {
+                      setSelectedStaff(null);
+                    }
                     setShowStaffDropdown(true);
                   }}
                   onFocus={() => setShowStaffDropdown(true)}
-                  placeholder="Ketik atau pilih nama Anda..."
+                  placeholder="Pilih nama Anda..."
                   required
                   className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-11 pr-10 py-2.5 text-[16px] sm:text-xs font-bold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all placeholder:font-normal placeholder:text-slate-400"
                 />
@@ -306,13 +306,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               )}
             </div>
 
-            {/* Password Anggota (Default 0000) */}
+            {/* Password Anggota (Default Kosong, Tanpa Badge Default) */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs text-slate-600 font-bold">Password Anggota</label>
-                <span className="text-[10px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/60">
-                  Default: 0000
-                </span>
               </div>
 
               <div className="relative flex items-center">
@@ -322,9 +319,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type={showPassword ? 'text' : 'password'}
                   value={staffPassword}
                   onChange={(e) => setStaffPassword(e.target.value)}
-                  placeholder="••••"
+                  placeholder="Masukkan password..."
                   required
-                  className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-11 py-2.5 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-wider"
+                  className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-11 py-2.5 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-wider placeholder:tracking-normal placeholder:font-normal"
                 />
 
                 <button
@@ -370,7 +367,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 onClick={() => {
                   setLoginMode('admin');
                   setErrorMessage(null);
-                  setAdminPasswordInput('607090');
+                  setAdminPasswordInput('');
                 }}
                 className="w-full py-2.5 px-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-700 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
@@ -402,18 +399,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
             </div>
 
-            {/* Password Admin Input (607090) */}
+            {/* Password Admin Input */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs text-slate-600 font-bold">Kode Otorisasi Keamanan</label>
-                <button
-                  type="button"
-                  onClick={() => setAdminPasswordInput('607090')}
-                  className="text-[10px] text-teal-700 font-bold bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200/60 transition-colors cursor-pointer"
-                  title="Klik untuk mengisi kode resmi"
-                >
-                  Kode Resmi: 607090
-                </button>
               </div>
 
               <div className="relative flex items-center">
@@ -423,7 +412,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type={showPassword ? 'text' : 'password'}
                   value={adminPasswordInput}
                   onChange={(e) => setAdminPasswordInput(e.target.value)}
-                  placeholder="Masukkan 607090"
+                  placeholder="Masukkan kode otorisasi..."
                   required
                   autoFocus
                   className="w-full bg-[#F8FAFC] border border-slate-200/90 rounded-2xl pl-10 pr-11 py-2.5 text-[16px] sm:text-xs font-bold text-slate-800 outline-none focus:border-teal-500 focus:bg-white transition-all tracking-widest placeholder:tracking-normal placeholder:font-normal"
@@ -470,9 +459,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </form>
         )}
 
-        {/* Replay Splash Action */}
-        {onReplaySplash && (
-          <div className="mt-4 pt-3 border-t border-slate-100/90 flex flex-col items-center justify-center gap-1">
+        {/* Replay Splash Action & Minimalist Footer */}
+        <div className="mt-4 pt-3 border-t border-slate-100/90 flex flex-col items-center justify-center gap-1">
+          {onReplaySplash && (
             <button
               type="button"
               onClick={onReplaySplash}
@@ -481,12 +470,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <RotateCcw className="w-3.5 h-3.5 text-teal-600" />
               <span>✨ Putar Ulang Animasi Splash</span>
             </button>
+          )}
 
-            <span className="text-[10px] text-slate-400 font-medium">
-              FMCU TEAMS • Sistem Operasional Lapangan & Portal Manajemen
-            </span>
-          </div>
-        )}
+          <span className="text-[10px] font-light text-slate-400/90 tracking-widest mt-0.5">
+            Pengembang Web
+          </span>
+        </div>
       </div>
     </div>
   );

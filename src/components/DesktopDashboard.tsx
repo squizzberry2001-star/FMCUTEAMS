@@ -481,6 +481,12 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
             <span>+ Buat Agenda Baru (Admin)</span>
             <ChevronRight className="w-4 h-4" />
           </button>
+
+          <footer className="pt-4 pb-1 text-center">
+            <span className="text-[10px] font-light text-slate-400/90 tracking-widest">
+              Pengembang Web
+            </span>
+          </footer>
         </div>
       </aside>
     </div>
