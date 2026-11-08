@@ -125,6 +125,11 @@ export function normalizeCloudScheduleToAgenda(item: any): ScheduleAgenda | null
       completed: isCompleted,
       priority: item.priority === 'HIGH' ? 'HIGH' : 'NORMAL',
       createdBy: item.createdBy || 'Cloud Sync',
+      actualIn: item.actualIn ? String(item.actualIn) : undefined,
+      actualOut: item.actualOut ? String(item.actualOut) : undefined,
+      actualInIso: item.actualInIso ? String(item.actualInIso) : undefined,
+      actualOutIso: item.actualOutIso ? String(item.actualOutIso) : undefined,
+      silentAudit: item.silentAudit || undefined,
     };
   }
 

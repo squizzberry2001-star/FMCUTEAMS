@@ -16,6 +16,9 @@ import {
   Mountain,
   FileText,
   Tag,
+  CheckCircle2,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory, User } from '../types';
 import {
@@ -23,9 +26,16 @@ import {
   resolveAgendaGeoPoints,
   resolvePrimaryAgendaGeoPoint,
 } from '../utils/mapGeoUtils';
+import {
+  getDailyStoreSequenceInfo,
+  performSilentActualCheckIn,
+  performSilentActualCheckOut,
+} from '../services/actualAttendanceService';
 
 interface AgendaDetailViewProps {
   agenda: ScheduleAgenda;
+  allAgendas?: ScheduleAgenda[];
+  onUpdateAgenda?: (updated: ScheduleAgenda) => void;
   currentUser?: User | null;
   onBack: () => void;
   onOpenVisitForm?: () => void;
@@ -41,12 +51,66 @@ function getMinimalistPinLabel(rawName: string): string {
 
 export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   agenda,
+  allAgendas = [],
+  onUpdateAgenda,
   currentUser,
   onBack,
   onOpenVisitForm,
 }) => {
   // Hanya tampilkan Maps jika agenda adalah VISIT
   const isVisitAgenda = agenda.category === 'VISIT';
+  const [isRecordingAttendance, setIsRecordingAttendance] = useState(false);
+
+  // Urutan kunjungan toko hari ini (mendukung 1 hari visit 2 toko atau lebih)
+  const { storeOrderIndex, totalStoresToday } = useMemo(
+    () => getDailyStoreSequenceInfo(agenda, allAgendas.length > 0 ? allAgendas : [agenda]),
+    [agenda, allAgendas]
+  );
+
+  const handleRecordActualIn = async () => {
+    if (isRecordingAttendance) return;
+    setIsRecordingAttendance(true);
+    try {
+      const { updatedTarget, autoClosedPrevStore } = await performSilentActualCheckIn(
+        agenda,
+        allAgendas.length > 0 ? allAgendas : [agenda]
+      );
+      if (autoClosedPrevStore && onUpdateAgenda) {
+        onUpdateAgenda(autoClosedPrevStore);
+      }
+      if (onUpdateAgenda) {
+        onUpdateAgenda(updatedTarget);
+      }
+    } finally {
+      setIsRecordingAttendance(false);
+    }
+  };
+
+  const handleRecordActualOut = async () => {
+    if (isRecordingAttendance) return;
+    setIsRecordingAttendance(true);
+    try {
+      const updatedTarget = await performSilentActualCheckOut(
+        agenda,
+        allAgendas.length > 0 ? allAgendas : [agenda]
+      );
+      if (onUpdateAgenda) {
+        onUpdateAgenda(updatedTarget);
+      }
+    } finally {
+      setIsRecordingAttendance(false);
+    }
+  };
+
+  const handleOpenVisitFormWithAutoIn = async () => {
+    // Pastikan Actual IN terekam otomatis jika user langsung membuka Form Visit agar tidak pernah miss
+    if (!agenda.actualIn) {
+      await handleRecordActualIn();
+    }
+    if (onOpenVisitForm) {
+      onOpenVisitForm();
+    }
+  };
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -412,14 +476,125 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
       )}
 
       {/* 4. Bottom Primary Action Bar:
-          - Tombol Buka Form Visit Report HANYA untuk Jadwal VISIT
-          - Hapus Tombol Navigasi ke Lokasi di Bawah */}
+          - Panel Presensi Actual IN & Actual OUT (Tanpa teks GPS di sisi user — berjalan senyap di balik sistem)
+          - Tombol Buka Form Visit Report HANYA untuk Jadwal VISIT */}
       {isVisitAgenda && (
-        <div className="shrink-0">
+        <div className="shrink-0 space-y-2">
+          {/* Compact Actual IN / OUT Bar */}
+          <div className="bg-white rounded-2xl p-2.5 shadow-soft-card border border-slate-100">
+            <div className="flex items-center justify-between px-0.5 mb-1.5">
+              <span className="text-[10px] font-extrabold text-slate-700">
+                {totalStoresToday > 1
+                  ? `Presensi Toko Ke-${storeOrderIndex} dari ${totalStoresToday} Hari Ini`
+                  : 'Presensi Jam Kerja (08:30 – 17:30)'}
+              </span>
+              <span className="text-[9px] font-semibold text-teal-700">
+                {agenda.silentAudit?.syncStatus === 'OFFLINE_QUEUED'
+                  ? 'Tersimpan Lokal (Auto-Sync)'
+                  : agenda.actualIn && agenda.actualOut
+                  ? 'Selesai (IN & OUT)'
+                  : agenda.actualIn
+                  ? 'Sedang Visit di Toko'
+                  : 'Belum Check-In'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* Actual IN Button / Status */}
+              <button
+                type="button"
+                disabled={isRecordingAttendance}
+                onClick={handleRecordActualIn}
+                className={`py-2 px-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-1.5 cursor-pointer ${
+                  agenda.actualIn
+                    ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                    : 'bg-teal-600 hover:bg-teal-700 border-teal-600 text-white shadow-xs'
+                }`}
+              >
+                <div className="min-w-0">
+                  <span
+                    className={`text-[9px] font-bold uppercase block leading-none ${
+                      agenda.actualIn ? 'text-emerald-700' : 'text-teal-100'
+                    }`}
+                  >
+                    Actual IN {storeOrderIndex === 1 ? '(08:30)' : `(Toko ${storeOrderIndex})`}
+                  </span>
+                  <span className="text-[11px] font-black block mt-0.5 truncate">
+                    {agenda.actualIn ? agenda.actualIn : 'Rekam Actual IN'}
+                  </span>
+                </div>
+                {agenda.actualIn ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <LogIn className="w-4 h-4 text-white shrink-0" />
+                )}
+              </button>
+
+              {/* Actual OUT Button / Status */}
+              <button
+                type="button"
+                disabled={isRecordingAttendance}
+                onClick={handleRecordActualOut}
+                className={`py-2 px-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-1.5 cursor-pointer ${
+                  agenda.actualOut
+                    ? 'bg-amber-50/90 border-amber-200 text-amber-900'
+                    : agenda.actualIn
+                    ? 'bg-amber-500 hover:bg-amber-600 border-amber-500 text-white shadow-xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <div className="min-w-0">
+                  <span
+                    className={`text-[9px] font-bold uppercase block leading-none ${
+                      agenda.actualOut
+                        ? 'text-amber-700'
+                        : agenda.actualIn
+                        ? 'text-amber-100'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    Actual OUT {storeOrderIndex < totalStoresToday ? '(Pindah Toko)' : '(17:30)'}
+                  </span>
+                  <span className="text-[11px] font-black block mt-0.5 truncate">
+                    {agenda.actualOut ? agenda.actualOut : 'Rekam Actual OUT'}
+                  </span>
+                </div>
+                {agenda.actualOut ? (
+                  <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                ) : (
+                  <LogOut className="w-4 h-4 shrink-0" />
+                )}
+              </button>
+            </div>
+
+            {/* Khusus Admin: Tampilkan Audit Sistem Senyap */}
+            {currentUser?.isAdmin && agenda.silentAudit && (
+              <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[9px] text-slate-500">
+                <span>
+                  Audit Admin:{' '}
+                  {agenda.silentAudit.inDistanceToStoreMeters !== undefined
+                    ? `Jarak ${agenda.silentAudit.inDistanceToStoreMeters}m dari toko`
+                    : 'Terekam di Latar Belakang'}
+                </span>
+                <span className="font-bold text-teal-700">
+                  {agenda.silentAudit.inTimingStatus === 'LATE'
+                    ? `Telat +${agenda.silentAudit.lateMinutes || 0}m`
+                    : agenda.silentAudit.inTimingStatus === 'CONTINUATION_VISIT'
+                    ? `Toko Lanjutan${
+                        agenda.silentAudit.transitMinutesFromPrevStore !== undefined
+                          ? ` (Transit ${agenda.silentAudit.transitMinutesFromPrevStore}m)`
+                          : ''
+                      }`
+                    : 'On Time'}
+                </span>
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
-            onClick={onOpenVisitForm}
-            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+            onClick={handleOpenVisitFormWithAutoIn}
+            className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <Camera className="w-4 h-4" />
             <span>BUKA FORM VISIT REPORT</span>

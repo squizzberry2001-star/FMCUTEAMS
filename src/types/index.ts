@@ -13,6 +13,31 @@ export type ScheduleCategory =
   | 'CUTI'
   | 'OFF';
 
+export interface ActualAttendanceSilentAudit {
+  inLat?: number;
+  inLng?: number;
+  inAccuracyMeters?: number;
+  inDistanceToStoreMeters?: number;
+  inLocationStatus?: 'VERIFIED_AT_STORE' | 'NEAR_STORE_INDOOR' | 'OUTSIDE_STORE_RADIUS' | 'SILENT_BG';
+  outLat?: number;
+  outLng?: number;
+  outAccuracyMeters?: number;
+  outDistanceToStoreMeters?: number;
+  outLocationStatus?: 'VERIFIED_AT_STORE' | 'NEAR_STORE_INDOOR' | 'OUTSIDE_STORE_RADIUS' | 'SILENT_BG';
+  storeOrderIndex?: number; // 1 = Toko Pertama, 2 = Toko Kedua, dst.
+  totalStoresToday?: number;
+  transitMinutesFromPrevStore?: number;
+  inTimingStatus?: 'ON_TIME' | 'LATE' | 'CONTINUATION_VISIT';
+  outTimingStatus?: 'FULL_DAY_COMPLETE' | 'TRANSIT_TO_NEXT_STORE' | 'EARLY_OUT';
+  lateMinutes?: number;
+  earlyOutMinutes?: number;
+  clockTamperDetected?: boolean;
+  recordedOfflineIn?: boolean;
+  recordedOfflineOut?: boolean;
+  syncStatus?: 'SYNCED' | 'OFFLINE_QUEUED';
+  lastSyncedAt?: string;
+}
+
 export interface ScheduleAgenda {
   id: string;
   title: string;
@@ -38,6 +63,11 @@ export interface ScheduleAgenda {
   completed?: boolean;
   priority?: 'HIGH' | 'MEDIUM' | 'NORMAL';
   createdBy?: string;
+  actualIn?: string; // HH:mm WIB
+  actualOut?: string; // HH:mm WIB
+  actualInIso?: string;
+  actualOutIso?: string;
+  silentAudit?: ActualAttendanceSilentAudit;
 }
 
 export interface User {

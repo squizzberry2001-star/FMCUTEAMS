@@ -67,9 +67,15 @@ import {
   getStoresWithOwnership,
   getBestieByStoreCode
 } from '../../data/masterStoresData';
+import {
+  performSilentActualCheckIn,
+  performSilentActualCheckOut,
+} from '../../services/actualAttendanceService';
 
 interface VisitReportFormProps {
   agenda: ScheduleAgenda;
+  allAgendas?: ScheduleAgenda[];
+  onUpdateAgenda?: (updated: ScheduleAgenda) => void;
   user: User | null;
   onBack: () => void;
 }
@@ -295,6 +301,8 @@ const FINDING_PRESETS = [
 
 export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   agenda,
+  allAgendas = [],
+  onUpdateAgenda,
   user,
   onBack,
 }) => {
@@ -331,8 +339,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       matchedMasterStore?.email ||
       `store.${resolvedStoreName.toLowerCase().replace(/\s+/g, '')}@familymartindonesia.com`;
 
-    const savedGps = localStorage.getItem('fmcu_live_gps') || '-6.2293, 106.8256 (Akurat)';
-    const initialInTime = localStorage.getItem('fmcu_initial_checkin_time') || getCurrentWibTime();
+    const savedGps = localStorage.getItem('fmcu_live_gps') || '-6.2293, 106.8256';
+    const initialInTime =
+      agenda.actualIn || localStorage.getItem('fmcu_initial_checkin_time') || getCurrentWibTime();
+    const initialOutTime = agenda.actualOut || '17:30 WIB';
 
     const saved = localStorage.getItem(draftKey);
     if (saved) {
@@ -340,6 +350,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         const parsed = JSON.parse(saved);
         return {
           ...parsed,
+          actualIn: agenda.actualIn || parsed.actualIn || initialInTime,
+          actualOut: agenda.actualOut || parsed.actualOut || initialOutTime,
+          actualInSubmitted: Boolean(agenda.actualIn || parsed.actualInSubmitted),
           visitorName: user?.name || agenda.pic || parsed.visitorName || 'Marisa Giselina',
           storeName: parsed.storeName || resolvedStoreName,
           storeCode: parsed.storeCode || resolvedStoreCode,
@@ -358,9 +371,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       id: `report-${Date.now()}`,
       agendaId: agenda.id,
       actualIn: initialInTime,
-      actualOut: '17:45 WIB',
+      actualOut: initialOutTime,
       liveGps: savedGps,
-      actualInSubmitted: false,
+      actualInSubmitted: Boolean(agenda.actualIn),
       isManualCheckIn: false,
       storeFrontPhoto: '',
       visitorName: user?.name || agenda.pic || 'Marisa Giselina',
@@ -802,8 +815,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }
   };
 
-  // Submit Mandatory Check-In / Check-Out Popup
-  const handleSubmitCheckInOut = (e: React.FormEvent) => {
+  // Submit Mandatory Check-In / Check-Out Popup (Silent Background Telemetry)
+  const handleSubmitCheckInOut = async (e: React.FormEvent) => {
     e.preventDefault();
     const formattedIn = manualInInput.includes('WIB') ? manualInInput : `${manualInInput} WIB`;
     const formattedOut = manualOutInput.includes('WIB') ? manualOutInput : `${manualOutInput} WIB`;
@@ -816,6 +829,29 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       isManualCheckIn: isOfflineOrWeakSignal,
     }));
     setShowCheckInPopup(false);
+
+    // Run silent background telemetry & update master schedule
+    try {
+      const list = allAgendas.length > 0 ? allAgendas : [agenda];
+      const { updatedTarget, autoClosedPrevStore } = await performSilentActualCheckIn(
+        agenda,
+        list,
+        manualInInput
+      );
+      if (autoClosedPrevStore && onUpdateAgenda) {
+        onUpdateAgenda(autoClosedPrevStore);
+      }
+      const finalUpdated = await performSilentActualCheckOut(
+        updatedTarget,
+        list,
+        manualOutInput
+      );
+      if (onUpdateAgenda) {
+        onUpdateAgenda(finalUpdated);
+      }
+    } catch {
+      // Silent background catch
+    }
   };
 
   // Helper: Resize & Compress Image Clean (Tanpa Watermark untuk rawPhotoUrl)
@@ -902,7 +938,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           const now = new Date();
           const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
           const timeStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
-          const statusStr = isOfflineOrWeakSignal ? 'Manual Check-In Verified' : 'GPS Verified';
+          const statusStr = 'Check-In Verified';
           const textStr = `${(formData.storeName || 'STORE').toUpperCase()} (${formData.storeCode || '-'})  •  ${timeStr}  •  ${statusStr}`;
 
           const fontSize = Math.max(11, Math.round(h * 0.024));
@@ -1786,8 +1822,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   }`}
                 >
                   {isOfflineOrWeakSignal
-                    ? '⚡ Mode Manual (Offline / Susah Sinyal)'
-                    : '📡 GPS Otomatis (Klik jika susah sinyal)'}
+                    ? '⚡ Mode Offline (Tersimpan di Perangkat)'
+                    : '⚡ Presensi Otomatis Aktif'}
                 </button>
               </div>
             </div>
@@ -2200,8 +2236,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     <div className="min-w-0">
                       <div className="text-[11px] font-black text-emerald-200 leading-none truncate">
                         {isOfflineOrWeakSignal
-                          ? 'Mode Manual Aktif (Offline / Susah Sinyal)'
-                          : 'Radar Geofence Toko Aktif'}
+                          ? 'Mode Offline Aktif (Auto-Sync Saat Sinyal Kembali)'
+                          : 'Sistem Presensi Kunjungan Aktif'}
                       </div>
                       <div className="text-[9.5px] text-emerald-300/80 leading-none mt-1 truncate">
                         {formData.actualInSubmitted
@@ -2223,7 +2259,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                       onClick={handleRefreshGps}
                       disabled={isGpsRefreshing}
                       className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
-                      title="Segarkan Sinyal GPS"
+                      title="Segarkan Status Presensi"
                     >
                       <RotateCw className={`w-3 h-3 ${isGpsRefreshing ? 'animate-spin' : ''}`} />
                     </button>

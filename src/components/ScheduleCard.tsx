@@ -111,6 +111,14 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
                 {agenda.endTime ? ` - ${agenda.endTime}` : ''} WIB
               </span>
             </span>
+            {agenda.actualIn && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80 flex-shrink-0">
+                <span>IN: {agenda.actualIn.replace(/\s*WIB$/i, '')}</span>
+                {agenda.actualOut ? (
+                  <span>• OUT: {agenda.actualOut.replace(/\s*WIB$/i, '')}</span>
+                ) : null}
+              </span>
+            )}
           </div>
 
           {/* Judul Agenda Lengkap (ditampilkan penuh tanpa terpotong) */}
