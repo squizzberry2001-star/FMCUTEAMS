@@ -618,6 +618,7 @@ export const App: React.FC = () => {
                   onSelectAgenda={handleSelectAgenda}
                   onOpenNewAgenda={() => setShowNewAgendaModal(true)}
                   onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
+                  initialDate={selectedDate}
                 />
               )}
 

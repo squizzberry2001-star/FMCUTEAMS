@@ -184,6 +184,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
     const filtered = agendas.filter((item) => {
       const isMyAgenda =
+        Boolean(user?.isAdmin) ||
         !item.pic ||
         isSamePersonName(item.pic, fullName) ||
         item.pic.toLowerCase().includes(fullName.toLowerCase()) ||

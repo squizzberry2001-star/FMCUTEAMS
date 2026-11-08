@@ -21,6 +21,7 @@ interface CalendarScheduleViewProps {
   onToggleComplete?: (id: string, e: React.MouseEvent) => void;
   onOpenNewAgenda?: () => void;
   onOpenExcelUpload?: () => void;
+  initialDate?: string;
 }
 
 export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
@@ -29,9 +30,11 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
   onBack,
   onSelectAgenda,
   onOpenNewAgenda,
+  initialDate,
 }) => {
-  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() => (initialDate ? new Date(initialDate + 'T00:00:00') : new Date()));
   const [selectedDateStr, setSelectedDateStr] = useState(() => {
+    if (initialDate) return initialDate;
     const now = new Date();
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, '0');

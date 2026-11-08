@@ -224,8 +224,6 @@ async function postCloudEndpoint(url: string, payload: Record<string, any>): Pro
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain;charset=utf-8',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
       },
       body: JSON.stringify(payload),
     });

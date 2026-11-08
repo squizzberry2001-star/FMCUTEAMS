@@ -214,8 +214,9 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         if (!matchesSearch) return false;
       }
 
-      // Filter Hak Kepemilikan User
+      // Filter Hak Kepemilikan User (Khusus Admin, selalu tampilkan seluruh agenda agar tidak tersembunyi)
       const isMyAgenda =
+        Boolean(user?.isAdmin) ||
         !item.pic ||
         isSamePersonName(item.pic, fullName) ||
         item.pic.toLowerCase().includes(fullName.toLowerCase()) ||
@@ -485,6 +486,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               onOpenNewAgenda={onOpenNewAgenda}
               onOpenExcelUpload={onOpenExcelUpload}
               onToggleComplete={onToggleComplete}
+              initialDate={selectedDate}
             />
           ) : activeMenu === 'coverage' ? (
             /* Halaman Coverage Store & Leaderboard */
