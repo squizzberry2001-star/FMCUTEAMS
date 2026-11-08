@@ -491,6 +491,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // Scroll Detection & Auto Navbar Scale (Bottom and Top Navbar)
   const [isScrolled, setIsScrolled] = useState(false);
   const [showTopNavbar, setShowTopNavbar] = useState(true);
+  const formScrollContainerRef = useRef<HTMLDivElement>(null);
   const manualExpandedRef = useRef(false);
   const manualExpandedScrollTopRef = useRef(0);
   const lastScrollTopRef = useRef(0);
@@ -501,6 +502,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       window.pageYOffset,
       document.documentElement?.scrollTop,
       document.body?.scrollTop,
+      formScrollContainerRef.current?.scrollTop,
     ];
     return Math.max(...targets.map((v) => (typeof v === 'number' && !isNaN(v) ? v : 0)));
   };
@@ -522,7 +524,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           const delta = top - lastScrollTopRef.current;
           lastScrollTopRef.current = top;
 
-          if (top <= 10) {
+          if (top <= 15) {
+            // Saat di posisi atas: selalu tampilkan top navbar & besarkan bottom navbar
             setIsScrolled(false);
             setShowTopNavbar(true);
             manualExpandedRef.current = false;
@@ -532,12 +535,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               setIsScrolled(true);
               setShowTopNavbar(false);
             }
-          } else if (delta < -4) {
-            // Scroll ke ATAS: Bottom navbar membesar, Top navbar auto muncul
+          } else if (delta < -3) {
+            // Scroll ke ATAS: Top navbar muncul, Bottom navbar membesar
             setIsScrolled(false);
             setShowTopNavbar(true);
-          } else if (delta > 4 && top > 20) {
-            // Scroll ke BAWAH: Bottom navbar mengecil, Top navbar auto hide
+          } else if (delta > 3 && top > 25) {
+            // Scroll ke BAWAH: Top navbar auto hide, Bottom navbar mengecil
             setIsScrolled(true);
             setShowTopNavbar(false);
           }
@@ -548,6 +551,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       }
     };
 
+    const container = formScrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', onScroll, { passive: true });
+    }
     window.addEventListener('scroll', onScroll, { passive: true, capture: true });
     document.addEventListener('scroll', onScroll, { passive: true, capture: true });
     window.addEventListener('touchmove', onScroll, { passive: true });
@@ -556,6 +563,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     onScroll();
 
     return () => {
+      if (container) {
+        container.removeEventListener('scroll', onScroll);
+      }
       window.removeEventListener('scroll', onScroll, true);
       document.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('touchmove', onScroll);
@@ -1292,7 +1302,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     obsSubTab === 'qsc' ? formData.enableQsc !== false : formData.enableOpi !== false;
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F8F9FD] select-none overflow-y-auto no-scrollbar px-4 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-36 max-w-6xl mx-auto w-full">
+    <div
+      ref={formScrollContainerRef}
+      className="flex flex-col min-h-screen bg-[#F8F9FD] select-none overflow-y-auto no-scrollbar px-4 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-36 max-w-6xl mx-auto w-full relative"
+    >
       {/* Section / Sub-Tab Blur + Silhouette + Mini "FMCU....." Bouncing Loader */}
       <PageTransitionLoader visible={isSectionTransitioning} />
       {/* =====================================================================
@@ -1504,8 +1517,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           </span>
           <h2 className="text-base sm:text-lg font-black text-slate-800">Audit Toko FMCU</h2>
         </div>
-        {/* Right Dock: Satu Dock Kombinasi Tombol PDF (Icon Only) dan Tombol R23 Standar Holding Time */}
+        {/* Right Dock: R23 (Icon Only) di sebelah kiri, PDF (Icon Only) di sebelah kanan */}
         <div className="iphone-glass-mini-dock flex items-center gap-1 p-1 rounded-full shadow-xs">
+          {/* Tombol R23 (Icon Only) */}
+          <button
+            type="button"
+            onClick={() => setShowR23Modal(true)}
+            title="Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)"
+            className="w-8 h-8 rounded-full hover:bg-emerald-500/15 text-emerald-800 hover:text-emerald-950 flex items-center justify-center active:scale-95 transition-transform cursor-pointer"
+          >
+            <Clock className="w-4 h-4 stroke-[2.3]" />
+          </button>
+
+          {/* Tombol PDF (Icon Only) */}
           <button
             type="button"
             onClick={() => setShowPreview(true)}
@@ -1513,15 +1537,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer"
           >
             <FileText className="w-4 h-4 stroke-[2.2]" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowR23Modal(true)}
-            title="Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)"
-            className="px-2.5 py-1 rounded-full bg-emerald-600/15 text-emerald-800 hover:bg-emerald-600/25 font-black text-[11px] flex items-center gap-1 transition active:scale-95 cursor-pointer"
-          >
-            <Clock className="w-3 h-3 stroke-[2.5]" />
-            <span>R23</span>
           </button>
         </div>
       </div>
