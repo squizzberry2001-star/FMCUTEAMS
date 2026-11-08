@@ -21,6 +21,7 @@ import {
   LogOut,
   Maximize2,
   Minimize2,
+  Lock,
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory, User } from '../types';
 import {
@@ -110,7 +111,21 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
     };
   }, [isVisitAgenda, agenda.id, agenda.actualIn]);
 
+  // Cek apakah tanggal agenda sesuai dengan tanggal aktual hari ini (WIB YYYY-MM-DD)
+  const isAgendaToday = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const todayYmd = `${y}-${m}-${d}`;
+    return agenda.date === todayYmd;
+  }, [agenda.date]);
+
   const handleOpenVisitFormWithAutoIn = async () => {
+    if (!isAgendaToday) {
+      alert(`Form Visit hanya dapat dibuka pada tanggal kunjungan (${agenda.date}).`);
+      return;
+    }
     if (!agenda.actualIn) {
       const res = await performSilentActualCheckIn(
         agenda,
@@ -651,15 +666,32 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleOpenVisitFormWithAutoIn}
-            className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Camera className="w-4 h-4" />
-            <span>BUKA FORM VISIT REPORT</span>
-            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-          </button>
+          {isAgendaToday ? (
+            <button
+              type="button"
+              onClick={handleOpenVisitFormWithAutoIn}
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Camera className="w-4 h-4" />
+              <span>BUKA FORM VISIT REPORT</span>
+              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+            </button>
+          ) : (
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                disabled
+                className="w-full py-3 px-4 rounded-2xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-2 cursor-not-allowed select-none shadow-none"
+                title={`Form Visit terkunci. Hanya dapat dibuka pada tanggal kunjungan (${agenda.date}).`}
+              >
+                <Lock className="w-4 h-4 text-slate-400" />
+                <span>FORM VISIT TERKUNCI (HANYA HARI H)</span>
+              </button>
+              <p className="text-[10px] text-center font-semibold text-slate-400">
+                Form visit report hanya dapat diakses saat tanggal kunjungan ({agenda.date}).
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1342,21 +1342,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     });
   };
 
-  // AI Auto-Isi (T.A.R.O AI) MURNI Menggunakan Hasil Analisa API Key (Tanpa Fallback Preset)
-  // Diambil dari deskripsi foto di section bukti atau teks temuan
+  // AI Auto-Isi (T.A.R.O AI) MURNI Menggunakan Hasil Analisa API Key
+  // Aturan Wajib: Jika kolom temuan belum diisi, AI TIDAK memproses
   const handleAiAutoFill = async (obsIdx: number, obs: ObservationFinding) => {
-    let sourceText = obs.auditFinding.trim();
-    if (!sourceText) {
-      // Ambil deskripsi foto di section bukti yang sesuai index atau foto pertama
-      const fallbackEv = formData.evidencePhotos[obsIdx] || formData.evidencePhotos[0];
-      if (fallbackEv && fallbackEv.caption.trim()) {
-        sourceText = fallbackEv.caption.trim();
-        handleUpdateObs(obs.id, 'auditFinding', sourceText);
-      }
-    }
+    const sourceText = obs.auditFinding?.trim() || '';
 
     if (!sourceText) {
-      alert('Tuliskan temuan atau tambahkan deskripsi foto di Section Bukti terlebih dahulu agar TARO AI dapat menganalisanya.');
+      alert('Kolom temuan wajib diisi terlebih dahulu sebelum AI dapat menganalisa.');
       return;
     }
 
@@ -3223,10 +3215,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleAiAutoFill(idx, obs)}
-                                  disabled={aiLoadingIdx === idx}
-                                  className="h-8 px-3 rounded-xl font-extrabold text-[11px] text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 border border-teal-500/30 flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer"
+                                  disabled={aiLoadingIdx === idx || !obs.auditFinding?.trim()}
+                                  className={`h-8 px-3 rounded-xl font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 ${
+                                    !obs.auditFinding?.trim()
+                                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
+                                      : 'text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 border border-teal-500/30 cursor-pointer'
+                                  }`}
+                                  title={
+                                    !obs.auditFinding?.trim()
+                                      ? 'Isi kolom temuan terlebih dahulu untuk menggunakan AI'
+                                      : 'Analisa Temuan dengan AI'
+                                  }
                                 >
-                                  <Wand2 className={`w-3.5 h-3.5 text-amber-300 shrink-0 ${aiLoadingIdx === idx ? 'animate-spin' : ''}`} />
+                                  <Wand2 className={`w-3.5 h-3.5 ${!obs.auditFinding?.trim() ? 'text-slate-400' : 'text-amber-300'} shrink-0 ${aiLoadingIdx === idx ? 'animate-spin' : ''}`} />
                                   <span>{aiLoadingIdx === idx ? 'Analisa AI...' : 'Auto-Isi AI'}</span>
                                 </button>
 
@@ -3531,8 +3532,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     key={ev.id || idx}
                     className="border border-slate-200 rounded-2xl p-3 bg-white space-y-2.5 relative shadow-xs"
                   >
-                    {/* Viewfinder Thumbnail */}
-                    <div className="h-44 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
+                    {/* Viewfinder Thumbnail with Blurry Ambient Fill & Natural Aspect Ratio */}
+                    <div className="h-44 bg-slate-950 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200/90 group shadow-inner">
                       {/* Tombol Icon Pencil di Kiri Atas Foto untuk Edit Foto & Keterangan (1x Klik Responsif) */}
                       <button
                         type="button"
@@ -3555,15 +3556,24 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                         #{idx + 1}
                       </span>
 
+                      {/* Blurry Ambient Background Layer (Fills canvas sides seamlessly without stretching distortions) */}
+                      <img
+                        src={ev.photoUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-55 pointer-events-none select-none"
+                      />
+
+                      {/* Sharp Natural Aspect Ratio Photo Centered */}
                       <img
                         src={ev.photoUrl}
                         alt={`Evidence ${idx + 1}`}
-                        className="w-full h-full object-cover cursor-zoom-in select-none"
+                        className="relative z-10 max-w-full max-h-full object-contain cursor-zoom-in select-none drop-shadow-md"
                         onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
                       />
                       {/* Desktop Hover Overlay (pointer-events-none so it NEVER blocks mobile taps) */}
                       <div
-                        className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
+                        className="absolute inset-0 z-20 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
                       >
                         <span className="bg-slate-900/85 text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
                           <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
@@ -3695,9 +3705,17 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           FLOATING QUICK ACTIONS (POJOK KANAN BAWAH TEPAT DI ATAS NAVBAR)
           - Section 2 (Observasi): Tombol + & Navigasi Cepat Antar Card Temuan (Liquid Glass)
           - Section 3 (Bukti): Tombol Icon Camera & Gallery (Liquid Glass)
+          Auto-Hide saat Scroll Down (Menciut instant lalu menghilang)
+          Auto-Appear saat Scroll Up
           ===================================================================== */}
       {activeSection === 2 && isCurrentObsSubTabEnabled && (
-        <div className="fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none">
+        <div
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none origin-bottom-right transition-all duration-300 ease-out transform ${
+            isScrolled
+              ? 'scale-0 opacity-0 pointer-events-none translate-y-6'
+              : 'scale-100 opacity-100 pointer-events-auto translate-y-0'
+          }`}
+        >
           {/* Quick Prev / Next Card Navigation Pill with Liquid Glass */}
           {currentObsList.length > 0 && (
             <div className="h-11 px-2.5 rounded-full iphone-glass-mini-dock text-slate-800 shadow-lg flex items-center gap-1 border border-white/40">
@@ -3738,7 +3756,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       )}
 
       {activeSection === 3 && (
-        <div className="fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none">
+        <div
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none origin-bottom-right transition-all duration-300 ease-out transform ${
+            isScrolled
+              ? 'scale-0 opacity-0 pointer-events-none translate-y-6'
+              : 'scale-100 opacity-100 pointer-events-auto translate-y-0'
+          }`}
+        >
           {/* Button Icon Gallery with Liquid Glass */}
           <button
             type="button"
@@ -3764,16 +3788,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       {/* ============================================================
           BOTTOM NAVBAR FORM VISIT (3 SECTION: INFO, OBSERVASI, BUKTI)
           Ala Glass iPhone dengan Smooth Sliding Lens Pill
+          Auto-Hide saat Scroll Down (Menciut instant lalu menghilang)
+          Auto-Appear saat Scroll Up
           ============================================================ */}
-      <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
+      <div
+        className={`fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center z-40 select-none px-4 origin-bottom transition-all duration-300 ease-out transform ${
+          isScrolled
+            ? 'scale-0 opacity-0 pointer-events-none translate-y-10'
+            : 'scale-100 opacity-100 pointer-events-auto translate-y-0'
+        }`}
+      >
         <div
           onClick={handleResetScale}
-          style={{
-            transform: isScrolled ? 'scale(0.86)' : 'scale(1)',
-          }}
-          className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] ${
-            isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
-          }`}
+          className="w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] iphone-glass-dock shadow-2xl"
         >
           {/* Top Specular Hairline Reflection */}
           <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-50 z-0" />
