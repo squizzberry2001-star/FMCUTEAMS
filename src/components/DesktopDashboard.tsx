@@ -104,13 +104,6 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
     onSelectDate(nextMon);
   };
 
-  const handleResetToCurrentWeek = () => {
-    const runningMon = getMondayOfWeek();
-    setCurrentWeekMonday(runningMon);
-    const todayStr = new Date().toISOString().split('T')[0];
-    onSelectDate(todayStr);
-  };
-
   const activeWeekDays = getFullWeekDays(currentWeekMonday);
   const weekStartStr = activeWeekDays[0]?.dateStr || currentWeekMonday;
   const weekEndStr = activeWeekDays[activeWeekDays.length - 1]?.dateStr || currentWeekMonday;
@@ -281,9 +274,9 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               <span className="w-2 h-2 rounded-full bg-[#2BB3A0] absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
             </button>
 
-            {/* Action Buttons: Upload Schedule by Excel & Create New Schedule */}
+            {/* Action Buttons: Upload Schedule by Excel (Admin Only) & Create New Schedule */}
             <div className="flex items-center gap-2">
-              {onOpenExcelUpload && (
+              {user?.isAdmin && onOpenExcelUpload && (
                 <button
                   type="button"
                   onClick={onOpenExcelUpload}
@@ -421,19 +414,10 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
 
               <div className="px-2 text-xs font-black text-slate-800 flex items-center gap-1.5">
                 <span>{formatWeekRangeDisplay(currentWeekMonday)}</span>
-                {isCurrentRunningWeek ? (
+                {isCurrentRunningWeek && (
                   <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
                     Minggu Berjalan
                   </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleResetToCurrentWeek}
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 hover:bg-teal-500 hover:text-white text-slate-700 transition cursor-pointer"
-                    title="Kembali ke Minggu Ini"
-                  >
-                    Reset Minggu Ini
-                  </button>
                 )}
               </div>
 
@@ -461,7 +445,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 Belum ada schedule agenda untuk {selectedPeriod === 'Today' ? `tanggal ${selectedDate}` : `minggu ${formatWeekRangeDisplay(currentWeekMonday)}`}.
               </p>
               <div className="mt-3 flex items-center justify-center gap-2.5">
-                {onOpenExcelUpload && (
+                {user?.isAdmin && onOpenExcelUpload && (
                   <button
                     type="button"
                     onClick={onOpenExcelUpload}

@@ -598,7 +598,7 @@ export const App: React.FC = () => {
                   onSelectDate={setSelectedDate}
                   onSelectAgenda={handleSelectAgenda}
                   onOpenNewAgenda={() => setShowNewAgendaModal(true)}
-                  onOpenExcelUpload={() => setShowExcelUploadModal(true)}
+                  onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
                   onOpenCalendar={() => setMobileTab('calendar')}
                   onOpenHistory={() => setMobileTab('history')}
                   onOpenProfile={() => setMobileTab('profile')}
@@ -614,7 +614,7 @@ export const App: React.FC = () => {
                   onBack={() => setMobileTab('home')}
                   onSelectAgenda={handleSelectAgenda}
                   onOpenNewAgenda={() => setShowNewAgendaModal(true)}
-                  onOpenExcelUpload={() => setShowExcelUploadModal(true)}
+                  onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
                 />
               )}
 
@@ -650,7 +650,7 @@ export const App: React.FC = () => {
             onSelectDate={setSelectedDate}
             onSelectAgenda={handleSelectAgenda}
             onOpenNewAgenda={() => setShowNewAgendaModal(true)}
-            onOpenExcelUpload={() => setShowExcelUploadModal(true)}
+            onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
             onOpenVisitForm={(agenda) => {
               if (user?.isAdmin || isSamePersonName(agenda.pic, user?.name)) {
                 setSelectedAgenda(agenda);
@@ -674,8 +674,8 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Upload Schedule by Excel Modal (Desktop & Mobile) */}
-      {showExcelUploadModal && (
+      {/* Upload Schedule by Excel Modal (Desktop & Mobile - Admin Only) */}
+      {showExcelUploadModal && user?.isAdmin && (
         <ExcelScheduleUploadModal
           existingUsers={users}
           currentAgendasCount={agendas.length}

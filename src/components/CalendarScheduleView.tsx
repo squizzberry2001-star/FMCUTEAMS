@@ -9,7 +9,6 @@ import {
   MapPin,
   Tag,
   ArrowRight,
-  FileSpreadsheet
 } from 'lucide-react';
 import { ScheduleAgenda } from '../types';
 import { DeveloperFooter } from './DeveloperFooter';
@@ -222,16 +221,6 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                   Tidak ada agenda kerja pada tanggal {selectedDateStr}.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                  {onOpenExcelUpload && (
-                    <button
-                      type="button"
-                      onClick={onOpenExcelUpload}
-                      className="px-4 py-2 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                      <span>Upload Jadwal (Excel)</span>
-                    </button>
-                  )}
                   {onOpenNewAgenda && (
                     <button
                       type="button"
