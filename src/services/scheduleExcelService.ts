@@ -74,16 +74,10 @@ export function getMondayOfWeek(dateInput?: string): string {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }
   const day = d.getDay(); // 0=Minggu, 1=Senin, 2=Selasa, 3=Rabu, 4=Kamis, 5=Jumat, 6=Sabtu
-  let offsetToNearestMonday = 0;
-  if (day === 0) {
-    offsetToNearestMonday = 1;
-  } else if (day >= 1 && day <= 4) {
-    offsetToNearestMonday = 1 - day;
-  } else {
-    offsetToNearestMonday = 8 - day;
-  }
+  // Senin hingga Minggu: jika Minggu (0), selisih -6 menuju Senin minggu ini
+  const diffToMonday = day === 0 ? -6 : 1 - day;
   const monday = new Date(d);
-  monday.setDate(d.getDate() + offsetToNearestMonday);
+  monday.setDate(d.getDate() + diffToMonday);
   const yyyy = monday.getFullYear();
   const mm = String(monday.getMonth() + 1).padStart(2, '0');
   const dd = String(monday.getDate()).padStart(2, '0');
@@ -92,37 +86,14 @@ export function getMondayOfWeek(dateInput?: string): string {
 
 /**
  * Generate week days for a given week Monday.
- * If actual day is Sunday and viewing the running period, returns 8 days (Today's Sunday + 7 days next week).
- * When actual day is Monday - Saturday, returns standard 7 days (Senin s/d Minggu).
+ * Returns exactly 7 days (Senin s/d Minggu) for the actual week.
  */
 export function getFullWeekDays(
   mondayStr: string
 ): { dayIndex: number; dayName: string; dateStr: string; isWeekend: boolean }[] {
-  const now = new Date();
-  const actualDayOfWeek = now.getDay();
-  const isActualSunday = actualDayOfWeek === 0;
-
-  const yyyyNow = now.getFullYear();
-  const mmNow = String(now.getMonth() + 1).padStart(2, '0');
-  const ddNow = String(now.getDate()).padStart(2, '0');
-  const todayStr = `${yyyyNow}-${mmNow}-${ddNow}`;
-
-  const runningMonday = getMondayOfWeek();
-  const isRunningWeek = mondayStr === runningMonday || (isActualSunday && mondayStr === todayStr);
-
   const baseMon = getMondayOfWeek(mondayStr);
   const dayNames = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
   const result: { dayIndex: number; dayName: string; dateStr: string; isWeekend: boolean }[] = [];
-
-  // RULE 1: JIKA MASIH HARI MINGGU MAKA PILL AUTO JADI 8 (1 PILL TGL MINGGU BERJALAN DAN 7 PILL MINGGU DEPAN)
-  if (isActualSunday && isRunningWeek) {
-    result.push({
-      dayIndex: 0,
-      dayName: 'MINGGU',
-      dateStr: todayStr,
-      isWeekend: true,
-    });
-  }
 
   for (let i = 0; i < 7; i++) {
     const dt = new Date(baseMon + 'T00:00:00');
@@ -131,12 +102,13 @@ export function getFullWeekDays(
     const mm = String(dt.getMonth() + 1).padStart(2, '0');
     const dd = String(dt.getDate()).padStart(2, '0');
     result.push({
-      dayIndex: result.length,
+      dayIndex: i,
       dayName: dayNames[i],
       dateStr: `${yyyy}-${mm}-${dd}`,
       isWeekend: i === 5 || i === 6,
     });
   }
+
   return result;
 }
 

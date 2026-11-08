@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useMemo } from 'react';
+import { getMondayOfWeek } from '../services/scheduleExcelService';
 
 export interface CalendarFocusTrigger {
   mode: 'today' | 'week';
@@ -36,65 +37,23 @@ const formatYmd = (d: Date): string => {
 
 export const getCurrentWeekDays = (referenceDateStr?: string): CalendarDayItem[] => {
   const now = new Date();
-  const actualDayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
-  const isActualSunday = actualDayOfWeek === 0;
   const todayStr = formatYmd(now);
 
-  // Find Monday of running week:
-  // If actual day is Sunday, running week shifts to next Monday (now + 1 day)
-  const mondayOffset = actualDayOfWeek === 0 ? 1 : 1 - actualDayOfWeek;
-  const runningMondayDate = new Date(now);
-  runningMondayDate.setDate(now.getDate() + mondayOffset);
-  const runningMondayStr = formatYmd(runningMondayDate);
-
-  let targetMonday: Date;
-  if (!referenceDateStr) {
-    targetMonday = new Date(runningMondayDate);
-  } else {
-    const ref = new Date(referenceDateStr + 'T12:00:00');
-    if (isNaN(ref.getTime())) {
-      targetMonday = new Date(runningMondayDate);
-    } else {
-      const refDay = ref.getDay();
-      const distToMon = refDay === 0 ? (ref.toDateString() === now.toDateString() ? 1 : -6) : 1 - refDay;
-      targetMonday = new Date(ref);
-      targetMonday.setDate(ref.getDate() + distToMon);
-    }
-  }
-
-  const targetMondayStr = formatYmd(targetMonday);
-  const isTargetRunningPeriod =
-    targetMondayStr === runningMondayStr || (isActualSunday && referenceDateStr === todayStr);
-
+  // Ambil hari Senin minggu aktual (Senin s/d Minggu)
+  const baseMon = getMondayOfWeek(referenceDateStr || todayStr);
   const dayLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
   const fullDayLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
   const dayNames = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
+  const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
   const days: CalendarDayItem[] = [];
 
-  // RULE 1: JIKA MASIH HARI MINGGU MAKA PILL AUTO JADI 8 (1 PILL TGL MINGGU BERJALAN DAN 7 PILL MINGGU DEPAN)
-  if (isActualSunday && isTargetRunningPeriod) {
-    const sundayObj = new Date(now);
-    days.push({
-      dateObj: sundayObj,
-      dateString: todayStr,
-      num: sundayObj.getDate(),
-      label: 'Min',
-      fullLabel: 'Minggu',
-      dayName: 'MINGGU',
-      isToday: true,
-      isWeekend: true,
-      isCurrentSunday: true,
-      isActualWeek: true,
-      isActualWeekStart: true,
-    });
-  }
-
-  // 7 Hari (Senin s/d Minggu depan / minggu terpilih)
+  // Tepat 7 hari: Senin hingga Minggu minggu aktual
   for (let i = 0; i < 7; i++) {
-    const d = new Date(targetMonday);
-    d.setDate(targetMonday.getDate() + i);
+    const d = new Date(baseMon + 'T00:00:00');
+    d.setDate(d.getDate() + i);
     const dateStr = formatYmd(d);
+
     days.push({
       dateObj: d,
       dateString: dateStr,
@@ -102,100 +61,28 @@ export const getCurrentWeekDays = (referenceDateStr?: string): CalendarDayItem[]
       label: dayLabels[i],
       fullLabel: fullDayLabels[i],
       dayName: dayNames[i],
+      monthShort: shortMonths[d.getMonth()],
       isToday: dateStr === todayStr,
       isWeekend: i === 5 || i === 6,
-      isActualWeek: isTargetRunningPeriod,
-      isActualWeekStart: !isActualSunday && isTargetRunningPeriod && i === 0,
+      isActualWeek: true,
+      isActualWeekStart: i === 0,
     });
   }
 
   return days;
 };
 
-/**
- * Generate multi-week scrollable days (2 weeks before actual week + Actual Week + 3 weeks after)
- * so user can horizontally scroll across weeks while opening directly focused on Actual Week.
- */
-export const getScrollableCalendarDays = (): {
-  days: CalendarDayItem[];
-  isEightPillsActualWeek: boolean;
-} => {
-  const now = new Date();
-  const actualDayOfWeek = now.getDay();
-  const isActualSunday = actualDayOfWeek === 0;
-  const todayStr = formatYmd(now);
-
-  const mondayOffset = actualDayOfWeek === 0 ? 1 : 1 - actualDayOfWeek;
-  const runningMondayDate = new Date(now);
-  runningMondayDate.setDate(now.getDate() + mondayOffset);
-
-  // Start of actual week:
-  // If today is Sunday, actual week starts from Today (Sunday) + 7 days next week = 8 pills.
-  // If today is Mon-Sat, actual week starts from runningMondayDate = 7 pills.
-  const actualWeekStartDate = new Date(runningMondayDate);
-  if (isActualSunday) {
-    actualWeekStartDate.setDate(runningMondayDate.getDate() - 1);
-  }
-  const actualWeekStartStr = formatYmd(actualWeekStartDate);
-
-  const actualWeekEndDate = new Date(runningMondayDate);
-  actualWeekEndDate.setDate(runningMondayDate.getDate() + 6);
-  const actualWeekEndStr = formatYmd(actualWeekEndDate);
-
-  // Range: 14 days before actualWeekStartDate through 21 days after actualWeekEndDate
-  const startRange = new Date(actualWeekStartDate);
-  startRange.setDate(actualWeekStartDate.getDate() - 14);
-
-  const endRange = new Date(actualWeekEndDate);
-  endRange.setDate(actualWeekEndDate.getDate() + 21);
-
-  const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-  const jsDayLabels = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-  const jsFullDayLabels = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-  const jsDayNames = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
-
-  const days: CalendarDayItem[] = [];
-  const cursor = new Date(startRange);
-
-  while (cursor <= endRange) {
-    const d = new Date(cursor);
-    const dateStr = formatYmd(d);
-    const dow = d.getDay();
-    const isActualWeek = dateStr >= actualWeekStartStr && dateStr <= actualWeekEndStr;
-
-    days.push({
-      dateObj: d,
-      dateString: dateStr,
-      num: d.getDate(),
-      label: jsDayLabels[dow],
-      fullLabel: jsFullDayLabels[dow],
-      dayName: jsDayNames[dow],
-      monthShort: shortMonths[d.getMonth()],
-      isToday: dateStr === todayStr,
-      isWeekend: dow === 0 || dow === 6,
-      isCurrentSunday: isActualSunday && dateStr === todayStr,
-      isActualWeek,
-      isActualWeekStart: dateStr === actualWeekStartStr,
-    });
-
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return {
-    days,
-    isEightPillsActualWeek: isActualSunday,
-  };
-};
-
 export const CalendarStrip: React.FC<CalendarStripProps> = ({
   selectedDate,
   onSelectDate,
+  baseDate,
   focusTrigger,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const { days, isEightPillsActualWeek } = useMemo(() => getScrollableCalendarDays(), []);
+  // Tepat 7 hari minggu aktual dari Senin hingga Minggu
+  const days = useMemo(() => getCurrentWeekDays(baseDate), [baseDate]);
 
-  // Helper to scroll container so Actual Date (or selected pill) is centered in focus
+  // Helper untuk memastikan tanggal terpilih atau aktual dalam fokus
   const focusOnDatePill = (smooth: boolean, preferSelected: boolean = true) => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -222,7 +109,6 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
     }
   };
 
-  // 1. On initial mount: immediately position scroll centered at selected / actual date pill
   useEffect(() => {
     focusOnDatePill(false);
     const rafId = window.requestAnimationFrame(() => focusOnDatePill(false));
@@ -233,13 +119,11 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
     };
   }, []);
 
-  // 2. When user clicks "Hari Ini" or "Minggu Ini": smooth scroll back to Actual Date / Week
   useEffect(() => {
     if (!focusTrigger) return;
     focusOnDatePill(true, focusTrigger.mode === 'today');
   }, [focusTrigger]);
 
-  // 3. When selectedDate changes: ensure the newly selected date pill is smoothly centered in focus
   useEffect(() => {
     focusOnDatePill(true, true);
   }, [selectedDate]);
@@ -247,9 +131,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   return (
     <div
       ref={scrollContainerRef}
-      className={`flex items-center overflow-x-auto py-2 no-scrollbar scroll-smooth snap-x snap-mandatory ${
-        isEightPillsActualWeek ? 'gap-1 sm:gap-1.5' : 'gap-1.5'
-      }`}
+      className="flex items-center justify-between py-2 no-scrollbar scroll-smooth gap-1 sm:gap-1.5 w-full select-none"
     >
       {days.map((item) => {
         const isSelected = item.dateString === selectedDate;
@@ -277,24 +159,16 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
                   }
                 : undefined
             }
-            className={`flex flex-col items-center justify-center transition-all duration-300 shrink-0 snap-start ${
-              isEightPillsActualWeek
-                ? 'w-[calc((100%-28px)/8)] min-w-[36px] sm:min-w-[42px] px-0.5 sm:px-1'
-                : 'w-[calc((100%-36px)/7)] min-w-[42px] sm:min-w-[46px]'
-            } ${
+            className={`flex flex-col items-center justify-center transition-all duration-300 flex-1 min-w-0 ${
               isSelected
                 ? 'py-3 sm:py-3.5 rounded-full bg-gradient-to-b from-[#FF7E98] to-[#FF5376] text-white shadow-pill-coral transform -translate-y-0.5'
                 : item.isToday
                 ? 'py-2.5 sm:py-3 rounded-full bg-white text-slate-800'
-                : item.isActualWeek
-                ? 'py-2.5 sm:py-3 rounded-full bg-white/95 hover:bg-white text-slate-500 hover:text-slate-700 shadow-soft-sm'
-                : 'py-2.5 sm:py-3 rounded-full bg-white/65 hover:bg-white text-slate-400 hover:text-slate-600'
+                : 'py-2.5 sm:py-3 rounded-full bg-white/95 hover:bg-white text-slate-500 hover:text-slate-700 shadow-soft-sm'
             }`}
           >
             <span
-              className={`${
-                isEightPillsActualWeek ? 'text-sm sm:text-base' : 'text-base'
-              } leading-tight ${
+              className={`text-sm sm:text-base leading-tight ${
                 isSelected
                   ? 'font-bold text-white'
                   : item.isToday
