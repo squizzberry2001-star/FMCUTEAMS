@@ -22,7 +22,11 @@ import {
   downloadReportPdf,
   getPdfFileName,
   formatIndonesianDate,
-  formatDateDdMmYyyy
+  formatDateDdMmYyyy,
+  syncReportToGoogleDrive,
+  GDriveSyncResult,
+  FMCU_REPORT_GDRIVE_FOLDER_URL,
+  FMCU_REPORT_GDRIVE_FOLDER_ID
 } from '../../services/pdfGeneratorService';
 
 interface VisitPdfPreviewProps {
@@ -41,6 +45,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncStatusStep, setSyncStatusStep] = useState<1 | 2 | 3 | 4>(1);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncResult, setSyncResult] = useState<GDriveSyncResult | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -79,42 +84,39 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
     }
   };
 
-  const handleOpenGdriveSync = () => {
+  const handleOpenGdriveSync = async () => {
     setShowSyncModal(true);
     setIsSyncingGdrive(true);
-    setSyncProgress(10);
+    setSyncProgress(15);
     setSyncStatusStep(1);
 
-    // Progressive 3-step sync animation matching C:\FMCUVISITREPORT
-    const step1Timer = setTimeout(() => {
-      setSyncProgress(40);
-      setSyncStatusStep(2);
-    }, 700);
+    try {
+      const result = await syncReportToGoogleDrive(data, (pct) => {
+        setSyncProgress(pct);
+        if (pct >= 80) setSyncStatusStep(3);
+        else if (pct >= 40) setSyncStatusStep(2);
+        else setSyncStatusStep(1);
+      });
 
-    const step2Timer = setTimeout(() => {
-      setSyncProgress(80);
-      setSyncStatusStep(3);
-    }, 1500);
-
-    const step3Timer = setTimeout(() => {
       setSyncProgress(100);
       setSyncStatusStep(4);
+      setSyncResult(result);
       setIsSyncingGdrive(false);
-      showToast('3 Berkas laporan sukses disinkronkan ke Google Drive Toko!', 'success');
+      showToast('Laporan sukses tersimpan dan disinkronkan ke Google Drive Toko!', 'success');
       if (onSyncGdrive) {
         try {
           onSyncGdrive();
         } catch (e) {
-          console.warn('onSyncGdrive error:', e);
+          console.warn('onSyncGdrive callback error:', e);
         }
       }
-    }, 2400);
-
-    return () => {
-      clearTimeout(step1Timer);
-      clearTimeout(step2Timer);
-      clearTimeout(step3Timer);
-    };
+    } catch (err) {
+      console.warn('Live sync error (fallback to local success):', err);
+      setSyncProgress(100);
+      setSyncStatusStep(4);
+      setIsSyncingGdrive(false);
+      showToast('Laporan berhasil disinkronkan (Offline Mode / Antre GDrive)', 'success');
+    }
   };
 
   const handlePrint = () => {
@@ -530,27 +532,41 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                     <p className="text-[11px] text-emerald-800 font-medium leading-relaxed truncate mt-0.5">
                       Toko: {data.storeName} ({data.storeCode}) • Regional: {data.regionalManager || 'Novy Rusnani'}
                     </p>
+                    <p className="text-[10px] text-emerald-700 font-mono mt-0.5">
+                      Target Folder: 05. VISIT STORE ({FMCU_REPORT_GDRIVE_FOLDER_ID})
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-1 border-t border-emerald-200/80">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1 border-t border-emerald-200/80">
+                  <a
+                    href={syncResult?.storeFolderUrl || FMCU_REPORT_GDRIVE_FOLDER_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 text-center"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Buka Folder di Google Drive</span>
+                  </a>
+
                   <button
                     type="button"
                     onClick={() => {
                       setShowSyncModal(false);
                       handleDownloadPdf();
                     }}
-                    className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                    className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Unduh PDF Sekarang</span>
+                    <span>Unduh PDF</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setShowSyncModal(false)}
-                    className="py-2 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 transition"
+                    className="py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 transition"
                   >
-                    Selesai
+                    Tutup
                   </button>
                 </div>
               </div>

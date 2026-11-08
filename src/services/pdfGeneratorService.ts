@@ -1321,3 +1321,101 @@ export function buildHtmlSlides(report: VisitReportData): HtmlSlide[] {
 
   return slides;
 }
+
+// ============================================================================
+// GOOGLE DRIVE & GOOGLE APPS SCRIPT (GAS) LIVE CONNECTION
+// ============================================================================
+
+export const FMCU_REPORT_GAS_URL =
+  'https://script.google.com/macros/s/AKfycbxC29L4Cb3NNvUl4IRe0MGDnrluvCvv1neuTjQieA8j7C4n7zgGfQ3dMA8SLXYBG0AWtw/exec';
+
+export const FMCU_REPORT_GDRIVE_FOLDER_ID = '15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8';
+
+export const FMCU_REPORT_GDRIVE_FOLDER_URL =
+  'https://drive.google.com/drive/u/3/folders/15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8';
+
+export interface GDriveSyncResult {
+  success: boolean;
+  pdfUrl?: string;
+  qscPdfUrl?: string;
+  caSpreadsheetUrl?: string;
+  storeFolderUrl?: string;
+  visitorFolderUrl?: string;
+  yearFolderUrl?: string;
+  message?: string;
+}
+
+/**
+ * Live upload & sync report to official FMCU Google Drive folder (15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8)
+ */
+export async function syncReportToGoogleDrive(
+  report: VisitReportData,
+  onProgress?: (pct: number, stage: string) => void
+): Promise<GDriveSyncResult> {
+  onProgress?.(25, 'Merender dokumen PDF HD 16:9 & kompresi foto...');
+  const doc = await generatePdfDoc(report);
+  const pdfBase64 = doc.output('datauristring');
+  const fileName = getPdfFileName(report);
+
+  onProgress?.(65, 'Mengunggah berkas ke Google Apps Script & Google Drive...');
+
+  const sanitizedReport = {
+    id: report.id,
+    storeCode: report.storeCode,
+    storeName: report.storeName,
+    storeType: report.storeType || 'CVS',
+    auditorName: report.visitorName || 'Visitor',
+    visitDate: report.visitDate,
+    visitDateFormatted: formatIndonesianDate(report.visitDate, false),
+    visitDayDateFormatted: formatIndonesianDate(report.visitDate, true),
+    storeHead: report.storeHead || '',
+    areaManager: report.areaManager || '',
+    regionalManager: report.regionalManager || 'Novy Rusnani',
+    storeEmail: report.storeEmail || '',
+    actualIn: report.actualIn || '',
+    actualOut: report.actualOut || '',
+    observations: (report.observations || []).map((o) => ({
+      temuan: o.auditFinding || '',
+      tindakanPerbaikan: o.actionPlan || '',
+      deadline: o.deadline || '',
+      deadlineFormatted: o.deadlineFormatted || formatIndonesianDate(o.deadline, false)
+    }))
+  };
+
+  const payload = {
+    action: 'sendReport',
+    report: sanitizedReport,
+    visitorName: report.visitorName || 'Visitor',
+    pdfBase64,
+    fileName,
+    gdriveFolderId: FMCU_REPORT_GDRIVE_FOLDER_ID,
+    sendEmail: false
+  };
+
+  const response = await fetch(FMCU_REPORT_GAS_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google Apps Script error: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  onProgress?.(100, 'Berhasil disinkronkan ke Google Drive Toko!');
+
+  return {
+    success: result.status === 'SUCCESS',
+    pdfUrl: result.pdfUrl,
+    qscPdfUrl: result.qscPdfUrl,
+    caSpreadsheetUrl: result.caSpreadsheetUrl,
+    storeFolderUrl: result.storeFolderUrl,
+    visitorFolderUrl: result.visitorFolderUrl,
+    yearFolderUrl: result.yearFolderUrl,
+    message: result.message
+  };
+}
+
