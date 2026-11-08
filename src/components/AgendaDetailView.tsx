@@ -112,19 +112,26 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
     };
   }, [isVisitAgenda, agenda.id, agenda.actualIn]);
 
-  // Cek apakah tanggal agenda sesuai dengan tanggal aktual hari ini (WIB YYYY-MM-DD)
-  const isAgendaToday = useMemo(() => {
+  // Cek apakah jadwal kunjungan berada di masa depan (ke depan): agenda.date > todayYmd
+  const isFutureVisit = useMemo(() => {
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
     const todayYmd = `${y}-${m}-${d}`;
-    return agenda.date === todayYmd;
+    return Boolean(agenda.date && agenda.date > todayYmd);
   }, [agenda.date]);
 
+  // Form visit boleh dibuka jika: hari ini, sudah lewat (masa lalu), ATAU user adalah Admin
+  const isVisitOpenable = useMemo(() => {
+    if (!isVisitAgenda) return true;
+    if (currentUser?.isAdmin) return true;
+    return !isFutureVisit;
+  }, [isVisitAgenda, isFutureVisit, currentUser?.isAdmin]);
+
   const handleOpenVisitFormWithAutoIn = async () => {
-    if (!isAgendaToday) {
-      alert(`Form Visit hanya dapat dibuka pada tanggal kunjungan (${agenda.date}).`);
+    if (!isVisitOpenable) {
+      alert(`Form Visit terkunci. Jadwal kunjungan ke depan (${agenda.date}) belum tiba.`);
       return;
     }
     if (!agenda.actualIn) {
@@ -696,7 +703,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
 
             {/* Tombol Buka Form Visit Report */}
             <div className="flex-1 min-w-0">
-              {isAgendaToday ? (
+              {isVisitOpenable ? (
                 <button
                   type="button"
                   onClick={handleOpenVisitFormWithAutoIn}
@@ -711,7 +718,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
                   type="button"
                   disabled
                   className="w-full py-3 px-3 rounded-2xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-none truncate"
-                  title={`Form Visit terkunci. Hanya dapat dibuka pada tanggal kunjungan (${agenda.date}).`}
+                  title={`Form Visit terkunci. Kunjungan ke depan baru dapat dibuka saat tanggal ${agenda.date} tiba.`}
                 >
                   <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span className="truncate">FORM VISIT TERKUNCI (HARI H)</span>
@@ -720,9 +727,9 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             </div>
           </div>
 
-          {!isAgendaToday && (
+          {!isVisitOpenable && (
             <p className="text-[10px] text-center font-semibold text-slate-400">
-              Form visit report hanya dapat diakses saat tanggal kunjungan ({agenda.date}).
+              Jadwal visit ke depan terkunci hingga tanggal kunjungan ({agenda.date}). Jadwal hari ini atau yang sudah lewat dapat dibuka.
             </p>
           )}
         </div>
