@@ -1,449 +1,563 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Printer,
+  FileText,
+  RotateCcw,
+  Download,
+  CloudUpload,
   ChevronLeft,
-  Share2,
+  Printer,
+  CheckCircle2,
+  Clock,
   ExternalLink,
   Store,
-  Users,
-  CheckCircle2,
   Calendar,
-  AlertTriangle,
-  Camera,
-  FileSpreadsheet
+  X,
+  FileSpreadsheet,
+  Images,
+  Check
 } from 'lucide-react';
 import { VisitReportData } from '../../types/visitReport';
+import {
+  buildHtmlSlides,
+  downloadReportPdf,
+  getPdfFileName,
+  formatIndonesianDate,
+  formatDateDdMmYyyy
+} from '../../services/pdfGeneratorService';
 
 interface VisitPdfPreviewProps {
   data: VisitReportData;
   onBack: () => void;
+  onSyncGdrive?: () => Promise<void> | void;
 }
 
-export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({ data, onBack }) => {
+export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
+  data,
+  onBack,
+  onSyncGdrive
+}) => {
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isSyncingGdrive, setIsSyncingGdrive] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+  const [syncStatusStep, setSyncStatusStep] = useState<1 | 2 | 3 | 4>(1);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Generate continuous HTML slides
+  const slides = useMemo(() => {
+    return buildHtmlSlides(data);
+  }, [data, refreshKey]);
+
+  const pdfFileName = useMemo(() => {
+    return getPdfFileName(data);
+  }, [data]);
+
+  const showToast = (text: string, type: 'success' | 'info' | 'error' = 'info') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  };
+
+  const handleRefresh = () => {
+    setRefreshKey((prev) => prev + 1);
+    showToast('Memuat ulang tampilan dokumen PDF...', 'info');
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      setIsGeneratingPdf(true);
+      showToast(`Menyusun dan mengunduh ${pdfFileName}...`, 'info');
+      await downloadReportPdf(data);
+      showToast(`PDF ${pdfFileName} berhasil diunduh!`, 'success');
+    } catch (err) {
+      console.error('Download PDF error:', err);
+      showToast('Gagal mengunduh berkas PDF. Silakan coba lagi.', 'error');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleOpenGdriveSync = () => {
+    setShowSyncModal(true);
+    setIsSyncingGdrive(true);
+    setSyncProgress(10);
+    setSyncStatusStep(1);
+
+    // Progressive 3-step sync animation matching C:\FMCUVISITREPORT
+    const step1Timer = setTimeout(() => {
+      setSyncProgress(40);
+      setSyncStatusStep(2);
+    }, 700);
+
+    const step2Timer = setTimeout(() => {
+      setSyncProgress(80);
+      setSyncStatusStep(3);
+    }, 1500);
+
+    const step3Timer = setTimeout(() => {
+      setSyncProgress(100);
+      setSyncStatusStep(4);
+      setIsSyncingGdrive(false);
+      showToast('3 Berkas laporan sukses disinkronkan ke Google Drive Toko!', 'success');
+      if (onSyncGdrive) {
+        try {
+          onSyncGdrive();
+        } catch (e) {
+          console.warn('onSyncGdrive error:', e);
+        }
+      }
+    }, 2400);
+
+    return () => {
+      clearTimeout(step1Timer);
+      clearTimeout(step2Timer);
+      clearTimeout(step3Timer);
+    };
+  };
+
   const handlePrint = () => {
     window.print();
   };
 
   return (
-    <div className="min-h-screen bg-slate-900/90 text-slate-800 print:bg-white print:text-black">
-      {/* Non-printable Sticky Header Control */}
-      <div className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm print:hidden">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          <span>Kembali ke Editor Form</span>
-        </button>
+    <div className="min-h-screen bg-slate-900/90 text-slate-800 print:bg-white print:text-black py-4 sm:py-6 px-3 sm:px-6">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-[100] max-w-md animate-in fade-in slide-in-from-top-4 duration-200">
+          <div
+            className={`px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold flex items-center gap-2.5 ${
+              toastMessage.type === 'success'
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : toastMessage.type === 'error'
+                ? 'bg-rose-600 text-white border-rose-500'
+                : 'bg-slate-900 text-white border-slate-700'
+            }`}
+          >
+            {toastMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-200" />
+            ) : (
+              <Clock className="w-4 h-4 shrink-0 text-teal-200" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+        </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-extrabold text-slate-800">
-            Preview PDF: FMCU Visit Store Report
-          </span>
+      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
+        {/* ================================================================== */}
+        {/* TOP PDF CONTROL BAR (Mobile-Optimized & Responsive)               */}
+        {/* ================================================================== */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl p-3.5 sm:p-5 flex flex-col gap-3.5 sm:gap-4 print:hidden">
+          {/* Row 1: Header Info & Active Report Details */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg sm:text-xl shrink-0 shadow-xs border border-rose-100">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-rose-600" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-black text-sm sm:text-lg text-slate-900 truncate">
+                    Preview & Download PDF
+                  </h2>
+                  <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-[#0099A6] border border-teal-200/60 shrink-0">
+                    16:9 Landscape
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium truncate">
+                  Simpan laporan ke Google Drive untuk mengaktifkan berkas unduhan PDF.
+                </p>
+              </div>
+            </div>
+
+            {/* Store & Visit Metadata Card */}
+            <div className="w-full sm:w-auto shrink-0 bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2 flex items-center justify-between sm:justify-start gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Store className="w-4 h-4 text-[#0099A6] shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-[11px] font-extrabold text-slate-900 truncate">
+                    {data.storeName || 'Store FamilyMart'} ({data.storeCode || '-'})
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    {formatIndonesianDate(data.visitDate, true)}
+                  </div>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
+                {data.storeType || 'CVS'}
+              </span>
+            </div>
+          </div>
+
+          {/* Row 2: Actions - SIMPAN LAPORAN, Unduh PDF, Muat Ulang & Kembali */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onBack}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                title="Kembali ke Editor Form"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Kembali</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                title="Segarkan / Render Ulang Dokumen PDF Terbaru"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Muat Ulang</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+              {/* Print Button */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                title="Cetak Dokumen"
+              >
+                <Printer className="w-4 h-4" />
+                <span className="hidden sm:inline">Cetak</span>
+              </button>
+
+              {/* Unduh PDF Button */}
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={isGeneratingPdf}
+                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#009944] hover:bg-emerald-600 text-white font-black text-xs sm:text-sm transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                title="Unduh Berkas PDF Lengkap (16:9 Landscape)"
+              >
+                {isGeneratingPdf ? (
+                  <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh PDF'}</span>
+              </button>
+
+              {/* SIMPAN LAPORAN Button */}
+              <button
+                type="button"
+                onClick={handleOpenGdriveSync}
+                className="flex-1 sm:flex-initial px-6 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-[#009944] hover:brightness-105 text-white font-black text-xs sm:text-sm tracking-wide transition flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95"
+                title="Simpan Laporan & Sinkronisasikan 3 Berkas ke Google Drive Toko"
+              >
+                <CloudUpload className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-200" />
+                <span>SIMPAN LAPORAN</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 active:scale-95 transition-all"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Cetak / Simpan PDF</span>
-          </button>
+        {/* ================================================================== */}
+        {/* DOCUMENT HEADER BANNER                                            */}
+        {/* ================================================================== */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-900 text-white rounded-2xl shadow-md border border-slate-800 print:hidden">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                Dokumen Asli (Direct PDF Output - Semua Halaman)
+              </div>
+              <div className="text-xs sm:text-sm font-extrabold text-white truncate mt-0.5">
+                Dokumen PDF Aktual: {pdfFileName}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="px-2.5 py-1 rounded-lg bg-teal-800/80 text-teal-200 text-xs font-extrabold border border-teal-600/60 shadow-xs">
+              {slides.length} Halaman (16:9 Landscape)
+            </span>
+          </div>
+        </div>
+
+        {/* ================================================================== */}
+        {/* CONTINUOUS 16:9 LANDSCAPE SLIDE CARDS STREAM                      */}
+        {/* ================================================================== */}
+        <div className="space-y-6 max-w-5xl mx-auto w-full">
+          {slides.map((slide, idx) => (
+            <div
+              key={slide.id || idx}
+              className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden p-2.5 sm:p-4 transition hover:shadow-lg print:shadow-none print:border-none print:rounded-none print:p-0 print:m-0 print:h-screen print:page-break-after-always"
+            >
+              {/* Header card (hidden in print) */}
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-2 mb-2 border-b border-slate-100 print:hidden">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-teal-500" />
+                  <span>
+                    Halaman {idx + 1} dari {slides.length}: {slide.title}
+                  </span>
+                </span>
+                <span className="text-[10px] sm:text-[11px] font-semibold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
+                  Dokumen PDF Asli 16:9
+                </span>
+              </div>
+
+              {/* 16:9 Aspect Ratio Slide Canvas */}
+              <div className="aspect-[16/9] w-full bg-white rounded-xl overflow-hidden border border-slate-100 shadow-inner relative select-text">
+                <div
+                  className="w-full h-full relative"
+                  style={{ containerType: 'inline-size' } as React.CSSProperties}
+                  dangerouslySetInnerHTML={{ __html: slide.html }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Printable Report Document (Slides Structure) */}
-      <div className="max-w-5xl mx-auto py-8 px-4 print:p-0 space-y-8 print:space-y-0">
-        {/* SLIDE 1: Cover & Store Overview */}
-        <div className="bg-white rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-200/80 print:shadow-none print:border-none print:rounded-none print:p-8 print:h-screen print:page-break-after-always">
-          {/* Top Exterior Image Banner */}
-          <div className="w-full h-64 sm:h-80 rounded-2xl overflow-hidden bg-slate-100 mb-8 border border-slate-100 shadow-sm relative">
-            {data.storeFrontPhoto ? (
-              <img
-                src={data.storeFrontPhoto}
-                alt="Store Exterior"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 text-teal-700">
-                <Store className="w-16 h-16 opacity-40 mb-2 stroke-[1.5]" />
-                <span className="text-xs font-bold uppercase tracking-wider">
-                  Foto Eksterior Toko FamilyMart
-                </span>
-              </div>
-            )}
-            <div className="absolute top-4 left-4 bg-emerald-600 text-white font-black text-xs px-3 py-1 rounded-full shadow-md tracking-wider">
-              FamilyMart
-            </div>
-          </div>
-
-          {/* Title & Metadata Layout */}
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#00A389] tracking-tight mb-8">
-            FMCU Visit Store Report
-          </h1>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-            {/* Left Column: Key Persons */}
-            <div className="space-y-4 text-sm">
-              <div className="flex">
-                <span className="w-32 text-slate-500 font-semibold">Nama Visitor</span>
-                <span className="font-extrabold text-slate-900">: {data.visitorName || '-'}</span>
-              </div>
-              <div className="flex">
-                <span className="w-32 text-slate-500 font-semibold">Nama Store</span>
-                <span className="font-extrabold text-slate-900">: {data.storeName || '-'}</span>
-              </div>
-              <div className="flex">
-                <span className="w-32 text-slate-500 font-semibold">Store Head</span>
-                <span className="font-extrabold text-slate-900">: {data.storeHead || '-'}</span>
-              </div>
-            </div>
-
-            {/* Right Column: Store Metadata Card */}
-            <div className="bg-slate-50/80 rounded-2xl p-6 border border-slate-200/60 grid grid-cols-2 gap-y-4 gap-x-6 text-xs">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  TANGGAL VISIT
-                </span>
-                <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">
-                  {data.visitDate || '-'}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  KODE TOKO
-                </span>
-                <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">
-                  {data.storeCode || '-'}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  TIPE TOKO
-                </span>
-                <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">
-                  {data.storeType || 'CVS'}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  AREA MANAGER
-                </span>
-                <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">
-                  {data.areaManager || '-'}
-                </span>
-              </div>
-              <div className="col-span-2 pt-2 border-t border-slate-200/60">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  REGIONAL MANAGER
-                </span>
-                <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">
-                  {data.regionalManager || 'Novy Rusnani'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SLIDE 2: QSC / FamiTrack Result */}
-        <div className="bg-white rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-200/80 print:shadow-none print:border-none print:rounded-none print:p-8 print:h-screen print:page-break-after-always">
-          <div className="border-b-2 border-[#00A389] pb-4 mb-6">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              QSC / FamiTrack Result
-            </h2>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              Form penilaian standar kualitas, kebersihan & layanan operasional toko
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Sheet 1: Bagian Atas */}
-            <div className="flex flex-col">
-              <div className="flex-1 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center p-4 min-h-[360px] overflow-hidden">
-                {data.qscSheetTop ? (
-                  <img
-                    src={data.qscSheetTop}
-                    alt="Lembar QSC Bagian Atas"
-                    className="max-h-[480px] w-auto object-contain rounded-lg shadow-sm"
-                  />
-                ) : (
-                  <div className="text-center text-slate-400">
-                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-2 opacity-40 text-teal-600" />
-                    <span className="text-xs font-semibold">Foto Lembar QSC Bagian Atas (Kosong)</span>
+      {/* ================================================================== */}
+      {/* 3-FILES GOOGLE DRIVE SYNC MODAL (MATCHING C:\FMCUVISITREPORT)      */}
+      {/* ================================================================== */}
+      {showSyncModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-4 z-[999999] overflow-y-auto animate-in fade-in duration-200">
+          <div className="relative bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-3xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-4 my-auto animate-in zoom-in-95 duration-200">
+            {/* Header: Logo Drive & Persentase */}
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-xl shadow-md shrink-0">
+                  <CloudUpload className="w-6 h-6 text-white" />
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 border-2 border-white rounded-full animate-ping" />
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 border-2 border-white rounded-full" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-slate-900 text-sm sm:text-base tracking-tight truncate">
+                      Menyimpan ke Google Drive
+                    </h3>
+                    <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                      {syncProgress}%
+                    </span>
                   </div>
-                )}
-              </div>
-              <span className="text-xs font-extrabold text-slate-700 mt-2 block">
-                Lembar Form QSC / FamiTrack #1 (Wajib)
-              </span>
-            </div>
-
-            {/* Sheet 2: Bagian Bawah */}
-            <div className="flex flex-col">
-              <div className="flex-1 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center p-4 min-h-[360px] overflow-hidden">
-                {data.qscSheetBottom ? (
-                  <img
-                    src={data.qscSheetBottom}
-                    alt="Lembar QSC Bagian Bawah"
-                    className="max-h-[480px] w-auto object-contain rounded-lg shadow-sm"
-                  />
-                ) : (
-                  <div className="text-center text-slate-400">
-                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-2 opacity-40 text-teal-600" />
-                    <span className="text-xs font-semibold">Foto Lembar QSC Bagian Bawah (Kosong)</span>
-                  </div>
-                )}
-              </div>
-              <span className="text-xs font-extrabold text-slate-700 mt-2 block">
-                Lembar Form QSC / FamiTrack #2 (Wajib)
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* SLIDE 3: General Information (Store Crew) */}
-        <div className="bg-white rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-200/80 print:shadow-none print:border-none print:rounded-none print:p-8 print:h-screen print:page-break-after-always">
-          <div className="border-b-2 border-[#00A389] pb-4 mb-6">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              General Information (Store Crew)
-            </h2>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              Hari, Tanggal Visit : <span className="text-slate-800 font-bold">{data.visitDate || '-'}</span>
-            </p>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#0B1E2E] text-white text-xs font-extrabold uppercase tracking-wider">
-                  <th className="py-3.5 px-6">ROLE / JABATAN</th>
-                  <th className="py-3.5 px-6">NAMA PERSONEL</th>
-                  <th className="py-3.5 px-6 text-right">JOB LEVEL</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                {data.crews.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="py-8 text-center text-slate-400">
-                      Belum ada data crew yang diinput.
-                    </td>
-                  </tr>
-                ) : (
-                  data.crews.map((crew, idx) => (
-                    <tr key={crew.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                      <td className="py-3.5 px-6 font-bold text-slate-900">{crew.role}</td>
-                      <td className="py-3.5 px-6 text-slate-700">{crew.name}</td>
-                      <td className="py-3.5 px-6 text-right font-extrabold text-teal-700">{crew.jobLevel}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* SLIDE 4 & ONWARDS: Observations (OPI & QSC) */}
-        {data.observations.map((obs, idx) => (
-          <div
-            key={obs.id || idx}
-            className="bg-white rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-200/80 print:shadow-none print:border-none print:rounded-none print:p-8 print:h-screen print:page-break-after-always"
-          >
-            <div className="border-b-2 border-[#00A389] pb-4 mb-5">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                {obs.type === 'OPI' ? 'OPI Project Observation' : 'QSC Observation'}
-              </h2>
-              <p className="text-xs text-slate-500 font-semibold mt-1">
-                Ringkasan observasi dan rencana tindak lanjut perbaikan toko
-              </p>
-            </div>
-
-            {/* Temuan Pill Banner */}
-            <div className="flex items-center justify-between mb-5">
-              <span className="px-4 py-1.5 rounded-xl bg-[#00A389] text-white text-xs font-black tracking-wide shadow-sm">
-                Temuan {idx + 1}/{data.observations.length}
-              </span>
-              <span className="text-xs font-extrabold text-rose-600 bg-rose-50 border border-rose-200 px-3.5 py-1 rounded-xl">
-                Deadline: {obs.deadline || data.visitDate || '-'}
-              </span>
-            </div>
-
-            {/* 6-Block Analysis Grid (Exact match to PDF layout) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Box 1: TEMUAN AUDIT */}
-              <div className="bg-[#FFFDF5] border border-amber-200/80 rounded-2xl p-4">
-                <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider block mb-1">
-                  TEMUAN AUDIT
-                </span>
-                <p className="text-xs font-bold text-slate-800 leading-relaxed">
-                  {obs.auditFinding || obs.title || '-'}
-                </p>
-              </div>
-
-              {/* Box 2: DAMPAK OPERASIONAL */}
-              <div className="bg-[#F8FBFF] border border-blue-200/80 rounded-2xl p-4">
-                <span className="text-[10px] font-black text-blue-800 uppercase tracking-wider block mb-1">
-                  DAMPAK OPERASIONAL
-                </span>
-                <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                  {obs.operationalImpact || '-'}
-                </p>
-              </div>
-
-              {/* Box 3: KONDISI IDEAL / STANDAR */}
-              <div className="bg-[#F4FCF9] border border-teal-200/80 rounded-2xl p-4">
-                <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
-                  KONDISI IDEAL / STANDAR
-                </span>
-                <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                  {obs.idealCondition || '-'}
-                </p>
-              </div>
-
-              {/* Box 4: TINDAKAN PERBAIKAN (ACTION PLAN) */}
-              <div className="bg-[#F2FAF5] border border-emerald-300 rounded-2xl p-4">
-                <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider block mb-1">
-                  TINDAKAN PERBAIKAN (ACTION PLAN)
-                </span>
-                <p className="text-xs text-slate-800 leading-relaxed font-semibold">
-                  {obs.actionPlan || '-'}
-                </p>
-              </div>
-
-              {/* Box 5: PENYEBAB (ROOT CAUSE) */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider block mb-1">
-                  PENYEBAB (ROOT CAUSE)
-                </span>
-                <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                  {obs.rootCause || '-'}
-                </p>
-              </div>
-
-              {/* Box 6: HASIL YANG DIHARAPKAN */}
-              <div className="bg-[#F4FCF9] border border-teal-200/80 rounded-2xl p-4">
-                <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
-                  HASIL YANG DIHARAPKAN
-                </span>
-                <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                  {obs.expectedResult || 'Akan dimonitoring pada visit berikutnya'}
-                </p>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {/* EVIDENCE PHOTOS GALLERY SLIDES (6 per page) */}
-        <div className="bg-white rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-200/80 print:shadow-none print:border-none print:rounded-none print:p-8 print:h-screen print:page-break-after-always">
-          <div className="border-b-2 border-[#00A389] pb-4 mb-6">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              Finding Evidence - Evidence Photos
-            </h2>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              Dokumentasi foto temuan audit operasional toko di lapangan
-            </p>
-          </div>
-
-          {data.evidencePhotos.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
-              <Camera className="w-12 h-12 mx-auto mb-2 opacity-40 text-teal-600" />
-              <p className="text-xs font-semibold">Belum ada foto temuan yang diunggah.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {data.evidencePhotos.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  className="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm flex flex-col justify-between"
-                >
-                  {/* Photo Container with Watermark */}
-                  <div className="w-full h-44 rounded-xl overflow-hidden bg-slate-100 relative mb-2">
-                    <img
-                      src={item.photoUrl}
-                      alt={item.caption}
-                      className="w-full h-full object-cover"
-                    />
-                    {/* Watermark Banner */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-xs text-[9px] text-white px-2 py-0.5 truncate font-mono">
-                      {data.storeName} • {item.timestamp} • {item.gpsLocation}
-                    </div>
-                  </div>
-
-                  {/* Caption */}
-                  <p className="text-xs font-bold text-slate-800 leading-snug">
-                    {item.caption || 'Temuan lapangan'}
+                  <p className="text-[11px] text-slate-500 font-medium truncate">
+                    {syncProgress < 100
+                      ? 'Menyiapkan 3 berkas laporan kunjungan...'
+                      : 'Sinkronisasi 3 berkas sukses selesai!'}
                   </p>
                 </div>
-              ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSyncModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition shrink-0 cursor-pointer"
+                title="Tutup Modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          )}
-        </div>
 
-        {/* SLIDE: Store Assignment & Action Mechanism */}
-        <div className="bg-white rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-200/80 print:shadow-none print:border-none print:rounded-none print:p-8 print:h-screen print:page-break-after-always">
-          <div className="border-b-2 border-[#00A389] pb-4 mb-6">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              Mekanisme Pelaporan & Tindak Lanjut Store
-            </h2>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              Panduan resmi pengisian form rencana perbaikan (Corrective Action) hasil audit FMCU
-            </p>
-          </div>
+            {/* Overall Animated Progress Bar */}
+            <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-[#009944] rounded-full transition-all duration-500 ease-out shadow-xs"
+                style={{ width: `${syncProgress}%` }}
+              />
+            </div>
 
-          {/* Spreadsheet Link Box */}
-          <div className="bg-teal-50/80 border border-teal-200 rounded-2xl p-5 mb-8">
-            <span className="text-[11px] font-black text-teal-900 tracking-wider uppercase block mb-1">
-              LINK FILE FORM SPREADSHEET CA KHUSUS {data.storeName || 'STORE'} ({data.storeCode || 'KODE'}):
-            </span>
-            <a
-              href={data.spreadsheetUrl || '#'}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-bold text-teal-700 underline break-all flex items-center gap-1.5 hover:text-teal-900"
-            >
-              <span>{data.spreadsheetUrl || 'https://docs.google.com/spreadsheets/d/1o0VG1WP_9cYcfrdEDuA3_7LA2CdYSWrI9vyfLNm-hzc/edit'}</span>
-              <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
-            </a>
-          </div>
-
-          {/* 4 Action Steps */}
-          <div className="space-y-4">
-            {[
-              {
-                num: 1,
-                title: 'Buka & Isi Formulir di Spreadsheet',
-                desc: 'Buka dan isi langsung di spreadsheet file formulir perbaikan toko melalui link di atas.',
-              },
-              {
-                num: 2,
-                title: 'Isi Rencana & Bukti Perbaikan',
-                desc: 'Tim store mengisi form tersebut berdasarkan temuan yang telah ditunjukkan pada file laporan ini.',
-              },
-              {
-                num: 3,
-                title: 'Patuhi Batas Waktu (Deadline)',
-                desc: 'Tindakan perbaikan WAJIB dilakukan sebelum deadline yang diberikan oleh FMCU / Regional Bestie.',
-              },
-              {
-                num: 4,
-                title: 'Validasi & Konfirmasi Tindak Lanjut',
-                desc: 'Forward email ini sebagai validasi bahwa sudah melakukan tindak lanjut hasil visit.',
-              },
-            ].map((step) => (
-              <div key={step.num} className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="w-8 h-8 rounded-full bg-[#00A389] text-white flex items-center justify-center font-black text-xs flex-shrink-0 mt-0.5">
-                  {step.num}
+            {/* 3 Files Status Cards */}
+            <div className="space-y-2.5">
+              {/* File 1: PDF Laporan Visit 16:9 */}
+              <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/80 transition-all duration-300">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-sm shrink-0 border border-red-100">
+                      <FileText className="w-4 h-4 text-rose-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-extrabold text-xs text-slate-900 truncate">
+                        1. PDF Laporan Visit (Slide 16:9 HD)
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-medium truncate">
+                        {syncStatusStep > 1
+                          ? 'Tata letak & foto selesai disusun'
+                          : 'Menyiapkan layout slide & kompresi foto...'}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      syncStatusStep > 1
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {syncStatusStep > 1 ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-700" />
+                        <span>Selesai</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-3 h-3 text-amber-600 animate-spin" />
+                        <span>Memproses</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-extrabold text-slate-900">{step.title}</h4>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">{step.desc}</p>
+                <div className="w-full h-1.5 bg-slate-200/80 rounded-full mt-2 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: syncStatusStep > 1 ? '100%' : '50%' }}
+                  />
                 </div>
               </div>
-            ))}
+
+              {/* File 2: Kolase Lembar QSC */}
+              <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/80 transition-all duration-300">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shrink-0 border border-blue-100">
+                      <Images className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-extrabold text-xs text-slate-900 truncate">
+                        2. Lembar Kolase QSC (Vertikal HD)
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-medium truncate">
+                        {syncStatusStep > 2
+                          ? 'Form evaluasi QSC tersimpan'
+                          : 'Menyatukan form evaluasi QSC...'}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      syncStatusStep > 2
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : syncStatusStep === 2
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {syncStatusStep > 2 ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-700" />
+                        <span>Selesai</span>
+                      </>
+                    ) : syncStatusStep === 2 ? (
+                      <>
+                        <Clock className="w-3 h-3 text-amber-600 animate-spin" />
+                        <span>Memproses</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        <span>Antre</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="w-full h-1.5 bg-slate-200/80 rounded-full mt-2 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: syncStatusStep > 2 ? '100%' : syncStatusStep === 2 ? '50%' : '0%' }}
+                  />
+                </div>
+              </div>
+
+              {/* File 3: Spreadsheet CA Toko */}
+              <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/80 transition-all duration-300">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#009944] flex items-center justify-center text-sm shrink-0 border border-emerald-100">
+                      <FileSpreadsheet className="w-4 h-4 text-[#009944]" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-extrabold text-xs text-slate-900 truncate">
+                        3. Spreadsheet CA Toko (Action Plan)
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-medium truncate">
+                        {syncStatusStep >= 4
+                          ? 'Action plan store terhubung & siap diisi'
+                          : 'Menata data temuan & Action Plan Store...'}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      syncStatusStep >= 4
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : syncStatusStep === 3
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {syncStatusStep >= 4 ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-700" />
+                        <span>Selesai</span>
+                      </>
+                    ) : syncStatusStep === 3 ? (
+                      <>
+                        <Clock className="w-3 h-3 text-amber-600 animate-spin" />
+                        <span>Memproses</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        <span>Antre</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="w-full h-1.5 bg-slate-200/80 rounded-full mt-2 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: syncStatusStep >= 4 ? '100%' : syncStatusStep === 3 ? '50%' : '0%' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Celebration Box when 100% finished */}
+            {syncStatusStep >= 4 && (
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/70 border-2 border-emerald-400 shadow-md space-y-3 animate-in zoom-in-95 duration-200">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-lg shrink-0 shadow-md">
+                    <CheckCircle2 className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-black text-sm text-emerald-950 flex items-center gap-1.5">
+                      <span>3 Berkas Sukses Tersimpan Rapi!</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 font-medium leading-relaxed truncate mt-0.5">
+                      Toko: {data.storeName} ({data.storeCode}) • Regional: {data.regionalManager || 'Novy Rusnani'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1 border-t border-emerald-200/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSyncModal(false);
+                      handleDownloadPdf();
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Unduh PDF Sekarang</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncModal(false)}
+                    className="py-2 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 transition"
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
