@@ -621,11 +621,12 @@ export const App: React.FC = () => {
                 />
               )}
 
-              {/* Section 3: Coverage Store & History Aktivitas (Full halaman tanpa navbar) */}
+              {/* Section 3: Coverage Store & History Aktivitas */}
               {mobileTab === 'history' && (
                 <HistoryView
                   user={user}
                   agendas={agendas}
+                  users={users}
                   onBack={() => setMobileTab('home')}
                   onSelectAgenda={handleSelectAgenda}
                 />

@@ -13,8 +13,10 @@ import {
   ExternalLink,
   Cloud,
   Download,
+  Trophy,
 } from 'lucide-react';
 import { DeveloperFooter } from './DeveloperFooter';
+import { LeaderboardTopVisit } from './LeaderboardTopVisit';
 import { ScheduleAgenda, User } from '../types';
 import { VisitReportData } from '../types/visitReport';
 import {
@@ -38,6 +40,7 @@ import {
 interface HistoryViewProps {
   user?: User | null;
   agendas?: ScheduleAgenda[];
+  users?: User[];
   onSelectAgenda?: (agenda: ScheduleAgenda) => void;
   onBack: () => void;
 }
@@ -215,9 +218,11 @@ function resolveVisitedStoreReportData(params: {
 export const HistoryView: React.FC<HistoryViewProps> = ({
   user,
   agendas = [],
+  users = [],
   onSelectAgenda,
   onBack,
 }) => {
+  const [activeCoverageTab, setActiveCoverageTab] = useState<'coverage' | 'leaderboard'>('coverage');
   const [storeFilter, setStoreFilter] = useState<'all' | 'covered' | 'pending'>('all');
   const [storeSearch, setStoreSearch] = useState('');
 
@@ -552,25 +557,27 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-2xl mx-auto w-full select-none">
-      {/* Header Section 3: Coverage Store */}
-      <div className="flex items-center justify-between mb-5">
-        <button
-          type="button"
-          onClick={handleBackToParent}
-          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer"
-        >
-          <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
-        </button>
-        <div className="text-center">
-          <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
-            {hasOwnStores ? 'Kepemilikan Toko Anda' : 'Monitoring Seluruh Jaringan'}
-          </span>
-          <h2 className="text-lg font-black text-slate-800">Coverage Store</h2>
-        </div>
-        <div className="w-10 h-10 rounded-full iphone-glass-icon-btn text-black flex items-center justify-center">
-          <Store className="w-5 h-5 stroke-[2.2]" />
-        </div>
-      </div>
+      {activeCoverageTab === 'coverage' ? (
+        <>
+          {/* Header Section 3: Coverage Store */}
+          <div className="flex items-center justify-between mb-5">
+            <button
+              type="button"
+              onClick={handleBackToParent}
+              className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer"
+            >
+              <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
+            </button>
+            <div className="text-center">
+              <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
+                {hasOwnStores ? 'Kepemilikan Toko Anda' : 'Monitoring Seluruh Jaringan'}
+              </span>
+              <h2 className="text-lg font-black text-slate-800">Coverage Store</h2>
+            </div>
+            <div className="w-10 h-10 rounded-full iphone-glass-icon-btn text-black flex items-center justify-center">
+              <Store className="w-5 h-5 stroke-[2.2]" />
+            </div>
+          </div>
 
       {/* Main Coverage Summary Card */}
       <div className="bg-gradient-to-br from-[#2BB3A0] to-[#169888] rounded-3xl p-5 sm:p-6 text-white shadow-pill-teal mb-5 relative overflow-hidden">
@@ -833,9 +840,89 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           })
         )}
       </div>
+        </>
+      ) : (
+        <LeaderboardTopVisit
+          user={user}
+          agendas={agendas}
+          users={users}
+          onBack={() => setActiveCoverageTab('coverage')}
+        />
+      )}
 
       {/* Minimalist Page Footer */}
       <DeveloperFooter />
+
+      {/* ============================================================
+          FLOATING APPLE LIQUID GLASS BOTTOM NAVBAR IN HALAMAN COVERAGE
+          Tabs: Coverage Store & Leaderboard Top Visit
+          ============================================================ */}
+      <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
+        <div className="w-full max-w-[280px] sm:max-w-[300px] flex items-center pointer-events-auto origin-center relative overflow-hidden select-none p-1.5 rounded-[32px] iphone-glass-dock shadow-2xl">
+          {/* Top specular hairline */}
+          <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-50 z-0" />
+
+          {/* Ambient bottom light refraction rim */}
+          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-30 z-0" />
+
+          {/* Sliding Glass Lens Pill */}
+          <div
+            className="absolute top-1.5 bottom-1.5 rounded-[22px] iphone-glass-pill pointer-events-none dock-pill-transition z-0"
+            style={{
+              width: 'calc((100% - 12px) / 2)',
+              transform: `translateX(calc(${activeCoverageTab === 'coverage' ? 0 : 1} * 100%))`,
+              left: '6px',
+            }}
+          >
+            <div className="pointer-events-none absolute inset-x-2.5 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-60" />
+            <div className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+          </div>
+
+          {/* Tab 1: Coverage Store */}
+          <button
+            type="button"
+            onClick={() => setActiveCoverageTab('coverage')}
+            className="relative z-10 flex-1 rounded-[22px] flex items-center justify-center py-2 px-2 gap-1.5 dock-btn-transition active:scale-95 cursor-pointer focus:outline-none"
+          >
+            <Store
+              className={`w-4 h-4 transition-all duration-300 ${
+                activeCoverageTab === 'coverage'
+                  ? 'text-teal-900 stroke-[2.4] scale-105'
+                  : 'text-slate-600 stroke-[2]'
+              }`}
+            />
+            <span
+              className={`text-xs font-black transition-all ${
+                activeCoverageTab === 'coverage' ? 'text-teal-950 font-black' : 'text-slate-600 font-bold'
+              }`}
+            >
+              Coverage
+            </span>
+          </button>
+
+          {/* Tab 2: Leaderboard Top Visit */}
+          <button
+            type="button"
+            onClick={() => setActiveCoverageTab('leaderboard')}
+            className="relative z-10 flex-1 rounded-[22px] flex items-center justify-center py-2 px-2 gap-1.5 dock-btn-transition active:scale-95 cursor-pointer focus:outline-none"
+          >
+            <Trophy
+              className={`w-4 h-4 transition-all duration-300 ${
+                activeCoverageTab === 'leaderboard'
+                  ? 'text-purple-900 stroke-[2.4] scale-105'
+                  : 'text-slate-600 stroke-[2]'
+              }`}
+            />
+            <span
+              className={`text-xs font-black transition-all ${
+                activeCoverageTab === 'leaderboard' ? 'text-purple-950 font-black' : 'text-slate-600 font-bold'
+              }`}
+            >
+              Top Visit
+            </span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
