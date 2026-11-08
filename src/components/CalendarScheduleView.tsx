@@ -238,7 +238,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
   }, [displayedAgendas]);
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full select-none">
+    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-28 max-w-7xl mx-auto w-full select-none">
       {/* Header Section 2 */}
       <div className="flex items-center justify-between mb-5">
         <button
@@ -251,15 +251,18 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
           <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
             FMCU Master Schedule
           </span>
-          <h2 className="text-lg font-black text-slate-800">Jadwal Agenda Kerja</h2>
+          <h2 className="text-lg lg:text-xl font-black text-slate-800">Jadwal Agenda Kerja</h2>
         </div>
         <div className="w-10 h-10 rounded-full iphone-glass-icon-btn text-black flex items-center justify-center">
           <CalendarIcon className="w-5 h-5 stroke-[2.2]" />
         </div>
       </div>
 
-      {/* Kalender Bulanan */}
-      <div className="bg-white rounded-3xl p-5 shadow-soft-card mb-4 border border-slate-100">
+      {/* Responsive Content Grid: Mobile (1 Col Stack) vs Desktop (2 Col Expansive) */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Left Column: Monthly Calendar Card */}
+        <div className="w-full lg:w-[380px] xl:w-[420px] lg:shrink-0">
+          <div className="bg-white rounded-3xl p-5 shadow-soft-card mb-4 border border-slate-100">
         {/* Month Selector Bar */}
         <div className="flex items-center justify-between mb-4 px-1">
           <div>
@@ -341,7 +344,10 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
           })}
         </div>
       </div>
+    </div>
 
+    {/* Right Column: Timeline & Agenda List Card */}
+    <div className="w-full lg:flex-1 min-w-0 bg-white rounded-3xl p-4 sm:p-5 shadow-soft-card border border-slate-100">
       {/* Tab Filter: Tanggal Ini, Semua Tim, & 1 Minggu Penuh */}
       <div className="flex items-center gap-1.5 mb-2.5 bg-slate-100/80 p-1 rounded-2xl">
         <button
@@ -538,6 +544,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
           </div>
         )}
       </div>
+    </div>
+  </div>
 
       {/* Minimalist Page Footer */}
       <DeveloperFooter />

@@ -222,6 +222,27 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         .filter((a) => a.completed && (isSamePersonName(a.pic, fullName) || !a.pic))
         .map((a) => (a.storeCode || a.location || '').trim().toLowerCase())
     );
+
+    if (typeof window !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('fmcu_visit_report_')) {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed && (isSamePersonName(parsed.visitorName, fullName) || !parsed.visitorName)) {
+                if (parsed.storeCode) visitedCodes.add(String(parsed.storeCode).toLowerCase());
+                if (parsed.storeName) visitedCodes.add(String(parsed.storeName).toLowerCase());
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     return ownedStores.filter(
       (s) => visitedCodes.has(s.code.toLowerCase()) || visitedCodes.has(s.name.toLowerCase())
     ).length;
@@ -391,14 +412,12 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         <div className="w-full max-w-[1240px] mx-auto">
           {activeMenu === 'schedule' ? (
             /* Halaman Master Kalender */
-            <div className="bg-white rounded-3xl p-5 shadow-soft-card border border-slate-100">
-              <CalendarScheduleView
-                user={user}
-                agendas={agendas}
-                onBack={() => setActiveMenu('dashboard')}
-                onSelectAgenda={onSelectAgenda}
-              />
-            </div>
+            <CalendarScheduleView
+              user={user}
+              agendas={agendas}
+              onBack={() => setActiveMenu('dashboard')}
+              onSelectAgenda={onSelectAgenda}
+            />
           ) : activeMenu === 'coverage' ? (
             /* Halaman Coverage Store & Leaderboard */
             <HistoryView

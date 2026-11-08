@@ -21,12 +21,13 @@ import {
   deleteAgendaFromCloud,
   subscribeToLocalSync,
 } from './services/cloudScheduleSyncService';
+import { fetchAllVisitReportsFromCloud } from './services/crossDeviceVisitSyncService';
 import {
   initSilentBackgroundPositioning,
   hydrateAgendasWithLocalAttendance,
   flushOfflineAttendanceQueue,
 } from './services/actualAttendanceService';
-import { Smartphone, Monitor, Shield, ArrowLeft } from 'lucide-react';
+import { Shield, ArrowLeft } from 'lucide-react';
 import { GpsEnforcerGuard } from './components/common/GpsEnforcerGuard';
 
 // Code-split heavy components to make initial splash & login load instantly on mobile
@@ -211,9 +212,47 @@ export const App: React.FC = () => {
     if (isSyncingCloudRef.current) return;
     isSyncingCloudRef.current = true;
     try {
-      const cloudAgendas = await fetchSchedulesFromCloud();
+      const [cloudAgendas, cloudReports] = await Promise.all([
+        fetchSchedulesFromCloud(),
+        fetchAllVisitReportsFromCloud(true).catch(() => null),
+      ]);
+
+      // Cache cloud reports to localStorage so that all components instantly have updated reports
+      if (cloudReports && Array.isArray(cloudReports) && cloudReports.length > 0) {
+        for (const rep of cloudReports) {
+          const repKey = `fmcu_visit_report_${rep.agendaId || rep.id}`;
+          try {
+            localStorage.setItem(repKey, JSON.stringify(rep));
+          } catch {
+            // ignore quota
+          }
+        }
+      }
+
       if (cloudAgendas && cloudAgendas.length > 0) {
-        const hydratedCloud = hydrateAgendasWithLocalAttendance(cloudAgendas);
+        let hydratedCloud = hydrateAgendasWithLocalAttendance(cloudAgendas);
+
+        if (cloudReports && cloudReports.length > 0) {
+          const reportMap = new Map<string, any>();
+          cloudReports.forEach((r) => {
+            if (r.agendaId) reportMap.set(r.agendaId, r);
+            if (r.id) reportMap.set(r.id, r);
+          });
+
+          hydratedCloud = hydratedCloud.map((a) => {
+            const matchedRep = reportMap.get(a.id);
+            if (matchedRep) {
+              return {
+                ...a,
+                completed: true,
+                actualIn: a.actualIn || matchedRep.actualIn,
+                actualOut: a.actualOut || matchedRep.actualOut,
+              };
+            }
+            return a;
+          });
+        }
+
         setAgendas((prev) => {
           const buildSig = (list: ScheduleAgenda[]) =>
             list
@@ -511,68 +550,20 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Real Web Header / Control Banner for Desktop Viewers (Hidden when printing PDF) */}
-      <div className="hidden lg:flex items-center justify-between px-5 py-1.5 bg-white/80 backdrop-blur-md border-b border-slate-200/60 shrink-0 z-40 print:hidden">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-bold text-slate-800">FMCU TEAMS Live Web Application</span>
-          <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
-            Real Web Mode
-          </span>
-          <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-            User: {user.name}
-          </span>
-        </div>
-
-        {/* Layout Switcher (Allows testing true mobile layout right inside the desktop browser!) */}
-        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
-          <button
-            onClick={() => setLayoutMode('auto')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-              layoutMode === 'auto'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Auto Responsive
-          </button>
-          <button
-            onClick={() => setLayoutMode('desktop')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-              layoutMode === 'desktop'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Monitor className="w-3.5 h-3.5 text-teal-600" />
-            <span>Desktop Dashboard</span>
-          </button>
-          <button
-            onClick={() => setLayoutMode('mobile')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-              layoutMode === 'mobile'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Smartphone className="w-3.5 h-3.5 text-blue-600" />
-            <span>Mobile App View</span>
-          </button>
-        </div>
-      </div>
-
       {/* Main Content: Responsive Desktop or Native Mobile */}
       {mobileScreen === 'visit-form' && selectedAgenda ? (
-        /* Full UI/UX FORM VISIT (KHUSUS AGENDA VISIT) */
-        <Suspense fallback={<PageTransitionLoader visible={true} />}>
-          <VisitReportForm
-            agenda={selectedAgenda}
-            allAgendas={agendas}
-            onUpdateAgenda={handleUpdateAgenda}
-            user={user}
-            onBack={() => setMobileScreen(isMobileLayout ? 'detail' : 'main')}
-          />
-        </Suspense>
+        /* Full UI/UX FORM VISIT (KHUSUS AGENDA VISIT) - Full scrollable container */
+        <div className="flex-1 w-full h-full overflow-y-auto bg-[#F8F9FD]">
+          <Suspense fallback={<PageTransitionLoader visible={true} />}>
+            <VisitReportForm
+              agenda={selectedAgenda}
+              allAgendas={agendas}
+              onUpdateAgenda={handleUpdateAgenda}
+              user={user}
+              onBack={() => setMobileScreen(isMobileLayout ? 'detail' : 'main')}
+            />
+          </Suspense>
+        </div>
       ) : isMobileLayout ? (
         /* Mobile Full-Screen Web App */
         <div className="flex-1 w-full max-w-md mx-auto min-h-screen bg-[#F8F9FD] flex flex-col relative">

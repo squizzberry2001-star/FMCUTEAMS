@@ -1898,7 +1898,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   return (
     <div
       ref={formScrollContainerRef}
-      className="flex flex-col min-h-screen bg-[#F8F9FD] select-none px-4 sm:px-6 pt-20 pb-36 max-w-6xl mx-auto w-full relative"
+      className="flex flex-col min-h-full bg-[#F8F9FD] select-none px-4 sm:px-6 pt-16 pb-36 max-w-6xl mx-auto w-full relative"
     >
       {/* Section / Sub-Tab Blur + Silhouette + Mini "FMCU....." Bouncing Loader */}
       <PageTransitionLoader visible={isSectionTransitioning} />
@@ -3737,16 +3737,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           FLOATING QUICK ACTIONS (POJOK KANAN BAWAH TEPAT DI ATAS NAVBAR)
           - Section 2 (Observasi): Tombol + & Navigasi Cepat Antar Card Temuan (Liquid Glass)
           - Section 3 (Bukti): Tombol Icon Camera & Gallery (Liquid Glass)
-          Auto-Hide saat Scroll Down (Menciut instant lalu menghilang)
-          Auto-Appear saat Scroll Up
+          Selalu aktif dan tidak menghilang saat scroll ke bawah
           ===================================================================== */}
       {activeSection === 2 && isCurrentObsSubTabEnabled && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
-            isScrolled
-              ? 'translate-y-36 opacity-0 pointer-events-none'
-              : 'translate-y-0 opacity-100 pointer-events-auto'
-          }`}
+          className="fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none pointer-events-auto transition-transform duration-200"
         >
           {/* Quick Prev / Next Card Navigation Pill with Liquid Glass */}
           {currentObsList.length > 0 && (
@@ -3789,11 +3784,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {activeSection === 3 && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
-            isScrolled
-              ? 'translate-y-36 opacity-0 pointer-events-none'
-              : 'translate-y-0 opacity-100 pointer-events-auto'
-          }`}
+          className="fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none pointer-events-auto transition-transform duration-200"
         >
           {/* Button Icon Gallery with Liquid Glass */}
           <button

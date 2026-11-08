@@ -19,6 +19,7 @@ import { DeveloperFooter } from './DeveloperFooter';
 import { LeaderboardTopVisit } from './LeaderboardTopVisit';
 import { ScheduleAgenda, User } from '../types';
 import { VisitReportData } from '../types/visitReport';
+import { fetchAllVisitReportsFromCloud } from '../services/crossDeviceVisitSyncService';
 import {
   getStoresWithOwnership,
   isSamePersonName,
@@ -225,6 +226,37 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [activeCoverageTab, setActiveCoverageTab] = useState<'coverage' | 'leaderboard'>('coverage');
   const [storeFilter, setStoreFilter] = useState<'all' | 'covered' | 'pending'>('all');
   const [storeSearch, setStoreSearch] = useState('');
+  const [cloudReports, setCloudReports] = useState<(VisitReportData & { updatedAtMs?: number })[]>([]);
+
+  // Real-time Cloud GDrive Visit Reports Fetcher
+  useEffect(() => {
+    let isMounted = true;
+    const loadReports = async () => {
+      try {
+        const reps = await fetchAllVisitReportsFromCloud(true);
+        if (isMounted && reps && Array.isArray(reps)) {
+          setCloudReports(reps);
+          for (const r of reps) {
+            const key = `fmcu_visit_report_${r.agendaId || r.id}`;
+            try {
+              localStorage.setItem(key, JSON.stringify(r));
+            } catch {
+              // ignore storage quota
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('HistoryView cloud reports load warning:', e);
+      }
+    };
+
+    loadReports();
+    const interval = setInterval(loadReports, 6000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Direct In-Web GDrive PDF Viewer State
   const [activeReportViewer, setActiveReportViewer] = useState<{
@@ -296,6 +328,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       }
     }
 
+    // Cek dari cloudReports yang berhasil ditarik secara realtime dari Google Drive / Cloud
+    if (cloudReports && cloudReports.length > 0) {
+      for (const r of cloudReports) {
+        if (!hasOwnStores || isSamePersonName(r.visitorName, currentUserName)) {
+          if (r.storeCode) coveredCodes.add(String(r.storeCode).toUpperCase());
+          if (r.storeName) coveredNames.add(String(r.storeName).toUpperCase());
+        }
+      }
+    }
+
     const relevantAgendas = hasOwnStores ? myScheduleHistory : agendas;
     relevantAgendas.forEach((ag) => {
       if (ag.category === 'OFF' || ag.category === 'CUTI') return;
@@ -345,7 +387,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       totalCount: targetStores.length,
       displayPercentage,
     };
-  }, [targetStores, hasOwnStores, myScheduleHistory, agendas, currentUserName]);
+  }, [targetStores, hasOwnStores, myScheduleHistory, agendas, currentUserName, cloudReports]);
 
   // Filter daftar toko
   const filteredStoreStatuses = useMemo(() => {
@@ -556,7 +598,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-2xl mx-auto w-full select-none">
+    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-28 max-w-6xl mx-auto w-full select-none">
       {activeCoverageTab === 'coverage' ? (
         <>
           {/* Header Section 3: Coverage Store */}
@@ -685,7 +727,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           />
         </div>
 
-        <div className="max-h-72 overflow-y-auto space-y-2 pr-0.5 no-scrollbar">
+        <div className="max-h-96 overflow-y-auto pr-0.5 no-scrollbar grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
           {filteredStoreStatuses.length === 0 ? (
             <p className="text-center text-xs text-slate-400 py-4">
               Tidak ada toko yang sesuai filter.
@@ -761,9 +803,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </span>
       </div>
 
-      <div className="space-y-2.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {myScheduleHistory.length === 0 ? (
-          <div className="bg-white rounded-2xl p-6 text-center shadow-soft-card border border-slate-100">
+          <div className="col-span-full bg-white rounded-2xl p-6 text-center shadow-soft-card border border-slate-100">
             <p className="text-xs font-bold text-slate-500">
               Belum ada riwayat kunjungan toko untuk akun {currentUserName}.
             </p>
