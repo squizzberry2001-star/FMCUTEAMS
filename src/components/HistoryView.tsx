@@ -621,53 +621,91 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </div>
           </div>
 
-      {/* Main Coverage Summary Card */}
-      <div className="bg-gradient-to-br from-[#2BB3A0] to-[#169888] rounded-3xl p-5 sm:p-6 text-white shadow-pill-teal mb-5 relative overflow-hidden">
-        <div className="absolute -right-4 -bottom-4 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none" />
+      {/* Main Coverage Summary Card - Executive Hero Card (Anti-shrink & Desktop Optimized) */}
+      <div className="w-full shrink-0 min-h-[200px] sm:min-h-[220px] bg-gradient-to-br from-[#129A88] via-[#1CB5A2] to-[#0E7F70] rounded-[32px] sm:rounded-[36px] p-6 sm:p-8 text-white shadow-xl shadow-teal-900/15 mb-6 relative overflow-hidden flex flex-col justify-between transition-all">
+        {/* Ambient Glow Orbs for Luxurious Depth */}
+        <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-white/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -left-12 -top-12 w-48 h-48 bg-emerald-300/20 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <span className="text-[11px] font-extrabold text-teal-100 uppercase tracking-wider flex items-center gap-1.5">
+        {/* Top Header Row: Status Badge & Store Counter */}
+        <div className="relative z-10 flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-md border border-white/25 text-xs font-black tracking-wide uppercase text-teal-50 shadow-sm">
             {hasOwnStores ? (
               <>
-                <UserCheck className="w-3.5 h-3.5" />
+                <UserCheck className="w-4 h-4 text-emerald-200" />
                 <span>Status Coverage Toko Milik Saya</span>
               </>
             ) : (
               <>
-                <Building2 className="w-3.5 h-3.5" />
-                <span>Persentase Semua Toko FMCU</span>
+                <Building2 className="w-4 h-4 text-emerald-200" />
+                <span>Persentase Seluruh Toko FMCU</span>
               </>
             )}
-          </span>
-          <span className="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
-            <TrendingUp className="w-3 h-3" />
+          </div>
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/20 backdrop-blur-md border border-white/20 text-xs font-bold text-teal-100 shadow-sm">
+            <TrendingUp className="w-4 h-4 text-emerald-300" />
             <span>
-              {coverageAnalysis.coveredCount}/{coverageAnalysis.totalCount} Toko
+              {coverageAnalysis.coveredCount} dari {coverageAnalysis.totalCount} Toko Ter-cover
             </span>
-          </span>
+          </div>
         </div>
 
-        <div className="flex items-baseline gap-2.5 mt-1">
-          <h3 className="text-4xl font-black tabular-nums">
-            {coverageAnalysis.displayPercentage}%
-          </h3>
-          <span className="text-xs font-bold text-teal-100">
-            {hasOwnStores ? `(${currentUserName})` : '(Seluruh Toko)'}
-          </span>
+        {/* Middle Content Row: Giant Percentage, Persona Label & Quick KPI Grid */}
+        <div className="relative z-10 my-2 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+          <div className="md:col-span-7 flex items-baseline gap-4">
+            <h3 className="text-5xl sm:text-6xl lg:text-7xl font-black tabular-nums tracking-tight drop-shadow-sm">
+              {coverageAnalysis.displayPercentage}%
+            </h3>
+            <div className="flex flex-col">
+              <span className="text-sm sm:text-base font-extrabold text-teal-100">
+                {hasOwnStores ? `Penugasan Toko: ${currentUserName}` : 'Semua Jaringan Toko'}
+              </span>
+              <p className="text-xs sm:text-[13px] text-teal-50/90 font-medium leading-relaxed max-w-lg mt-0.5">
+                {hasOwnStores
+                  ? `Menampilkan cakupan riil dari ${coverageAnalysis.totalCount} toko milik Anda. Tercatat ${coverageAnalysis.coveredCount} toko telah selesai dikunjungi atau terjadwal.`
+                  : `Menampilkan total persentase cakupan operasional dari seluruh ${coverageAnalysis.totalCount} jaringan toko FMCU.`}
+              </p>
+            </div>
+          </div>
+
+          <div className="md:col-span-5 grid grid-cols-2 gap-2.5">
+            <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex flex-col justify-center">
+              <span className="text-[10.5px] font-bold text-teal-200 uppercase tracking-wider">
+                Toko Ter-cover
+              </span>
+              <span className="text-2xl font-black tabular-nums text-white mt-0.5">
+                {coverageAnalysis.coveredCount}
+              </span>
+            </div>
+            <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex flex-col justify-center">
+              <span className="text-[10.5px] font-bold text-teal-200 uppercase tracking-wider">
+                Sisa Belum Visit
+              </span>
+              <span className="text-2xl font-black tabular-nums text-white mt-0.5">
+                {Math.max(0, coverageAnalysis.totalCount - coverageAnalysis.coveredCount)}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <p className="text-xs text-teal-50/95 mt-2 leading-relaxed">
-          {hasOwnStores
-            ? `Menampilkan status coverage khusus untuk ${coverageAnalysis.totalCount} toko milik Anda. Tercatat ${coverageAnalysis.coveredCount} toko telah masuk dalam cakupan jadwal/kunjungan.`
-            : `Menampilkan persentase coverage dari seluruh ${coverageAnalysis.totalCount} toko jaringan FMCU.`}
-        </p>
-
-        {/* Progress Bar */}
-        <div className="w-full bg-black/15 rounded-full h-2.5 mt-4 overflow-hidden">
-          <div
-            className="bg-white h-2.5 rounded-full transition-all duration-500"
-            style={{ width: `${Math.min(100, Math.max(4, coverageAnalysis.displayPercentage))}%` }}
-          />
+        {/* Bottom Section: Progress Bar with Real-time Markers */}
+        <div className="relative z-10 mt-4 pt-2">
+          <div className="flex items-center justify-between text-xs font-extrabold text-teal-100 mb-2">
+            <span>Progres Penyelesaian Kunjungan</span>
+            <span>
+              {coverageAnalysis.coveredCount} / {coverageAnalysis.totalCount} Toko (
+              {coverageAnalysis.displayPercentage}%)
+            </span>
+          </div>
+          <div className="w-full bg-black/25 rounded-full h-3 sm:h-3.5 p-0.5 border border-white/20 overflow-hidden shadow-inner">
+            <div
+              className="bg-gradient-to-r from-white via-teal-100 to-white h-full rounded-full transition-all duration-700 shadow-sm"
+              style={{
+                width: `${Math.min(100, Math.max(3, coverageAnalysis.displayPercentage))}%`,
+              }}
+            />
+          </div>
         </div>
       </div>
 

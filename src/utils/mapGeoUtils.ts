@@ -319,45 +319,178 @@ export interface UserPinpoint {
   targetStoreName: string;
   distanceToStoreMeters: number;
   isInsideRadius: boolean;
+  gpsSource?: 'LIVE_DEVICE' | 'ATTENDANCE_CHECKIN' | 'VISIT_REPORT';
+  gpsAccuracy?: number;
+  capturedAt?: string;
+  isRealGps: true;
 }
 
 /**
- * Compute simulated/live field positions of users for Admin Map Monitoring
+ * Parses raw GPS coordinate string e.g. "-6.2293, 106.8256" or "-6.22930, 106.82560 (Akurat)"
+ */
+function parseGpsCoordinate(raw: string | null | undefined): { lat: number; lng: number } | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const clean = raw.replace(/\(.*?\)/g, '').trim();
+  const parts = clean.split(',').map((p) => parseFloat(p.trim()));
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    const [lat, lng] = parts;
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0)) {
+      return { lat, lng };
+    }
+  }
+  return null;
+}
+
+/**
+ * Compute REAL field positions of users for Admin Map Monitoring.
+ * ATURAN MUTLAK: Hilangkan seluruh dummy pin point. Jika user belum pernah
+ * terdeteksi GPS aktual atau belum pernah mengakses web/check-in sama sekali,
+ * mereka TIDAK AKAN ditampilkan di peta.
  */
 export function buildAdminUserPinpoints(
   users: User[],
   scheduledPoints: StoreGeoPoint[],
-  radiusMeters: number
+  radiusMeters: number,
+  agendas: ScheduleAgenda[] = [],
+  currentUser?: User | null
 ): UserPinpoint[] {
   const result: UserPinpoint[] = [];
   const nonAdminUsers = users.filter((u) => !u.isAdmin);
 
-  nonAdminUsers.forEach((u, idx) => {
-    // Find first scheduled store for this user
+  // 1. Cek koordinat GPS perangkat aktif saat ini
+  let localGpsStr: string | null = null;
+  let activeSessionUserName: string | null = currentUser?.name || null;
+  try {
+    if (!activeSessionUserName) {
+      const sessionRaw = localStorage.getItem('fmcu_user_session_v3');
+      if (sessionRaw) {
+        const parsed = JSON.parse(sessionRaw);
+        activeSessionUserName = parsed.name || null;
+      }
+    }
+    localGpsStr = localStorage.getItem('fmcu_live_gps');
+  } catch {
+    // ignore storage access error
+  }
+
+  // 2. Load riwayat audit GPS kehadiran aktual dari localStorage
+  let localAttendanceMap: Record<string, { silentAudit?: any }> = {};
+  try {
+    const rawMap = localStorage.getItem('fmcu_actual_attendance_map_v2');
+    if (rawMap) localAttendanceMap = JSON.parse(rawMap);
+  } catch {
+    // ignore
+  }
+
+  // 3. Scan riwayat laporan visit yang tersimpan di localStorage
+  const userReportGpsMap = new Map<string, { lat: number; lng: number; capturedAt?: string }>();
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('fmcu_visit_report_')) {
+        const itemRaw = localStorage.getItem(key);
+        if (itemRaw) {
+          try {
+            const report = JSON.parse(itemRaw);
+            if (report.visitorName && report.liveGps) {
+              const coords = parseGpsCoordinate(report.liveGps);
+              if (coords) {
+                userReportGpsMap.set(report.visitorName.toLowerCase().trim(), {
+                  ...coords,
+                  capturedAt: report.date || report.timestamp,
+                });
+              }
+            }
+          } catch {
+            // ignore JSON error
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  nonAdminUsers.forEach((u) => {
+    let realCoords: { lat: number; lng: number } | null = null;
+    let gpsSource: 'LIVE_DEVICE' | 'ATTENDANCE_CHECKIN' | 'VISIT_REPORT' = 'LIVE_DEVICE';
+    let gpsAccuracy: number | undefined;
+    let capturedAt: string | undefined;
+
+    // Prioritas 1: GPS Perangkat Aktif jika pengguna saat ini sedang login & membuka web
+    if (
+      activeSessionUserName &&
+      isSamePersonName(activeSessionUserName, u.name) &&
+      localGpsStr
+    ) {
+      const parsed = parseGpsCoordinate(localGpsStr);
+      if (parsed) {
+        realCoords = parsed;
+        gpsSource = 'LIVE_DEVICE';
+        gpsAccuracy = 15;
+        capturedAt = 'Sekarang (Realtime Aktif)';
+      }
+    }
+
+    // Prioritas 2: Riwayat Audit GPS Kehadiran Aktual (Check-In / Check-Out)
+    if (!realCoords) {
+      const userAgendas = agendas.filter((ag) => isSamePersonName(ag.pic, u.name));
+      for (const ag of userAgendas) {
+        const audit = ag.silentAudit || localAttendanceMap[ag.id]?.silentAudit;
+        if (audit?.inLat && audit?.inLng && (audit.inLat !== 0 || audit.inLng !== 0)) {
+          realCoords = { lat: audit.inLat, lng: audit.inLng };
+          gpsSource = 'ATTENDANCE_CHECKIN';
+          gpsAccuracy = audit.inAccuracyMeters;
+          capturedAt = ag.actualIn || ag.date;
+          break;
+        } else if (audit?.outLat && audit?.outLng && (audit.outLat !== 0 || audit.outLng !== 0)) {
+          realCoords = { lat: audit.outLat, lng: audit.outLng };
+          gpsSource = 'ATTENDANCE_CHECKIN';
+          gpsAccuracy = audit.outAccuracyMeters;
+          capturedAt = ag.actualOut || ag.date;
+          break;
+        }
+      }
+    }
+
+    // Prioritas 3: GPS dari Laporan Visit Lapangan yang Disimpan
+    if (!realCoords) {
+      const reportCoords = userReportGpsMap.get(u.name.toLowerCase().trim());
+      if (reportCoords) {
+        realCoords = { lat: reportCoords.lat, lng: reportCoords.lng };
+        gpsSource = 'VISIT_REPORT';
+        capturedAt = reportCoords.capturedAt;
+      }
+    }
+
+    // ATURAN MUTLAK: Jika user BELUM terdeteksi GPS aktual atau belum akses web, SKIP!
+    // Tidak ada koordinat rekaan / dummy pinpoint sama sekali.
+    if (!realCoords) {
+      return;
+    }
+
+    // Cari toko penugasan pengguna untuk menghitung jarak aktual ke toko
     const userStore = scheduledPoints.find((p) => isSamePersonName(p.agendaPic, u.name));
-    if (!userStore) return;
+    const targetStore = userStore || scheduledPoints[0];
 
-    // Deterministic slight offset around the target store (some inside radius, some en-route)
-    const seed = Math.sin((idx + 1) * 97.13);
-    const angle = ((idx * 137.5) % 360) * (Math.PI / 180);
-    // Distance between 45m and 380m
-    const distMeters = Math.round(45 + Math.abs(seed) * 280);
-    const dLat = (distMeters * Math.cos(angle)) / 111320;
-    const dLng = (distMeters * Math.sin(angle)) / (111320 * Math.cos((userStore.lat * Math.PI) / 180));
-
-    const uLat = userStore.lat + dLat;
-    const uLng = userStore.lng + dLng;
+    const distMeters = targetStore
+      ? Math.round(calculateHaversineKm(realCoords.lat, realCoords.lng, targetStore.lat, targetStore.lng) * 1000)
+      : 0;
 
     result.push({
       userName: u.name,
       role: u.role || 'FMCU Field Specialist',
-      lat: uLat,
-      lng: uLng,
-      altitude: userStore.altitude,
-      targetStoreCode: userStore.code,
-      targetStoreName: userStore.name,
+      lat: realCoords.lat,
+      lng: realCoords.lng,
+      altitude: targetStore?.altitude || 25,
+      targetStoreCode: targetStore?.code || 'FMCU',
+      targetStoreName: targetStore?.name || 'Area Operasional FMCU',
       distanceToStoreMeters: distMeters,
-      isInsideRadius: distMeters <= radiusMeters,
+      isInsideRadius: targetStore ? distMeters <= radiusMeters : false,
+      gpsSource,
+      gpsAccuracy,
+      capturedAt,
+      isRealGps: true,
     });
   });
 

@@ -256,15 +256,15 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     return displayedStorePoints.slice(0, 50);
   }, [viewMode, displayedStorePoints, scheduledStorePoints, searchQuery]);
 
-  // 3. Admin User Pinpoints
+  // 3. Admin User Pinpoints (HANYA USER YANG BENAR TERDETEKSI GPS AKTUAL / SUDAH AKSES WEB)
   const adminUserPinpoints = useMemo(() => {
     if (!isAdmin) return [];
     const targetRef =
       scheduledStorePoints.length > 0 ? scheduledStorePoints : allMasterGeoPoints.slice(0, 30);
-    const allPoints = buildAdminUserPinpoints(users, targetRef, radiusMeters);
+    const allPoints = buildAdminUserPinpoints(users, targetRef, radiusMeters, agendas, currentUser);
     if (selectedPicFilter === 'ALL') return allPoints;
     return allPoints.filter((u) => isSamePersonName(u.userName, selectedPicFilter));
-  }, [isAdmin, users, scheduledStorePoints, allMasterGeoPoints, radiusMeters, selectedPicFilter]);
+  }, [isAdmin, users, scheduledStorePoints, allMasterGeoPoints, radiusMeters, selectedPicFilter, agendas, currentUser]);
 
   // 4. Total Scheduled Route Distance Calculation
   const totalRouteKm = useMemo(() => {
@@ -513,7 +513,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         const targetStore =
           scheduledStorePoints.find((s) => s.code === up.targetStoreCode) ||
           displayedStorePoints.find((s) => s.code === up.targetStoreCode);
-        if (targetStore) {
+        if (targetStore && up.distanceToStoreMeters < 50000) {
           L.polyline(
             [
               [up.lat, up.lng],
@@ -617,16 +617,29 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
           L.popup({ closeButton: true, autoPan: true })
             .setLatLng([up.lat, up.lng])
             .setContent(
-              `<div style="font-family:system-ui,-apple-system,sans-serif;min-width:185px;padding:2px;">
-                <div style="font-size:9.5px;font-weight:800;color:#2563EB;text-transform:uppercase;">PINPOINT USER LAPANGAN</div>
-                <div style="font-size:12.5px;font-weight:900;color:#0F172A;margin-top:2px;">${up.userName}</div>
-                <div style="font-size:10px;color:#64748B;margin-bottom:5px;">${up.role}</div>
-                <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:5px;font-size:10px;">
-                  <div><strong>Tujuan:</strong> Toko ${up.targetStoreName} (#${up.targetStoreCode})</div>
-                  <div><strong>Jarak:</strong> ${up.distanceToStoreMeters}m (${
-                up.isInsideRadius ? 'Dalam Radius' : 'Menuju Lokasi'
-              })</div>
-                  <div><strong>Koordinat:</strong> ${up.lat.toFixed(4)}°, ${up.lng.toFixed(4)}°</div>
+              `<div style="font-family:system-ui,-apple-system,sans-serif;min-width:215px;padding:3px;">
+                <div style="display:flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;color:#059669;text-transform:uppercase;">
+                  <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10B981;box-shadow:0 0 6px #10B981;"></span>
+                  LIVE GPS TERVERIFIKASI
+                </div>
+                <div style="font-size:13px;font-weight:900;color:#0F172A;margin-top:2px;">${up.userName}</div>
+                <div style="font-size:10px;color:#64748B;margin-bottom:6px;">${up.role}</div>
+                <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:6px;font-size:10.5px;line-height:1.45;">
+                  <div><strong>Tujuan:</strong> ${up.targetStoreName} (#${up.targetStoreCode})</div>
+                  <div><strong>Jarak Aktual:</strong> ${
+                    up.distanceToStoreMeters >= 1000
+                      ? (up.distanceToStoreMeters / 1000).toFixed(1) + ' km'
+                      : up.distanceToStoreMeters + ' m'
+                  } (${up.isInsideRadius ? '✅ Dalam Radius' : '🚗 Menuju Lokasi'})</div>
+                  <div><strong>Sumber GPS:</strong> ${
+                    up.gpsSource === 'LIVE_DEVICE'
+                      ? 'Perangkat Aktif (Realtime)'
+                      : up.gpsSource === 'ATTENDANCE_CHECKIN'
+                      ? 'Audit Kehadiran Toko'
+                      : 'Laporan Visit Lapangan'
+                  }</div>
+                  ${up.capturedAt ? `<div><strong>Waktu:</strong> ${up.capturedAt}</div>` : ''}
+                  <div style="font-size:9.5px;color:#64748B;margin-top:2px;"><strong>Koordinat:</strong> ${up.lat.toFixed(5)}°, ${up.lng.toFixed(5)}°</div>
                 </div>
               </div>`
             )
@@ -918,7 +931,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                           : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      User
+                      User ({adminUserPinpoints.length})
                     </button>
                     <button
                       type="button"
