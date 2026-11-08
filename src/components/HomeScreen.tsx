@@ -92,6 +92,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
+  const shortMonthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+  ];
+  const shortDayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+  const formatShortDayDate = (dateYmd: string) => {
+    const dt = new Date(dateYmd + 'T00:00:00');
+    if (isNaN(dt.getTime())) return dateYmd;
+    const dayLabel = shortDayNames[dt.getDay()];
+    const dd = String(dt.getDate()).padStart(2, '0');
+    const mon = shortMonthNames[dt.getMonth()];
+    return `${dayLabel}, ${dd} ${mon}`;
+  };
   const currentMonthYear = `${monthNames[liveNow.getMonth()]} ${liveNow.getFullYear()}`;
   const actualDateNum = liveNow.getDate();
   const actualMonthName = monthNames[liveNow.getMonth()];
@@ -109,11 +123,39 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       // KETIKA USER KLIK TOMBOL HARI INI MAKA SELECTION PILL AUTO KE TANGGAL AKTUAL
       onSelectDate(todayStr);
       setCalendarFocus({ mode: 'today', ts: Date.now() });
-    } else if (period === 'Week') {
-      // KETIKA USER KLIK MINGGU INI PILL AUTO FOCUS KE MINGGUAN AKTUAL
+    } else if (period === 'Week' || period === 'AllTeam') {
+      // KETIKA USER KLIK MINGGU INI ATAU SEMUA TIM PILL AUTO FOCUS KE MINGGUAN AKTUAL
       setCalendarFocus({ mode: 'week', ts: Date.now() });
     }
   };
+
+  // Rentang 1 Minggu Penuh untuk tab Semua Tim (mengikuti minggu dari pill yang dipilih atau minggu berjalan)
+  const { teamWeekStartStr, teamWeekEndStr } = useMemo(() => {
+    if (selectedDate >= weekStartStr && selectedDate <= weekEndStr) {
+      // Gunakan Senin s/d Minggu dari currentWeekMonday (7 hari penuh jadwal mingguan)
+      const monDate = new Date(currentWeekMonday + 'T00:00:00');
+      const sunDate = new Date(monDate);
+      sunDate.setDate(monDate.getDate() + 6);
+      const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth() + 1).padStart(2, '0')}-${String(
+        sunDate.getDate()
+      ).padStart(2, '0')}`;
+      return { teamWeekStartStr: currentWeekMonday, teamWeekEndStr: sunStr };
+    }
+
+    const selDate = new Date(selectedDate + 'T00:00:00');
+    if (isNaN(selDate.getTime())) {
+      return { teamWeekStartStr: weekStartStr, teamWeekEndStr: weekEndStr };
+    }
+    const day = selDate.getDay();
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const calMon = new Date(selDate);
+    calMon.setDate(selDate.getDate() + diffToMon);
+    const calSun = new Date(calMon);
+    calSun.setDate(calMon.getDate() + 6);
+    const toYmd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { teamWeekStartStr: toYmd(calMon), teamWeekEndStr: toYmd(calSun) };
+  }, [selectedDate, weekStartStr, weekEndStr, currentWeekMonday]);
 
   // Daftar seluruh nama tim unik terurut A-Z untuk fitur Filter by Nama
   const allTeamNamesAZ = useMemo(() => {
@@ -126,7 +168,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // Filter agenda berdasarkan tab aktif:
   // - 'Today': Jadwal milik user pada tanggal terpilih
   // - 'Week': Jadwal milik user pada minggu aktual
-  // - 'AllTeam': Jadwal Semua Tim pada tanggal terpilih (Diurutkan A-Z Nama Tim + Filter by Nama)
+  // - 'AllTeam': Jadwal Semua Tim dalam 1 Minggu Penuh (Diurutkan A-Z Nama Tim + Filter by Nama)
   const displayedAgendas = useMemo(() => {
     const q = nameFilter.trim().toLowerCase();
 
@@ -143,8 +185,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       if (selectedPeriod === 'Week') {
         return isMyAgenda && item.date >= weekStartStr && item.date <= weekEndStr;
       }
-      // 'AllTeam' -> Menampilkan jadwal seluruh tim pada tanggal yang dipilih + Filter by Nama
-      if (item.date !== selectedDate) return false;
+      // 'AllTeam' -> Menampilkan jadwal seluruh tim dalam 1 Minggu Penuh + Filter by Nama
+      if (item.date < teamWeekStartStr || item.date > teamWeekEndStr) return false;
 
       if (selectedPersonDropdown !== 'ALL') {
         if (!isSamePersonName(item.pic, selectedPersonDropdown) && item.pic !== selectedPersonDropdown) {
@@ -164,12 +206,49 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       return [...filtered].sort(
         (a, b) =>
           (a.pic || '').localeCompare(b.pic || '', 'id', { sensitivity: 'base' }) ||
+          (a.date || '').localeCompare(b.date || '') ||
           (a.time || '').localeCompare(b.time || '')
       );
     }
 
     return filtered;
-  }, [agendas, fullName, selectedPeriod, selectedDate, weekStartStr, weekEndStr, nameFilter, selectedPersonDropdown]);
+  }, [
+    agendas,
+    fullName,
+    selectedPeriod,
+    selectedDate,
+    weekStartStr,
+    weekEndStr,
+    teamWeekStartStr,
+    teamWeekEndStr,
+    nameFilter,
+    selectedPersonDropdown,
+  ]);
+
+  // Pengelompokan per Nama Tim (A-Z) untuk tab Semua Tim (1 Minggu Penuh):
+  // Visual Nama Kecil Bold di atas, lalu di bawahnya semua agendanya dalam 1 minggu berurutan sampai bawah
+  const groupedAllTeamWeekByPerson = useMemo(() => {
+    if (selectedPeriod !== 'AllTeam') return [];
+    const groupsMap = new Map<string, ScheduleAgenda[]>();
+    for (const item of displayedAgendas) {
+      const picName = (item.pic || 'Tanpa Nama').trim();
+      if (!groupsMap.has(picName)) {
+        groupsMap.set(picName, []);
+      }
+      groupsMap.get(picName)!.push(item);
+    }
+
+    return Array.from(groupsMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'id', { sensitivity: 'base' }))
+      .map(([picName, items]) => ({
+        picName,
+        items: items.sort(
+          (x, y) =>
+            (x.date || '').localeCompare(y.date || '') ||
+            (x.time || '').localeCompare(y.time || '')
+        ),
+      }));
+  }, [selectedPeriod, displayedAgendas]);
 
   // Scroll detection & auto navbar scale with rAF throttling & icon click restore
   const manualExpandedRef = useRef(false);
@@ -403,7 +482,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <div className="text-center py-10 bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
             <p className="text-slate-500 text-xs font-semibold">
               {selectedPeriod === 'AllTeam'
-                ? `Belum ada schedule agenda tim yang cocok pada tanggal ini (${selectedDate}).`
+                ? `Belum ada schedule agenda tim yang cocok pada minggu ${formatShortDayDate(teamWeekStartStr)} – ${formatShortDayDate(teamWeekEndStr)}.`
                 : selectedPeriod === 'Week'
                 ? `Tidak ada agenda yang ditugaskan kepada Anda pada minggu ini.`
                 : `Tidak ada agenda yang ditugaskan kepada Anda pada tanggal ini (${selectedDate}).`}
@@ -412,47 +491,68 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <div className="mt-3">
                 <button
                   type="button"
-                  onClick={() => setSelectedPeriod('AllTeam')}
+                  onClick={() => handleSelectPeriodTab('AllTeam')}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 text-xs font-bold border border-teal-200/60 hover:bg-teal-100 transition-colors cursor-pointer"
                 >
                   <span>
-                    Lihat Semua Tim ({agendas.filter((a) => a.date === selectedDate).length})
+                    Lihat Semua Tim 1 Minggu ({agendas.filter((a) => a.date >= teamWeekStartStr && a.date <= teamWeekEndStr).length})
                   </span>
                 </button>
               </div>
             )}
           </div>
         ) : selectedPeriod === 'AllTeam' ? (
-          /* Minimalist Text List pada Semua Tim (Nama Kecil Bold, Di Bawahnya Agendanya Thin Kecil - Bukan Card) */
-          <div className="divide-y divide-slate-200/60 px-1">
-            {displayedAgendas.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectAgenda && onSelectAgenda(item)}
-                className="w-full text-left py-2 px-1 hover:bg-slate-100/60 active:bg-slate-100 transition-colors flex items-start justify-between gap-2 cursor-pointer"
-              >
-                <div className="min-w-0 flex-1">
-                  {/* Nama Kecil Bold */}
-                  <p className="text-[11px] font-bold text-slate-900 leading-tight truncate">
-                    {item.pic}
-                  </p>
-                  {/* Di Bawahnya Agendanya Thin Kecil */}
-                  <p className="text-[11px] font-light text-slate-600 leading-snug mt-0.5 truncate">
-                    {item.title}
-                    {item.location &&
-                    item.location !== 'OFF / LIBUR' &&
-                    !item.title.toLowerCase().includes(item.location.toLowerCase())
-                      ? ` — ${item.location}`
-                      : ''}
-                  </p>
-                </div>
+          /* Minimalist Text List Semua Tim dalam 1 Minggu Penuh: Visual Nama Kecil Bold di atas, lalu di bawahnya semua agendanya dalam 1 minggu sampai bawah */
+          <div className="px-1">
+            <div className="flex items-center justify-between px-1 mb-1.5">
+              <span className="text-[10px] font-bold text-teal-700">
+                Jadwal 1 Minggu: {formatShortDayDate(teamWeekStartStr)} – {formatShortDayDate(teamWeekEndStr)}
+              </span>
+              <span className="text-[10px] font-light text-slate-500">
+                {groupedAllTeamWeekByPerson.length} personel
+              </span>
+            </div>
 
-                <span className="text-[9px] font-light text-slate-400 shrink-0 tabular-nums pt-0.5">
-                  {item.category === 'OFF' ? 'OFF' : item.time}
-                </span>
-              </button>
-            ))}
+            <div className="divide-y divide-slate-200/70">
+              {groupedAllTeamWeekByPerson.map((group) => (
+                <div key={group.picName} className="py-2.5 px-1">
+                  {/* Visual Nama Kecil Bold */}
+                  <p className="text-[11px] font-bold text-slate-900 leading-tight mb-1">
+                    {group.picName}
+                  </p>
+
+                  {/* Di bawahnya semua agendanya dalam satu minggu penuh */}
+                  <div className="space-y-0.5 pl-2 border-l border-slate-200/80">
+                    {group.items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectAgenda && onSelectAgenda(item)}
+                        className="w-full text-left py-1 px-1.5 rounded-lg hover:bg-slate-100/70 active:bg-slate-100 transition-colors flex items-start justify-between gap-2 cursor-pointer"
+                      >
+                        <p className="text-[11px] font-light text-slate-600 leading-snug min-w-0 flex-1">
+                          <span className="font-normal text-slate-500">
+                            {formatShortDayDate(item.date)} •{' '}
+                          </span>
+                          <span>
+                            {item.title}
+                            {item.location &&
+                            item.location !== 'OFF / LIBUR' &&
+                            !item.title.toLowerCase().includes(item.location.toLowerCase())
+                              ? ` — ${item.location}`
+                              : ''}
+                          </span>
+                        </p>
+
+                        <span className="text-[9px] font-light text-slate-400 shrink-0 tabular-nums pt-0.5">
+                          {item.category === 'OFF' ? 'OFF' : item.time}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           displayedAgendas.map((agenda) => (

@@ -127,9 +127,17 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
     if (period === 'Today') {
       onSelectDate(todayStr);
       setCalendarFocus({ mode: 'today', ts: Date.now() });
-    } else if (period === 'Week') {
+    } else if (period === 'Week' || period === 'AllTeam') {
       setCalendarFocus({ mode: 'week', ts: Date.now() });
     }
+  };
+
+  const shortMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const shortDayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  const formatShortDayDate = (dateYmd: string) => {
+    const dt = new Date(dateYmd + 'T00:00:00');
+    if (isNaN(dt.getTime())) return dateYmd;
+    return `${shortDayNames[dt.getDay()]}, ${String(dt.getDate()).padStart(2, '0')} ${shortMonthNames[dt.getMonth()]}`;
   };
 
   const filteredAgendas = agendas.filter((item) => {
@@ -151,17 +159,40 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
     if (selectedPeriod === 'Week') {
       return isMyAgenda && item.date >= weekStartStr && item.date <= weekEndStr;
     }
-    // 'AllTeam'
-    return item.date === selectedDate;
+    // 'AllTeam' -> 1 Minggu Penuh
+    return item.date >= weekStartStr && item.date <= weekEndStr;
   }).sort((a, b) => {
     if (selectedPeriod === 'AllTeam') {
       return (
         (a.pic || '').localeCompare(b.pic || '', 'id', { sensitivity: 'base' }) ||
+        (a.date || '').localeCompare(b.date || '') ||
         (a.time || '').localeCompare(b.time || '')
       );
     }
     return 0;
   });
+
+  const groupedAllTeamWeekByPerson = (() => {
+    if (selectedPeriod !== 'AllTeam') return [];
+    const groupsMap = new Map<string, ScheduleAgenda[]>();
+    for (const item of filteredAgendas) {
+      const picName = (item.pic || 'Tanpa Nama').trim();
+      if (!groupsMap.has(picName)) {
+        groupsMap.set(picName, []);
+      }
+      groupsMap.get(picName)!.push(item);
+    }
+    return Array.from(groupsMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'id', { sensitivity: 'base' }))
+      .map(([picName, items]) => ({
+        picName,
+        items: items.sort(
+          (x, y) =>
+            (x.date || '').localeCompare(y.date || '') ||
+            (x.time || '').localeCompare(y.time || '')
+        ),
+      }));
+  })();
 
   const completedCount = agendas.filter((a) => a.completed).length;
   const totalCount = agendas.length;
@@ -515,34 +546,43 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               </div>
             </div>
           ) : selectedPeriod === 'AllTeam' ? (
-            <div className="col-span-full divide-y divide-slate-200/60 px-1">
-              {filteredAgendas.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onSelectAgenda(item)}
-                  className={`w-full text-left py-2 px-2 hover:bg-slate-100/70 transition-colors flex items-start justify-between gap-2 cursor-pointer rounded-lg ${
-                    selectedAgenda?.id === item.id ? 'bg-teal-50/70' : ''
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-slate-900 leading-tight truncate">
-                      {item.pic}
-                    </p>
-                    <p className="text-[11px] font-light text-slate-600 leading-snug mt-0.5 truncate">
-                      {item.title}
-                      {item.location &&
-                      item.location !== 'OFF / LIBUR' &&
-                      !item.title.toLowerCase().includes(item.location.toLowerCase())
-                        ? ` — ${item.location}`
-                        : ''}
-                    </p>
-                  </div>
+            <div className="col-span-full divide-y divide-slate-200/70 px-1">
+              {groupedAllTeamWeekByPerson.map((group) => (
+                <div key={group.picName} className="py-2.5 px-1">
+                  <p className="text-[11px] font-bold text-slate-900 leading-tight mb-1">
+                    {group.picName}
+                  </p>
+                  <div className="space-y-0.5 pl-2 border-l border-slate-200/80">
+                    {group.items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectAgenda(item)}
+                        className={`w-full text-left py-1 px-1.5 rounded-lg hover:bg-slate-100/70 transition-colors flex items-start justify-between gap-2 cursor-pointer ${
+                          selectedAgenda?.id === item.id ? 'bg-teal-50/70' : ''
+                        }`}
+                      >
+                        <p className="text-[11px] font-light text-slate-600 leading-snug min-w-0 flex-1">
+                          <span className="font-normal text-slate-500">
+                            {formatShortDayDate(item.date)} •{' '}
+                          </span>
+                          <span>
+                            {item.title}
+                            {item.location &&
+                            item.location !== 'OFF / LIBUR' &&
+                            !item.title.toLowerCase().includes(item.location.toLowerCase())
+                              ? ` — ${item.location}`
+                              : ''}
+                          </span>
+                        </p>
 
-                  <span className="text-[9px] font-light text-slate-400 shrink-0 tabular-nums pt-0.5">
-                    {item.category === 'OFF' ? 'OFF' : item.time}
-                  </span>
-                </button>
+                        <span className="text-[9px] font-light text-slate-400 shrink-0 tabular-nums pt-0.5">
+                          {item.category === 'OFF' ? 'OFF' : item.time}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           ) : (
