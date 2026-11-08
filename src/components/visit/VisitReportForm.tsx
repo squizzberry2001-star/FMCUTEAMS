@@ -41,7 +41,8 @@ import {
   Image as ImageIcon,
   Cloud,
   WifiOff,
-  Navigation
+  Navigation,
+  Star
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from '../../types';
@@ -56,6 +57,11 @@ import { PageTransitionLoader } from '../PageTransitionLoader';
 import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from './HoldingTimeR23Modal';
 import { generateTaroObservationAnalysis } from '../../services/taroAiService';
+import {
+  findMasterStoreByCodeOrName,
+  getStoresWithOwnership,
+  getBestieByStoreCode
+} from '../../data/masterStoresData';
 
 interface VisitReportFormProps {
   agenda: ScheduleAgenda;
@@ -296,10 +302,29 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // Form State
   const [formData, setFormData] = useState<VisitReportData>(() => {
     const cleanStoreName =
+      agenda.storeName ||
       agenda.title
         .replace(/^Audit & Store Visit - Cabang /i, '')
         .replace(/ - SENSE OF URGENCY$/i, '')
-        .trim() || agenda.location;
+        .trim() ||
+      agenda.location;
+    const matchedMasterStore =
+      findMasterStoreByCodeOrName(agenda.storeCode) ||
+      findMasterStoreByCodeOrName(cleanStoreName) ||
+      findMasterStoreByCodeOrName(agenda.location);
+
+    const resolvedStoreName = matchedMasterStore?.name || cleanStoreName;
+    const resolvedStoreCode = agenda.storeCode || matchedMasterStore?.code || '3013';
+    const resolvedStoreType = agenda.storeType || matchedMasterStore?.type || 'CVS';
+    const resolvedStoreHead = agenda.storeHead || matchedMasterStore?.storeHead || 'Sutris Ismawan';
+    const resolvedAreaManager = agenda.areaManager || matchedMasterStore?.areaManager || 'Hadi Ilman';
+    const resolvedRegionalManager =
+      agenda.regionalManager || matchedMasterStore?.regionalManager || 'Novy Rusnani';
+    const resolvedStoreEmail =
+      agenda.storeEmail ||
+      matchedMasterStore?.email ||
+      `store.${resolvedStoreName.toLowerCase().replace(/\s+/g, '')}@familymartindonesia.com`;
+
     const savedGps = localStorage.getItem('fmcu_live_gps') || '-6.2293, 106.8256 (Akurat)';
     const initialInTime = localStorage.getItem('fmcu_initial_checkin_time') || getCurrentWibTime();
 
@@ -310,9 +335,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         return {
           ...parsed,
           visitorName: user?.name || agenda.pic || parsed.visitorName || 'Marisa Giselina',
-          storeName: cleanStoreName || parsed.storeName,
-          storeCode: parsed.storeCode || '3013',
-          storeType: parsed.storeType || 'CVS',
+          storeName: parsed.storeName || resolvedStoreName,
+          storeCode: parsed.storeCode || resolvedStoreCode,
+          storeType: parsed.storeType || resolvedStoreType,
+          storeHead: parsed.storeHead || resolvedStoreHead,
+          areaManager: parsed.areaManager || resolvedAreaManager,
+          regionalManager: parsed.regionalManager || resolvedRegionalManager,
+          storeEmail: parsed.storeEmail || resolvedStoreEmail,
         };
       } catch (e) {
         console.error(e);
@@ -329,19 +358,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       isManualCheckIn: false,
       storeFrontPhoto: '',
       visitorName: user?.name || agenda.pic || 'Marisa Giselina',
-      storeName: cleanStoreName,
-      storeCode: '3013',
-      storeType: 'CVS',
-      storeHead: 'Sutris Ismawan',
+      storeName: resolvedStoreName,
+      storeCode: resolvedStoreCode,
+      storeType: resolvedStoreType,
+      storeHead: resolvedStoreHead,
       visitDate: agenda.date || new Date().toISOString().split('T')[0],
-      areaManager: 'Hadi Ilman',
-      regionalManager: 'Novy Rusnani',
-      storeEmail: `store.${cleanStoreName.toLowerCase().replace(/\s+/g, '')}@familymartindonesia.com`,
+      areaManager: resolvedAreaManager,
+      regionalManager: resolvedRegionalManager,
+      storeEmail: resolvedStoreEmail,
       qscSheetTop: '',
       qscSheetBottom: '',
       gasSyncStatus: 'idle',
       crews: [
-        { id: 'c-1', role: 'Store Head', name: 'Sutris Ismawan', jobLevel: '1A' },
+        { id: 'c-1', role: 'Store Head', name: resolvedStoreHead, jobLevel: '1A' },
         { id: 'c-2', role: 'Shift Leader', name: 'Fikri S.', jobLevel: 'NS3' },
         { id: 'c-3', role: 'Crew Store 1', name: 'Tini Pratiwi', jobLevel: 'MG1' },
         { id: 'c-4', role: 'Crew Store 2', name: 'Zildzian Azhar Permana', jobLevel: 'MG1' },
@@ -358,6 +387,57 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       status: 'DRAFT',
     };
   });
+
+  // Master Store & Bestie Ownership Quick Picker State in Visit Form
+  const [showStorePickerBar, setShowStorePickerBar] = useState(false);
+  const [storePickerScope, setStorePickerScope] = useState<'ALL' | 'OWNED'>('ALL');
+  const [storePickerSearch, setStorePickerSearch] = useState('');
+
+  const pickableStoresForVisitor = React.useMemo(() => {
+    const visitor = formData.visitorName || user?.name || agenda.pic;
+    const all = getStoresWithOwnership(visitor);
+    const q = storePickerSearch.trim().toLowerCase();
+    return all
+      .filter((s) => {
+        if (storePickerScope === 'OWNED' && !s.isOwnedByBestie) return false;
+        if (!q) return true;
+        return (
+          s.code.toLowerCase().includes(q) ||
+          s.name.toLowerCase().includes(q) ||
+          s.city.toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        if (a.isOwnedByBestie !== b.isOwnedByBestie) return a.isOwnedByBestie ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [formData.visitorName, user?.name, agenda.pic, storePickerScope, storePickerSearch]);
+
+  const currentStoreBestieOwner = React.useMemo(
+    () => getBestieByStoreCode(formData.storeCode),
+    [formData.storeCode]
+  );
+
+  const handleApplyMasterStore = (storeCode: string) => {
+    const found = findMasterStoreByCodeOrName(storeCode);
+    if (!found) return;
+    const updatedCrews = [...formData.crews];
+    if (updatedCrews[0] && found.storeHead) {
+      updatedCrews[0].name = found.storeHead;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      storeCode: found.code,
+      storeName: found.name,
+      storeType: found.type || 'CVS',
+      storeHead: found.storeHead || prev.storeHead,
+      areaManager: found.areaManager || prev.areaManager,
+      regionalManager: found.regionalManager || prev.regionalManager,
+      storeEmail: found.email || prev.storeEmail,
+      crews: updatedCrews,
+    }));
+    setShowStorePickerBar(false);
+  };
 
   // Step Nav: 1 (General Info & QSC), 2 (Observation), 3 (Evidence)
   const [activeSection, setActiveSection] = useState<number>(1);
@@ -1735,11 +1815,88 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             ============================================================ */}
         {activeSection === 1 && (
           <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-6 animate-in fade-in">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="font-black text-base sm:text-lg text-slate-900">
-                General Info & QSC
-              </h3>
+            <div className="border-b border-slate-100 pb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-black text-base sm:text-lg text-slate-900">
+                  General Info & QSC
+                </h3>
+                {currentStoreBestieOwner && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-extrabold">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                    <span>Kepemilikan: {currentStoreBestieOwner}</span>
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowStorePickerBar((v) => !v)}
+                className="px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[11px] font-extrabold transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Store className="w-3.5 h-3.5 text-teal-600" />
+                <span>{showStorePickerBar ? 'Tutup Pemilih Toko' : 'Pilih dari 610 Master Toko'}</span>
+              </button>
             </div>
+
+            {showStorePickerBar && (
+              <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-2.5 animate-in fade-in">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] font-black text-emerald-900 uppercase">
+                    Database 610 Master Toko & Kepemilikan Bestie
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setStorePickerScope('ALL')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer ${
+                        storePickerScope === 'ALL'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-white text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      Semua Master Toko (610)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStorePickerScope('OWNED')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer ${
+                        storePickerScope === 'OWNED'
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-white text-amber-800 border border-amber-300'
+                      }`}
+                    >
+                      <Star className="w-2.5 h-2.5 fill-current" />
+                      <span>Toko Kepemilikan Saya</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Cari kode toko (3013) atau nama cabang..."
+                    value={storePickerSearch}
+                    onChange={(e) => setStorePickerSearch(e.target.value)}
+                    className="w-full h-10 bg-white border border-emerald-200 rounded-xl px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                  <select
+                    value={formData.storeCode}
+                    onChange={(e) => handleApplyMasterStore(e.target.value)}
+                    className="w-full h-10 bg-white border border-emerald-200 rounded-xl px-3 text-xs font-extrabold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                  >
+                    <option value="">
+                      -- Pilih dari {pickableStoresForVisitor.length} Toko --
+                    </option>
+                    {pickableStoresForVisitor.map((st) => (
+                      <option key={st.code} value={st.code}>
+                        {st.isOwnedByBestie ? '★ ' : ''}
+                        {st.code} - {st.name} ({st.city})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Sub-bagian 1A: Data Identitas Toko & Manajemen (Simetris 100% di Mobile & Terkunci untuk 4 Field Utama) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -10,17 +10,30 @@ export type ScheduleCategory =
   | 'TRAINING'
   | 'WORK_PLAN'
   | 'OPERATION'
-  | 'CUTI';
+  | 'CUTI'
+  | 'OFF';
 
 export interface ScheduleAgenda {
   id: string;
   title: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
+  endDate?: string; // YYYY-MM-DD
+  endTime?: string; // HH:mm
   category: ScheduleCategory;
   location: string;
   pic: string;
   description?: string;
+  rawDescription?: string;
+  rawLocation?: string;
+  storeCode?: string;
+  storeName?: string;
+  storeType?: string;
+  storeHead?: string;
+  areaManager?: string;
+  regionalManager?: string;
+  storeEmail?: string;
+  bestieInCharge?: string;
   tags: string[];
   completed?: boolean;
   priority?: 'HIGH' | 'MEDIUM' | 'NORMAL';
