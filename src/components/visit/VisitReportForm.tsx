@@ -39,6 +39,7 @@ import {
   Lock,
   Bot,
   Image as ImageIcon,
+  Images,
   Cloud,
   WifiOff,
   Navigation,
@@ -58,6 +59,8 @@ import { PageTransitionLoader } from '../PageTransitionLoader';
 import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from './HoldingTimeR23Modal';
 import { PhotoEditModal } from './PhotoEditModal';
+import { ErrorBoundary } from '../common/ErrorBoundary';
+import { stitchTwoImagesVertically } from '../../services/pdfGeneratorService';
 import { generateTaroObservationAnalysis } from '../../services/taroAiService';
 import {
   findMasterStoreByCodeOrName,
@@ -564,8 +567,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           ...prev,
           storeFrontPhoto: cached.storeFrontPhoto || prev.storeFrontPhoto,
           qscSheetPhoto: cached.qscSheetPhoto || cached.qscSheetTop || cached.qscSheetBottom || prev.qscSheetPhoto,
-          qscSheetTop: cached.qscSheetPhoto || cached.qscSheetTop || cached.qscSheetBottom || prev.qscSheetTop,
-          qscSheetBottom: '',
+          qscSheetTop: cached.qscSheetTop || prev.qscSheetTop,
+          qscSheetBottom: cached.qscSheetBottom || prev.qscSheetBottom,
           evidencePhotos:
             Array.isArray(cached.evidencePhotos) && cached.evidencePhotos.length > 0
               ? cached.evidencePhotos
@@ -707,7 +710,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   }, []);
 
   // File Input References
-  const qscFullCameraInputRef = useRef<HTMLInputElement>(null);
+  const qscTopInputRef = useRef<HTMLInputElement>(null);
+  const qscBottomInputRef = useRef<HTMLInputElement>(null);
   const qscFullGalleryInputRef = useRef<HTMLInputElement>(null);
   const evidenceCameraInputRef = useRef<HTMLInputElement>(null);
   const evidenceGalleryInputRef = useRef<HTMLInputElement>(null);
@@ -935,7 +939,126 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     return { stamped, raw };
   };
 
-  // 1x QSC Sheet Upload Handler (Foto Utuh Tidak Displit + Auto GDrive Sync via GAS)
+  // Helper: Stitch top & bottom QSC photos into single vertical collage and update state
+  const updateAndStitchQsc = async (newTop: string, newBottom: string) => {
+    let merged = '';
+    if (newTop && newBottom) {
+      merged = await stitchTwoImagesVertically(newTop, newBottom);
+    } else {
+      merged = newTop || newBottom || '';
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      qscSheetTop: newTop,
+      qscSheetBottom: newBottom,
+      qscSheetPhoto: merged,
+    }));
+
+    return merged;
+  };
+
+  // Upload Lembar QSC Bagian Atas (Halaman 1)
+  const handleQscTopUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    setIsUploadingPhoto(true);
+    setUploadStatusMsg('Menyimpan Lembar QSC Bagian Atas & Menyusun Kolase...');
+
+    try {
+      const { stamped } = await processAndStampImage(file);
+      const merged = await updateAndStitchQsc(stamped, formData.qscSheetBottom);
+
+      // Async sync to GDrive
+      uploadPhotoToGasGDrive({
+        base64Data: merged || stamped,
+        filename: `LEMBAR_QSC_${formData.storeCode}_${formData.visitDate}.jpg`,
+        storeCode: formData.storeCode,
+        storeName: formData.storeName,
+        visitorName: formData.visitorName,
+        visitDate: formData.visitDate,
+        section: 'QSC_SHEET',
+      }).then((uploadRes) => {
+        setFormData((prev) => ({
+          ...prev,
+          qscTopDriveUrl: uploadRes.driveUrl,
+          qscDriveUrl: uploadRes.driveUrl,
+          gasSyncStatus: uploadRes.synced ? 'synced' : 'offline-queued',
+          lastSyncedAt: getCurrentWibTime(),
+        }));
+      }).catch(console.warn);
+
+      setUploadStatusMsg('Lembar QSC Bagian Atas berhasil disimpan!');
+      setTimeout(() => setUploadStatusMsg(null), 3500);
+      confetti({ zIndex: 9999999, particleCount: 30, spread: 45, origin: { y: 0.5 } });
+    } catch (err) {
+      console.error('QSC Top Upload Error:', err);
+      setUploadStatusMsg('Gagal memproses gambar. Silakan coba lagi.');
+      setTimeout(() => setUploadStatusMsg(null), 3500);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  // Upload Lembar QSC Bagian Bawah (Halaman 2)
+  const handleQscBottomUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    setIsUploadingPhoto(true);
+    setUploadStatusMsg('Menyimpan Lembar QSC Bagian Bawah & Menyusun Kolase...');
+
+    try {
+      const { stamped } = await processAndStampImage(file);
+      const merged = await updateAndStitchQsc(formData.qscSheetTop, stamped);
+
+      // Async sync to GDrive
+      uploadPhotoToGasGDrive({
+        base64Data: merged || stamped,
+        filename: `LEMBAR_QSC_${formData.storeCode}_${formData.visitDate}.jpg`,
+        storeCode: formData.storeCode,
+        storeName: formData.storeName,
+        visitorName: formData.visitorName,
+        visitDate: formData.visitDate,
+        section: 'QSC_SHEET',
+      }).then((uploadRes) => {
+        setFormData((prev) => ({
+          ...prev,
+          qscBottomDriveUrl: uploadRes.driveUrl,
+          qscDriveUrl: uploadRes.driveUrl,
+          gasSyncStatus: uploadRes.synced ? 'synced' : 'offline-queued',
+          lastSyncedAt: getCurrentWibTime(),
+        }));
+      }).catch(console.warn);
+
+      setUploadStatusMsg('Lembar QSC Bagian Bawah berhasil disimpan!');
+      setTimeout(() => setUploadStatusMsg(null), 3500);
+      confetti({ zIndex: 9999999, particleCount: 30, spread: 45, origin: { y: 0.5 } });
+    } catch (err) {
+      console.error('QSC Bottom Upload Error:', err);
+      setUploadStatusMsg('Gagal memproses gambar. Silakan coba lagi.');
+      setTimeout(() => setUploadStatusMsg(null), 3500);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleDeleteQscTop = () => {
+    if (confirm('Hapus foto lembar QSC bagian atas?')) {
+      updateAndStitchQsc('', formData.qscSheetBottom);
+    }
+  };
+
+  const handleDeleteQscBottom = () => {
+    if (confirm('Hapus foto lembar QSC bagian bawah?')) {
+      updateAndStitchQsc(formData.qscSheetTop, '');
+    }
+  };
+
+  // 1x QSC Sheet Upload Handler (Foto Utuh Langsung)
   const handleQscFullUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -947,7 +1070,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     try {
       const { stamped: stampedFull } = await processAndStampImage(file);
 
-      // Simpan foto UTUH (TIDAK DISPLIT) ke state lokal
       setFormData((prev) => ({
         ...prev,
         qscSheetPhoto: stampedFull,
@@ -956,7 +1078,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         gasSyncStatus: 'syncing',
       }));
 
-      // Unggah foto UTUH langsung ke GDrive via GAS
       const uploadRes = await uploadPhotoToGasGDrive({
         base64Data: stampedFull,
         filename: `LEMBAR_QSC_${formData.storeCode}_${formData.visitDate}.jpg`,
@@ -978,7 +1099,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       setUploadStatusMsg('Foto Lembar QSC Utuh berhasil disimpan & disinkronkan ke GDrive Toko!');
       setTimeout(() => setUploadStatusMsg(null), 4000);
-      confetti({ particleCount: 30, spread: 45, origin: { y: 0.5 } });
+      confetti({ zIndex: 9999999, particleCount: 30, spread: 45, origin: { y: 0.5 } });
     } catch (err) {
       console.error('QSC Upload Error:', err);
       setUploadStatusMsg('Gagal memproses gambar. Silakan coba foto lainnya.');
@@ -1914,13 +2035,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {/* Full-Screen Photo Edit Modal (Crop, Markup / Tandai, Rotate, & Caption) */}
       {editingPhotoState && (
-        <PhotoEditModal
-          photo={editingPhotoState.originalPhoto}
-          index={editingPhotoState.index}
-          isCa={editingPhotoState.isCa}
-          onSave={handleSavePhotoFromModal}
-          onClose={() => setEditingPhotoState(null)}
-        />
+        <ErrorBoundary
+          fallbackTitle="Editor Foto Mengalami Gangguan"
+          onReset={() => setEditingPhotoState(null)}
+        >
+          <PhotoEditModal
+            photo={editingPhotoState.originalPhoto}
+            index={editingPhotoState.index}
+            isCa={editingPhotoState.isCa}
+            onSave={handleSavePhotoFromModal}
+            onClose={() => setEditingPhotoState(null)}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Live Toast Notification for GAS GDrive Photo Upload */}
@@ -2497,138 +2623,271 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             </div>
 
             {/* Sub-bagian 1C: Evidence Form QSC / FamiTrack Result (Slide 2 PDF) */}
-            <div className="pt-4 border-t border-slate-100 space-y-3">
+            <div className="pt-4 border-t border-slate-100 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h4 className="font-black text-sm text-slate-800">
                     Evidence Form QSC / FamiTrack Result
                   </h4>
                   <p className="text-[11px] text-slate-400 font-medium">
-                    Foto lembar fisik formulir QSC/FamiTrack — Otomatis dibagi 2 bagian (Atas & Bawah)
+                    Upload foto fisik formulir QSC/FamiTrack dalam 2 bagian: Lembar Bagian Atas &amp; Bagian Bawah. Hasil kolase otomatis digabungkan secara utuh 1 halaman penuh.
                   </p>
                 </div>
-                <div className="text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 self-start sm:self-auto">
+                <div className="text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 self-start sm:self-auto shrink-0">
                   <Cloud className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Auto-Split & Simpan GDrive</span>
+                  <span>Split Upload &amp; Kolase Utuh Full</span>
                 </div>
               </div>
 
-              {/* Banner: Ambil / Upload Foto Lembar Form QSC & Tombol Hapus */}
-              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-white border-2 border-emerald-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <Camera className="w-5 h-5" />
-                  </div>
-                  <h5 className="font-black text-sm sm:text-base text-slate-900">
-                    Foto Lembar Form QSC
-                  </h5>
-                </div>
+              {/* Hidden File Inputs */}
+              <input
+                type="file"
+                ref={qscTopInputRef}
+                accept="image/*"
+                onChange={handleQscTopUpload}
+                className="hidden"
+              />
+              <input
+                type="file"
+                ref={qscBottomInputRef}
+                accept="image/*"
+                onChange={handleQscBottomUpload}
+                className="hidden"
+              />
+              <input
+                type="file"
+                ref={qscFullGalleryInputRef}
+                accept="image/*"
+                onChange={handleQscFullUpload}
+                className="hidden"
+              />
 
-                <div className="shrink-0 w-full sm:w-auto flex items-center gap-2">
-                  <input
-                    type="file"
-                    ref={qscFullGalleryInputRef}
-                    accept="image/*"
-                    onChange={handleQscFullUpload}
-                    className="hidden"
-                  />
-
-                  <button
-                    type="button"
-                    disabled={isUploadingPhoto}
-                    onClick={() => qscFullGalleryInputRef.current?.click()}
-                    className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span>Upload / Ambil Foto QSC</span>
-                  </button>
-
-                  {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm('Hapus foto lembar QSC?')) {
-                          setFormData((prev) => ({
-                            ...prev,
-                            qscSheetPhoto: '',
-                            qscSheetTop: '',
-                            qscSheetBottom: '',
-                            qscDriveUrl: '',
-                            qscTopDriveUrl: '',
-                            qscBottomDriveUrl: '',
-                          }));
-                        }
-                      }}
-                      className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs border border-rose-200 shadow-2xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
-                      title="Hapus Foto Lembar QSC"
-                    >
-                      <Trash2 className="w-4 h-4 text-rose-600" />
-                      <span>Hapus Foto</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Single Full Intact Photo Preview Slot */}
-              <div className="pt-2">
-                <div className="border border-slate-200 rounded-2xl p-3.5 sm:p-4 bg-white space-y-2.5 shadow-2xs">
+              {/* 2 Upload Cards (Split Atas & Bawah) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {/* Slot 1: Lembar QSC Bagian Atas */}
+                <div className="border border-slate-200 rounded-2xl p-3.5 sm:p-4 bg-white space-y-3 shadow-2xs">
                   <div className="flex items-center justify-between text-xs font-black text-slate-800">
                     <div className="flex items-center gap-2">
-                      <span>Preview Lembar Form QSC / FamiTrack (Utuh)</span>
-                      <span className="text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
-                        Foto Utuh Full Page
-                      </span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span>Lembar QSC #1 (Bagian Atas)</span>
                     </div>
-                    {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) ? (
+                    {formData.qscSheetTop ? (
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        Tersedia (Siap Upload GDrive & PDF)
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Tersedia
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded-md">
+                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
                         Belum Diunggah
                       </span>
                     )}
                   </div>
 
-                  <div className="h-64 sm:h-80 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
-                    {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) ? (
+                  <div className="h-44 sm:h-52 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
+                    {formData.qscSheetTop ? (
                       <>
                         <img
-                          src={formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom}
-                          alt="Preview Lembar QSC Utuh"
+                          src={formData.qscSheetTop}
+                          alt="Lembar QSC Bagian Atas"
                           className="w-full h-full object-contain cursor-zoom-in"
                           onClick={() =>
-                            handleOpenSinglePhotoZoom(
-                              formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom,
-                              'Lembar QSC / FamiTrack (Utuh)'
-                            )
+                            handleOpenSinglePhotoZoom(formData.qscSheetTop, 'Lembar QSC Bagian Atas')
                           }
                         />
                         <div
                           className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
                         >
-                          <span className="bg-slate-900/85 text-white text-xs font-bold px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
-                            <Maximize2 className="w-4 h-4 text-teal-300" />
-                            <span>Perbesar Lembar QSC (Tap / Klik)</span>
+                          <span className="bg-slate-900/85 text-white text-[11px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md">
+                            <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
+                            <span>Perbesar</span>
                           </span>
                         </div>
                       </>
                     ) : (
-                      <div className="text-center p-6 space-y-2">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-200/80 text-slate-400 flex items-center justify-center mx-auto">
-                          <Eye className="w-6 h-6" />
+                      <div className="text-center p-4 space-y-1.5">
+                        <div className="w-10 h-10 rounded-xl bg-slate-200/80 text-slate-400 flex items-center justify-center mx-auto">
+                          <Camera className="w-5 h-5" />
                         </div>
                         <span className="text-xs text-slate-600 font-bold block">
-                          Belum ada foto lembar QSC yang diunggah
+                          Lembar Bagian Atas
                         </span>
-                        <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                          Foto lembar QSC kini disimpan secara utuh (tidak dipotong) dan diperbesar otomatis agar pas dengan ukuran halaman dokumen resmi.
+                        <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
+                          Foto halaman bagian atas formulir penilaian QSC
                         </p>
                       </div>
                     )}
                   </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={isUploadingPhoto}
+                      onClick={() => qscTopInputRef.current?.click()}
+                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>{formData.qscSheetTop ? 'Ganti Foto Atas' : 'Upload Foto Bagian Atas'}</span>
+                    </button>
+
+                    {formData.qscSheetTop && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteQscTop}
+                        className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 font-bold text-xs border border-rose-200 transition flex items-center gap-1 cursor-pointer shrink-0"
+                        title="Hapus foto bagian atas"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span className="hidden sm:inline">Hapus</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* Slot 2: Lembar QSC Bagian Bawah */}
+                <div className="border border-slate-200 rounded-2xl p-3.5 sm:p-4 bg-white space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs font-black text-slate-800">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-teal-500" />
+                      <span>Lembar QSC #2 (Bagian Bawah)</span>
+                    </div>
+                    {formData.qscSheetBottom ? (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Tersedia
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                        Belum Diunggah
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="h-44 sm:h-52 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
+                    {formData.qscSheetBottom ? (
+                      <>
+                        <img
+                          src={formData.qscSheetBottom}
+                          alt="Lembar QSC Bagian Bawah"
+                          className="w-full h-full object-contain cursor-zoom-in"
+                          onClick={() =>
+                            handleOpenSinglePhotoZoom(formData.qscSheetBottom, 'Lembar QSC Bagian Bawah')
+                          }
+                        />
+                        <div
+                          className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
+                        >
+                          <span className="bg-slate-900/85 text-white text-[11px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md">
+                            <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
+                            <span>Perbesar</span>
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center p-4 space-y-1.5">
+                        <div className="w-10 h-10 rounded-xl bg-slate-200/80 text-slate-400 flex items-center justify-center mx-auto">
+                          <Camera className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs text-slate-600 font-bold block">
+                          Lembar Bagian Bawah
+                        </span>
+                        <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
+                          Foto halaman bagian bawah formulir penilaian QSC
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={isUploadingPhoto}
+                      onClick={() => qscBottomInputRef.current?.click()}
+                      className="flex-1 py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-extrabold text-xs shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>{formData.qscSheetBottom ? 'Ganti Foto Bawah' : 'Upload Foto Bagian Bawah'}</span>
+                    </button>
+
+                    {formData.qscSheetBottom && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteQscBottom}
+                        className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 font-bold text-xs border border-rose-200 transition flex items-center gap-1 cursor-pointer shrink-0"
+                        title="Hapus foto bagian bawah"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span className="hidden sm:inline">Hapus</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Single Intact Vertical Collage Preview Slot */}
+              <div className="border border-slate-200 rounded-2xl p-3.5 sm:p-4 bg-gradient-to-b from-white to-slate-50/70 space-y-2.5 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-black text-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Images className="w-4 h-4 text-teal-600" />
+                    <span>Hasil Kolase Lembar QSC (Utuh 1 Halaman)</span>
+                    <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                      Full Page A4 Portrait &amp; Slide HD
+                    </span>
+                  </div>
+                  {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md flex items-center gap-1 self-start sm:self-auto">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Kolase Siap (Tersinkron GDrive &amp; PDF)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded-md self-start sm:self-auto">
+                      Menunggu Foto Diunggah
+                    </span>
+                  )}
+                </div>
+
+                <div className="h-64 sm:h-80 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
+                  {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) ? (
+                    <>
+                      <img
+                        src={formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom}
+                        alt="Hasil Kolase Lembar QSC Utuh"
+                        className="w-full h-full object-contain cursor-zoom-in"
+                        onClick={() =>
+                          handleOpenSinglePhotoZoom(
+                            formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom,
+                            'Hasil Kolase Lembar QSC (Utuh 1 Halaman)'
+                          )
+                        }
+                      />
+                      <div
+                        className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
+                      >
+                        <span className="bg-slate-900/85 text-white text-xs font-bold px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                          <Maximize2 className="w-4 h-4 text-teal-300" />
+                          <span>Perbesar Kolase Utuh (Tap / Klik)</span>
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center p-6 space-y-2">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-200/80 text-slate-400 flex items-center justify-center mx-auto">
+                        <Images className="w-6 h-6" />
+                      </div>
+                      <span className="text-xs text-slate-600 font-bold block">
+                        Belum ada foto lembar QSC yang diunggah
+                      </span>
+                      <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                        Unggah foto bagian atas dan/atau bagian bawah di atas. Sistem otomatis menggabungkannya secara vertikal menjadi 1 halaman utuh penuh tanpa dipotong.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {formData.qscSheetTop && formData.qscSheetBottom
+                    ? 'Foto bagian atas dan bagian bawah telah otomatis digabungkan secara vertikal menjadi 1 lembar kolase utuh yang pas dengan halaman PDF A4 Portrait dan slide presentasi 16:9.'
+                    : 'Unggah kedua bagian (Atas & Bawah) untuk hasil kolase formulir QSC lengkap.'}
+                </p>
               </div>
             </div>
 

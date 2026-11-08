@@ -373,6 +373,46 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
     }
   };
 
+  const triggerCelebrationConfetti = () => {
+    try {
+      // Direct high-z-index explosion on top of the modal (z-[999999])
+      confetti({
+        zIndex: 9999999,
+        particleCount: 130,
+        spread: 85,
+        origin: { y: 0.5 },
+      });
+
+      // Left & right celebration cannons
+      setTimeout(() => {
+        try {
+          confetti({
+            zIndex: 9999999,
+            particleCount: 75,
+            angle: 60,
+            spread: 60,
+            origin: { x: 0.15, y: 0.55 },
+          });
+          confetti({
+            zIndex: 9999999,
+            particleCount: 75,
+            angle: 120,
+            spread: 60,
+            origin: { x: 0.85, y: 0.55 },
+          });
+        } catch {}
+      }, 250);
+    } catch (e) {
+      console.warn('Confetti error:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (syncProgress === 100) {
+      triggerCelebrationConfetti();
+    }
+  }, [syncProgress]);
+
   const handleOpenGdriveSync = async () => {
     setShowSyncModal(true);
     setIsSyncingGdrive(true);
@@ -409,7 +449,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       setSyncResult(result);
       setIsSyncingGdrive(false);
       showToast('Laporan sukses tersimpan dan disinkronkan ke Google Drive Toko!', 'success');
-      confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 } });
+      triggerCelebrationConfetti();
       if (onSyncGdrive) {
         try {
           onSyncGdrive();
@@ -424,7 +464,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       setSyncStatusStep(4);
       setIsSyncingGdrive(false);
       showToast('Laporan berhasil disinkronkan (Offline Mode / Antre GDrive)', 'success');
-      confetti({ particleCount: 45, spread: 55, origin: { y: 0.6 } });
+      triggerCelebrationConfetti();
     }
   };
 
@@ -728,8 +768,15 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                     <h3 className="font-black text-slate-900 text-sm sm:text-base tracking-tight truncate">
                       Menyimpan ke Google Drive
                     </h3>
-                    <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                      {syncProgress}%
+                    <span
+                      className={`text-xs font-black px-2.5 py-0.5 rounded-full border shrink-0 flex items-center gap-1 ${
+                        syncProgress === 100
+                          ? 'text-emerald-800 bg-emerald-100 border-emerald-300 shadow-xs ring-2 ring-emerald-400/40'
+                          : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                      }`}
+                    >
+                      {syncProgress === 100 && <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[3]" />}
+                      <span>{syncProgress}%</span>
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 font-medium truncate">

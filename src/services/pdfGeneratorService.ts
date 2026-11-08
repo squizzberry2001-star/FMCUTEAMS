@@ -360,7 +360,13 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
   doc.line(12, 24.5, 308, 24.5);
 
   // FOTO UTUH BESAR MAKSIMAL FIT DENGAN HALAMAN (296mm x 147mm) - 100% SINGLE FRAME (NO SPLIT)
-  const fullQscRaw = report.qscSheetPhoto || report.qscSheetTop || report.qscSheetBottom;
+  let qscB64 = '';
+  if (report.qscSheetTop && report.qscSheetBottom) {
+    qscB64 = await stitchTwoImagesVertically(report.qscSheetTop, report.qscSheetBottom);
+  } else {
+    const fullQscRaw = report.qscSheetPhoto || report.qscSheetTop || report.qscSheetBottom;
+    qscB64 = await loadImageAsBase64(fullQscRaw);
+  }
   const boxX = 12;
   const boxY = 27;
   const boxW = 296;
@@ -371,7 +377,6 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
   doc.setLineWidth(0.3);
   doc.roundedRect(boxX, boxY, boxW, boxH, 3, 3, 'FD');
 
-  const qscB64 = await loadImageAsBase64(fullQscRaw);
   if (qscB64 && qscB64.startsWith('data:image')) {
     drawImageProportional(doc, qscB64, boxX + 2, boxY + 2, boxW - 4, boxH - 4, 'JPEG');
   } else {
@@ -1380,13 +1385,94 @@ export function getVerticalQscFileName(report: VisitReportData): string {
 }
 
 /**
+ * Stitches two images vertically (Top & Bottom) into a single seamless vertical image
+ */
+export async function stitchTwoImagesVertically(topSrc: string, bottomSrc: string): Promise<string> {
+  const [topB64, bottomB64] = await Promise.all([
+    loadImageAsBase64(topSrc),
+    loadImageAsBase64(bottomSrc)
+  ]);
+
+  if (!topB64 && !bottomB64) return '';
+  if (!topB64) return bottomB64;
+  if (!bottomB64) return topB64;
+
+  return new Promise((resolve) => {
+    const imgTop = new Image();
+    const imgBottom = new Image();
+    let loadedCount = 0;
+
+    const onBothLoaded = () => {
+      loadedCount++;
+      if (loadedCount < 2) return;
+
+      try {
+        const topW = imgTop.naturalWidth || 1200;
+        const topH = imgTop.naturalHeight || 800;
+        const bottomW = imgBottom.naturalWidth || 1200;
+        const bottomH = imgBottom.naturalHeight || 800;
+
+        const targetW = Math.max(topW, bottomW, 1200);
+        const scaledTopH = Math.round((topH * targetW) / topW);
+        const scaledBottomH = Math.round((bottomH * targetW) / bottomW);
+        const totalH = scaledTopH + scaledBottomH;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = totalH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(topB64);
+          return;
+        }
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, targetW, totalH);
+
+        // Draw top image
+        ctx.drawImage(imgTop, 0, 0, targetW, scaledTopH);
+        // Draw bottom image seamlessly directly underneath
+        ctx.drawImage(imgBottom, 0, scaledTopH, targetW, scaledBottomH);
+
+        // Thin subtle separator line
+        ctx.strokeStyle = '#E2E8F0';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, scaledTopH);
+        ctx.lineTo(targetW, scaledTopH);
+        ctx.stroke();
+
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      } catch (err) {
+        console.warn('stitchTwoImagesVertically error:', err);
+        resolve(topB64 || bottomB64);
+      }
+    };
+
+    imgTop.onload = onBothLoaded;
+    imgTop.onerror = () => resolve(bottomB64 || topB64);
+
+    imgBottom.onload = onBothLoaded;
+    imgBottom.onerror = () => resolve(topB64 || bottomB64);
+
+    imgTop.src = topB64;
+    imgBottom.src = bottomB64;
+  });
+}
+
+/**
  * Generate Vertical QSC Collage PDF (A4 Portrait, 100% Utuh 1 Halaman Tanpa Split)
  */
 export async function generateVerticalQscCollagePdf(report: VisitReportData): Promise<jsPDF | null> {
-  const qscSource = report.qscSheetPhoto || report.qscSheetTop || report.qscSheetBottom;
-  if (!qscSource) return null;
+  let b64 = '';
+  if (report.qscSheetTop && report.qscSheetBottom) {
+    b64 = await stitchTwoImagesVertically(report.qscSheetTop, report.qscSheetBottom);
+  } else {
+    const qscSource = report.qscSheetPhoto || report.qscSheetTop || report.qscSheetBottom;
+    if (!qscSource) return null;
+    b64 = await loadImageAsBase64(qscSource);
+  }
 
-  const b64 = await loadImageAsBase64(qscSource);
   if (!b64 || !b64.startsWith('data:image')) return null;
 
   // A4 Portrait [210mm x 297mm]

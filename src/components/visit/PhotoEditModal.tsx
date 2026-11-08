@@ -97,95 +97,160 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
   // 1. SYNC CANVAS SIZE DENGAN NATURAL SIZE IMAGE SAAT LOAD
   // ==========================================================================
   const handleImageLoaded = () => {
-    const img = imgRef.current;
-    const canvas = drawCanvasRef.current;
-    if (!img || !canvas) return;
+    try {
+      const img = imgRef.current;
+      const canvas = drawCanvasRef.current;
+      if (!img || !canvas) return;
 
-    const naturalW = img.naturalWidth || 1200;
-    const naturalH = img.naturalHeight || 900;
+      const naturalW = img.naturalWidth || 1200;
+      const naturalH = img.naturalHeight || 900;
 
-    canvas.width = naturalW;
-    canvas.height = naturalH;
-    redrawDrawCanvas();
+      canvas.width = naturalW;
+      canvas.height = naturalH;
+      redrawDrawCanvas();
+    } catch (err) {
+      console.warn('handleImageLoaded error:', err);
+    }
   };
 
   // ==========================================================================
   // 2. REDRAW DRAWING OVERLAY (TRANSPARENT LAYER - ZERO BLANK RISK)
   // ==========================================================================
   const drawSingleAction = (ctx: CanvasRenderingContext2D, act: DrawAction) => {
-    ctx.save();
-    ctx.strokeStyle = act.color;
-    ctx.fillStyle = act.color;
-    ctx.lineWidth = act.strokeWidth;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    if (!ctx || !act) return;
+    try {
+      ctx.save();
+      ctx.strokeStyle = act.color || '#EF4444';
+      ctx.fillStyle = act.color || '#EF4444';
+      ctx.lineWidth = Number.isFinite(act.strokeWidth) && act.strokeWidth > 0 ? act.strokeWidth : 4;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-    if (act.tool === 'pen' && act.points && act.points.length > 0) {
-      ctx.beginPath();
-      ctx.moveTo(act.points[0].x, act.points[0].y);
-      for (let i = 1; i < act.points.length; i++) {
-        ctx.lineTo(act.points[i].x, act.points[i].y);
+      if (act.tool === 'pen' && act.points && act.points.length > 0) {
+        if (act.points.length === 1) {
+          const pt = act.points[0];
+          if (Number.isFinite(pt.x) && Number.isFinite(pt.y)) {
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, Math.max(1, (act.strokeWidth || 4) / 2), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else {
+          ctx.beginPath();
+          let started = false;
+          for (let i = 0; i < act.points.length; i++) {
+            const pt = act.points[i];
+            if (Number.isFinite(pt.x) && Number.isFinite(pt.y)) {
+              if (!started) {
+                ctx.moveTo(pt.x, pt.y);
+                started = true;
+              } else {
+                ctx.lineTo(pt.x, pt.y);
+              }
+            }
+          }
+          if (started) {
+            ctx.stroke();
+          }
+        }
+      } else if (act.tool === 'rect') {
+        const sX = Number(act.startX);
+        const sY = Number(act.startY);
+        const eX = Number(act.endX ?? sX);
+        const eY = Number(act.endY ?? sY);
+        if (Number.isFinite(sX) && Number.isFinite(sY) && Number.isFinite(eX) && Number.isFinite(eY)) {
+          const w = eX - sX;
+          const h = eY - sY;
+          ctx.beginPath();
+          ctx.strokeRect(sX, sY, w, h);
+        }
+      } else if (act.tool === 'circle') {
+        const sX = Number(act.startX);
+        const sY = Number(act.startY);
+        const eX = Number(act.endX ?? sX);
+        const eY = Number(act.endY ?? sY);
+        if (Number.isFinite(sX) && Number.isFinite(sY) && Number.isFinite(eX) && Number.isFinite(eY)) {
+          const rx = Math.max(Math.abs(eX - sX) / 2, 1);
+          const ry = Math.max(Math.abs(eY - sY) / 2, 1);
+          const cx = (sX + eX) / 2;
+          const cy = (sY + eY) / 2;
+          ctx.beginPath();
+          if (typeof (ctx as any).ellipse === 'function') {
+            try {
+              (ctx as any).ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+            } catch {
+              const avgR = (rx + ry) / 2;
+              ctx.arc(cx, cy, avgR, 0, Math.PI * 2);
+            }
+          } else {
+            const avgR = (rx + ry) / 2;
+            ctx.arc(cx, cy, avgR, 0, Math.PI * 2);
+          }
+          ctx.stroke();
+        }
+      } else if (act.tool === 'arrow') {
+        const fromX = Number(act.startX);
+        const fromY = Number(act.startY);
+        const toX = Number(act.endX ?? fromX);
+        const toY = Number(act.endY ?? fromY);
+        if (Number.isFinite(fromX) && Number.isFinite(fromY) && Number.isFinite(toX) && Number.isFinite(toY)) {
+          const dx = toX - fromX;
+          const dy = toY - fromY;
+          const dist = Math.hypot(dx, dy);
+
+          // Line
+          ctx.beginPath();
+          ctx.moveTo(fromX, fromY);
+          ctx.lineTo(toX, toY);
+          ctx.stroke();
+
+          // Arrowhead
+          if (dist > 3) {
+            const angle = Math.atan2(dy, dx);
+            const headlen = Math.min(Math.max(16, (act.strokeWidth || 4) * 3), Math.max(dist * 0.75, 10));
+            ctx.beginPath();
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(
+              toX - headlen * Math.cos(angle - Math.PI / 6),
+              toY - headlen * Math.sin(angle - Math.PI / 6)
+            );
+            ctx.lineTo(
+              toX - headlen * Math.cos(angle + Math.PI / 6),
+              toY - headlen * Math.sin(angle + Math.PI / 6)
+            );
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
       }
-      ctx.stroke();
-    } else if (act.tool === 'rect' && act.startX !== undefined && act.startY !== undefined) {
-      const w = (act.endX ?? act.startX) - act.startX;
-      const h = (act.endY ?? act.startY) - act.startY;
-      ctx.beginPath();
-      ctx.strokeRect(act.startX, act.startY, w, h);
-    } else if (act.tool === 'circle' && act.startX !== undefined && act.startY !== undefined) {
-      const rx = Math.abs((act.endX ?? act.startX) - act.startX) / 2;
-      const ry = Math.abs((act.endY ?? act.startY) - act.startY) / 2;
-      const cx = (act.startX + (act.endX ?? act.startX)) / 2;
-      const cy = (act.startY + (act.endY ?? act.startY)) / 2;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, Math.max(rx, 2), Math.max(ry, 2), 0, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (act.tool === 'arrow' && act.startX !== undefined && act.startY !== undefined) {
-      const fromX = act.startX;
-      const fromY = act.startY;
-      const toX = act.endX ?? fromX;
-      const toY = act.endY ?? fromY;
-      const headlen = Math.max(22, act.strokeWidth * 3.5);
-      const angle = Math.atan2(toY - fromY, toX - fromX);
-
-      // Line
-      ctx.beginPath();
-      ctx.moveTo(fromX, fromY);
-      ctx.lineTo(toX, toY);
-      ctx.stroke();
-
-      // Sharp solid arrowhead
-      ctx.beginPath();
-      ctx.moveTo(toX, toY);
-      ctx.lineTo(
-        toX - headlen * Math.cos(angle - Math.PI / 6),
-        toY - headlen * Math.sin(angle - Math.PI / 6)
-      );
-      ctx.lineTo(
-        toX - headlen * Math.cos(angle + Math.PI / 6),
-        toY - headlen * Math.sin(angle + Math.PI / 6)
-      );
-      ctx.closePath();
-      ctx.fill();
+      ctx.restore();
+    } catch (err) {
+      console.warn('drawSingleAction error handled safely:', err);
+      try {
+        ctx.restore();
+      } catch {}
     }
-
-    ctx.restore();
   };
 
   const redrawDrawCanvas = useCallback(() => {
-    const canvas = drawCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    try {
+      const canvas = drawCanvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    history.forEach((act) => {
-      drawSingleAction(ctx, act);
-    });
+      if (Array.isArray(history)) {
+        history.forEach((act) => {
+          if (act) drawSingleAction(ctx, act);
+        });
+      }
 
-    if (currentActionRef.current) {
-      drawSingleAction(ctx, currentActionRef.current);
+      if (currentActionRef.current) {
+        drawSingleAction(ctx, currentActionRef.current);
+      }
+    } catch (err) {
+      console.warn('redrawDrawCanvas error safely handled:', err);
     }
   }, [history]);
 
@@ -195,16 +260,20 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
 
   // Sync canvas dimensions instantly on mount, data URL change, or active tab switch
   useEffect(() => {
-    const img = imgRef.current;
-    const canvas = drawCanvasRef.current;
-    if (!img || !canvas) return;
+    try {
+      const img = imgRef.current;
+      const canvas = drawCanvasRef.current;
+      if (!img || !canvas) return;
 
-    if (img.complete && img.naturalWidth && img.naturalHeight) {
-      if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        redrawDrawCanvas();
+      if (img.complete && img.naturalWidth && img.naturalHeight) {
+        if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          redrawDrawCanvas();
+        }
       }
+    } catch (err) {
+      console.warn('Sync canvas dimensions error:', err);
     }
   }, [currentDataUrl, activeTab, redrawDrawCanvas]);
 
@@ -213,103 +282,134 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     const canvas = drawCanvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
     return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
+      x: Number.isFinite(x) ? x : 0,
+      y: Number.isFinite(y) ? y : 0,
     };
   };
 
   // Drawing Pointer Handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (activeTab !== 'markup') return;
-    e.preventDefault();
-    e.stopPropagation();
-
     try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
+      e.preventDefault();
+      e.stopPropagation();
 
-    const { x, y } = getCanvasCoords(e.clientX, e.clientY);
-    isDrawingRef.current = true;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
 
-    const baseWidth = drawCanvasRef.current?.width || 1200;
-    const scaledStroke = Math.max(2, Math.round(markupStrokeWidth * (baseWidth / 650)));
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      isDrawingRef.current = true;
 
-    currentActionRef.current = {
-      tool: markupTool,
-      color: markupColor,
-      strokeWidth: scaledStroke,
-      startX: x,
-      startY: y,
-      endX: x,
-      endY: y,
-      points: [{ x, y }],
-    };
+      const baseWidth = drawCanvasRef.current?.width || 1200;
+      const scaledStroke = Math.max(2, Math.round(markupStrokeWidth * (baseWidth / 650)));
 
-    redrawDrawCanvas();
+      currentActionRef.current = {
+        tool: markupTool,
+        color: markupColor,
+        strokeWidth: scaledStroke,
+        startX: x,
+        startY: y,
+        endX: x,
+        endY: y,
+        points: [{ x, y }],
+      };
+
+      redrawDrawCanvas();
+    } catch (err) {
+      console.warn('handlePointerDown error handled safely:', err);
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawingRef.current || !currentActionRef.current || activeTab !== 'markup') return;
-    e.preventDefault();
-    const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+    try {
+      e.preventDefault();
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
 
-    if (markupTool === 'pen') {
-      currentActionRef.current.points?.push({ x, y });
-    } else {
-      currentActionRef.current.endX = x;
-      currentActionRef.current.endY = y;
+      if (markupTool === 'pen') {
+        if (!currentActionRef.current.points) {
+          currentActionRef.current.points = [];
+        }
+        currentActionRef.current.points.push({ x, y });
+      } else {
+        currentActionRef.current.endX = x;
+        currentActionRef.current.endY = y;
+      }
+
+      redrawDrawCanvas();
+    } catch (err) {
+      console.warn('handlePointerMove error handled safely:', err);
     }
-
-    redrawDrawCanvas();
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current || !currentActionRef.current || activeTab !== 'markup') return;
-    e.preventDefault();
-
+    if (!isDrawingRef.current || activeTab !== 'markup') return;
     try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {}
+      e.preventDefault();
 
-    isDrawingRef.current = false;
-    setHistory((prev) => [...prev, currentActionRef.current!]);
-    currentActionRef.current = null;
-    redrawDrawCanvas();
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+
+      isDrawingRef.current = false;
+      if (currentActionRef.current) {
+        const finishedAction = { ...currentActionRef.current };
+        currentActionRef.current = null;
+        setHistory((prev) => [...prev, finishedAction]);
+      }
+      redrawDrawCanvas();
+    } catch (err) {
+      console.warn('handlePointerUp error handled safely:', err);
+    }
   };
 
   const handleUndo = () => {
-    setHistory((prev) => prev.slice(0, -1));
+    try {
+      setHistory((prev) => prev.slice(0, -1));
+    } catch {}
   };
 
   const handleClearMarkup = () => {
-    setHistory([]);
+    try {
+      setHistory([]);
+    } catch {}
   };
 
   // ==========================================================================
   // 3. BAKE DRAWING ONTO IMAGE
   // ==========================================================================
   const commitDrawingToBase = (): string => {
-    const img = imgRef.current;
-    const drawCanvas = drawCanvasRef.current;
-    if (!img || !drawCanvas || history.length === 0) return currentDataUrl;
+    try {
+      const img = imgRef.current;
+      const drawCanvas = drawCanvasRef.current;
+      if (!img || !drawCanvas || history.length === 0) return currentDataUrl;
 
-    const mergeCanvas = document.createElement('canvas');
-    mergeCanvas.width = img.naturalWidth || 1200;
-    mergeCanvas.height = img.naturalHeight || 900;
-    const mCtx = mergeCanvas.getContext('2d');
-    if (!mCtx) return currentDataUrl;
+      const mergeCanvas = document.createElement('canvas');
+      mergeCanvas.width = img.naturalWidth || 1200;
+      mergeCanvas.height = img.naturalHeight || 900;
+      const mCtx = mergeCanvas.getContext('2d');
+      if (!mCtx) return currentDataUrl;
 
-    mCtx.drawImage(img, 0, 0, mergeCanvas.width, mergeCanvas.height);
-    mCtx.drawImage(drawCanvas, 0, 0, mergeCanvas.width, mergeCanvas.height);
+      mCtx.drawImage(img, 0, 0, mergeCanvas.width, mergeCanvas.height);
+      mCtx.drawImage(drawCanvas, 0, 0, mergeCanvas.width, mergeCanvas.height);
 
-    const mergedUrl = mergeCanvas.toDataURL('image/jpeg', 0.95);
-    setCurrentDataUrl(mergedUrl);
-    setHistory([]);
-    return mergedUrl;
+      const mergedUrl = mergeCanvas.toDataURL('image/jpeg', 0.95);
+      setCurrentDataUrl(mergedUrl);
+      setHistory([]);
+      return mergedUrl;
+    } catch (err) {
+      console.warn('commitDrawingToBase fallback:', err);
+      return currentDataUrl;
+    }
   };
 
   const handleSwitchTab = (tab: EditTabMode) => {
@@ -520,28 +620,34 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
   // 7. FINAL SAVE
   // ==========================================================================
   const handleSave = () => {
-    const img = imgRef.current;
-    const drawCanvas = drawCanvasRef.current;
+    try {
+      const img = imgRef.current;
+      const drawCanvas = drawCanvasRef.current;
 
-    let finalDataUrl = currentDataUrl;
+      let finalDataUrl = currentDataUrl;
 
-    if (img) {
-      const saveCanvas = document.createElement('canvas');
-      saveCanvas.width = img.naturalWidth || 1200;
-      saveCanvas.height = img.naturalHeight || 900;
-      const ctx = saveCanvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0, saveCanvas.width, saveCanvas.height);
-        if (drawCanvas && history.length > 0) {
-          ctx.drawImage(drawCanvas, 0, 0, saveCanvas.width, saveCanvas.height);
+      if (img) {
+        const saveCanvas = document.createElement('canvas');
+        saveCanvas.width = img.naturalWidth || 1200;
+        saveCanvas.height = img.naturalHeight || 900;
+        const ctx = saveCanvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, saveCanvas.width, saveCanvas.height);
+          if (drawCanvas && history.length > 0) {
+            ctx.drawImage(drawCanvas, 0, 0, saveCanvas.width, saveCanvas.height);
+          }
+          finalDataUrl = saveCanvas.toDataURL('image/jpeg', 0.95);
         }
-        finalDataUrl = saveCanvas.toDataURL('image/jpeg', 0.95);
       }
-    }
 
-    onSave({ photoUrl: finalDataUrl, caption: photo.caption || '' });
-    confetti({ particleCount: 35, spread: 55, origin: { y: 0.5 } });
-    onClose();
+      onSave({ photoUrl: finalDataUrl, caption: photo.caption || '' });
+      confetti({ zIndex: 9999999, particleCount: 45, spread: 60, origin: { y: 0.5 } });
+      onClose();
+    } catch (err) {
+      console.warn('handleSave fallback:', err);
+      onSave({ photoUrl: currentDataUrl, caption: photo.caption || '' });
+      onClose();
+    }
   };
 
   return (
@@ -826,6 +932,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
           <img
             ref={imgRef}
             src={currentDataUrl}
+            crossOrigin="anonymous"
             onLoad={handleImageLoaded}
             alt="Edit Canvas Base"
             className="max-w-full max-h-[82vh] sm:max-h-[85vh] object-contain block select-none pointer-events-none rounded-2xl"
@@ -838,6 +945,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            style={{ touchAction: 'none' }}
             className={`absolute inset-0 w-full h-full object-contain block select-none rounded-2xl ${
               activeTab === 'markup'
                 ? 'cursor-crosshair touch-none pointer-events-auto z-10'
