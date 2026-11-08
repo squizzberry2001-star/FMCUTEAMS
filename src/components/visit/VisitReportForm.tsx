@@ -1934,66 +1934,64 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* Top Navbar: Fixed Header with Authentic Apple Liquid Glass Aesthetic & Feathered Bottom Edge */}
+      {/* Top Navbar: Transparent Header (Background Removed) with Floating Apple Liquid Glass Buttons */}
       <header
-        className={`fixed top-0 left-0 right-0 z-40 iphone-glass-top-navbar transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
+        className={`fixed top-0 left-0 right-0 z-40 bg-transparent pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
           showTopNavbar
             ? 'translate-y-0 opacity-100'
-            : '-translate-y-full opacity-0 pointer-events-none'
+            : '-translate-y-full opacity-0'
         }`}
       >
-        {/* Internal Liquid Glass Specular Shine */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/35 via-transparent to-white/10" />
-
-        {/* Feather Bottom Edge: Smooth gradual fade into page content */}
-        <div className="absolute inset-x-0 -bottom-3.5 h-3.5 bg-gradient-to-b from-white/40 via-white/15 to-transparent pointer-events-none" />
-
-        <div className="px-4 sm:px-6 pt-[max(0.6rem,env(safe-area-inset-top,12px))] pb-2.5 max-w-6xl mx-auto w-full flex items-center justify-between relative z-10">
-
+        <div className="px-4 sm:px-6 pt-[max(0.6rem,env(safe-area-inset-top,12px))] pb-2 max-w-6xl mx-auto w-full flex items-center justify-between select-none">
+          {/* Tombol Back: Authentic Floating Liquid Glass Round Button */}
           <button
             type="button"
             onClick={onBack}
             title="Kembali ke Beranda"
-            className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer shrink-0"
+            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-90 transition-all shadow-lg cursor-pointer shrink-0 pointer-events-auto border border-white/60"
           >
-            <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
+            <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
           </button>
 
-          <div className="text-center px-2 min-w-0">
-            <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
+          {/* Tengah: Floating Liquid Glass Title Capsule */}
+          <div className="iphone-glass-mini-dock px-3.5 sm:px-4 py-1.5 rounded-full shadow-lg border border-white/50 text-center min-w-0 max-w-[190px] sm:max-w-xs truncate pointer-events-auto">
+            <span className="text-[9px] font-black text-teal-800 uppercase tracking-wider block leading-none">
               FMCU Visit Report
             </span>
-            <h2 className="text-base sm:text-lg font-black text-slate-800 leading-tight truncate">
-              Audit Toko FMCU
+            <h2 className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate mt-0.5">
+              {formData.storeName ? formData.storeName : 'Audit Toko FMCU'}
             </h2>
           </div>
 
-          {/* Right Dock: HT/R23 di sebelah kiri, PDF (Icon + title PDF kecil) di sebelah kanan */}
-          <div className="iphone-glass-mini-dock flex items-center gap-1.5 p-1 rounded-full shadow-xs shrink-0">
+          {/* Right Floating Dock: HT/R23 & PDF Buttons in Authentic Liquid Glass */}
+          <div className="iphone-glass-mini-dock flex items-center gap-1 p-1 rounded-full shadow-lg shrink-0 pointer-events-auto border border-white/50">
             {/* Tombol HT (Besar di atas) & R23 (Kecil di bawah) */}
             <button
               type="button"
               onClick={() => setShowR23Modal(true)}
               title="Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)"
-              className="w-9 h-9 rounded-full hover:bg-emerald-500/15 text-emerald-950 flex flex-col items-center justify-center active:scale-95 transition-transform cursor-pointer group"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-emerald-500/15 text-emerald-950 flex flex-col items-center justify-center active:scale-90 transition-all cursor-pointer group"
             >
-              <span className="text-[11px] font-black tracking-tight leading-none text-emerald-950 group-hover:text-emerald-800">
+              <span className="text-[11px] sm:text-xs font-black tracking-tight leading-none text-emerald-950 group-hover:text-emerald-800">
                 HT
               </span>
-              <span className="text-[7.5px] font-black tracking-tighter leading-none text-emerald-700 group-hover:text-emerald-900 mt-[1.5px]">
+              <span className="text-[7.5px] sm:text-[8px] font-black tracking-tighter leading-none text-emerald-700 group-hover:text-emerald-900 mt-[1.5px]">
                 R23
               </span>
             </button>
+
+            {/* Separator Hairline Kaca */}
+            <div className="w-[1px] h-5 bg-black/10 shrink-0" />
 
             {/* Tombol PDF: Icon + Title PDF Kecil di bawahnya */}
             <button
               type="button"
               onClick={() => setShowPreview(true)}
               title="Pratinjau & Cetak Laporan PDF"
-              className="w-9 h-9 rounded-full hover:bg-black/5 flex flex-col items-center justify-center text-slate-800 active:scale-95 transition-transform cursor-pointer group"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-black/5 flex flex-col items-center justify-center text-slate-800 active:scale-90 transition-all cursor-pointer group"
             >
-              <FileText className="w-3.5 h-3.5 stroke-[2.3] text-slate-800 group-hover:text-black" />
-              <span className="text-[7px] font-black tracking-wider leading-none text-slate-700 group-hover:text-black mt-[1.5px]">
+              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.3] text-slate-800 group-hover:text-black" />
+              <span className="text-[7px] sm:text-[7.5px] font-black tracking-wider leading-none text-slate-700 group-hover:text-black mt-[1.5px]">
                 PDF
               </span>
             </button>
