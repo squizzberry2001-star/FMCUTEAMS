@@ -131,7 +131,10 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   // Resolve store geo point(s) (Lat, Lng, Altitude) from Master Data Store
   const matchedGeoPoints = useMemo(() => resolveAgendaGeoPoints(agenda), [agenda]);
   const primaryGeoPoint = useMemo(() => resolvePrimaryAgendaGeoPoint(agenda), [agenda]);
-  const activePoints = matchedGeoPoints.length > 0 ? matchedGeoPoints : [primaryGeoPoint];
+  const activePoints = useMemo(
+    () => (matchedGeoPoints.length > 0 ? matchedGeoPoints : [primaryGeoPoint]),
+    [matchedGeoPoints, primaryGeoPoint]
+  );
 
   useEffect(() => {
     if (!isVisitAgenda) return;
@@ -154,11 +157,18 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
       mapInstanceRef.current = null;
     }
 
+    const canvasRenderer = L.canvas({ padding: 0.5 });
+
     const map = L.map(mapContainerRef.current, {
       center: [primaryGeoPoint.lat, primaryGeoPoint.lng],
       zoom: 15,
       zoomControl: false,
       attributionControl: false,
+      preferCanvas: true,
+      renderer: canvasRenderer,
+      fadeAnimation: false,
+      markerZoomAnimation: false,
+      zoomAnimation: true,
     });
 
     L.control.zoom({ position: 'topright' }).addTo(map);
@@ -166,6 +176,9 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
     // 100% Free OpenStreetMap Tile Server (No API Key Required) with Esri fallback
     const tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
+      updateWhenIdle: false,
+      updateWhenZooming: false,
+      keepBuffer: 2,
     }).addTo(map);
 
     tl.on('tileerror', () => {
@@ -468,7 +481,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             <div ref={mapContainerRef} className="w-full h-full z-10" />
 
             {/* Coordinate & Altitude Overlay Pill at Map Bottom */}
-            <div className="absolute bottom-2 left-2 right-2 z-20 bg-white/95 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-2 text-[9px] font-bold text-slate-600 tabular-nums">
+            <div className="absolute bottom-2 left-2 right-2 z-20 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-sm flex items-center justify-between gap-2 text-[9px] font-bold text-slate-600 tabular-nums">
               <div className="flex items-center gap-2 truncate">
                 <span>
                   Lat: <strong className="text-slate-900">{primaryGeoPoint.lat.toFixed(5)}°</strong>

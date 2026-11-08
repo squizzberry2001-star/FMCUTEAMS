@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   X,
   MapPin,
@@ -13,8 +13,6 @@ import {
   ExternalLink,
   Layers,
   Calendar,
-  Maximize2,
-  Minimize2,
   LocateFixed,
   SlidersHorizontal,
   ChevronDown,
@@ -55,19 +53,19 @@ const MAP_TILE_PROVIDERS: Record<
   osm: {
     label: 'OpenStreetMap',
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
+    attribution: '&copy; OpenStreetMap',
     maxZoom: 19,
   },
   street: {
     label: 'Peta Jalan',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri &copy; OpenStreetMap',
+    attribution: '&copy; Esri',
     maxZoom: 19,
   },
   satellite: {
     label: 'Satelit',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri World Imagery',
+    attribution: '&copy; Esri Imagery',
     maxZoom: 19,
   },
 };
@@ -89,28 +87,27 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   selectedDate,
 }) => {
   const isAdmin = Boolean(currentUser?.isAdmin);
-  const modalRootRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
-  const layerGroupRef = useRef<any>(null);
+  const canvasRendererRef = useRef<any>(null);
+  const vectorLayerGroupRef = useRef<any>(null);
+  const labelLayerGroupRef = useRef<any>(null);
+  const lastFitSignatureRef = useRef<string>('');
 
   const [leafletReady, setLeafletReady] = useState(false);
   const [tileStyle, setTileStyle] = useState<MapTileStyle>('osm');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStore, setSelectedStore] = useState<StoreGeoPoint | null>(null);
 
-  // Fullscreen & Immersive HUD State
-  const [isFullScreenMap, setIsFullScreenMap] = useState<boolean>(false);
+  // Direct 100% Fullscreen HUD Drawer States
   const [showFloatingControls, setShowFloatingControls] = useState<boolean>(false);
-  const [showBottomStripInFs, setShowBottomStripInFs] = useState<boolean>(false);
+  const [showBottomStrip, setShowBottomStrip] = useState<boolean>(false);
 
-  // Filter Scope:
-  // 'all' = Menampilkan SEMUA titik koordinat toko yang ada di Master Data (610 toko) + Rute Toko Terjadwal
-  // 'scheduled' = Fokus hanya pada toko yang dijadwalkan
+  // Filter Scope: 'all' (610 master stores + route) vs 'scheduled' (route only)
   const [viewMode, setViewMode] = useState<'all' | 'scheduled'>('all');
 
-  // Admin-specific controls: Pinpoint User, Pinpoint Toko, Radius, Rute
+  // Admin-specific controls
   const [selectedPicFilter, setSelectedPicFilter] = useState<string>('ALL');
   const [showUserPinpoints, setShowUserPinpoints] = useState<boolean>(true);
   const [showStorePinpoints, setShowStorePinpoints] = useState<boolean>(true);
@@ -205,7 +202,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     allMasterStores,
   ]);
 
-  // Set of scheduled store codes & lookup map for route order
+  // Lookup map of scheduled store codes
   const scheduledByCodeMap = useMemo(() => {
     const map = new Map<string, StoreGeoPoint>();
     scheduledStorePoints.forEach((pt) => {
@@ -217,7 +214,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     return map;
   }, [scheduledStorePoints]);
 
-  // 2. ALL Master Store GeoPoints (Seluruh 610 Toko di Master Data tanpa pemotongan!)
+  // 2. ALL 610 Master Store GeoPoints
   const allMasterGeoPoints = useMemo(() => {
     return allMasterStores.map((st, idx) => {
       const sched = scheduledByCodeMap.get(String(st.code).toUpperCase());
@@ -246,7 +243,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     );
   }, [viewMode, scheduledStorePoints, allMasterGeoPoints, searchQuery]);
 
-  // Bottom strip list (prioritizes scheduled route stores first, then master stores)
+  // Bottom drawer strip list
   const bottomStripPoints = useMemo(() => {
     if (viewMode === 'scheduled') return displayedStorePoints;
     const q = searchQuery.trim().toLowerCase();
@@ -295,7 +292,67 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     };
   }, [isOpen]);
 
-  // Initialize Map Instance & Tile Layer (100% Free, Zero API Key)
+  // Viewport-Culled Idle Labels Updater (Runs ONLY when map finishes moving/zooming, Max 22 lightweight labels)
+  const updateViewportLabels = useCallback(() => {
+    const L = (window as any).L;
+    const map = mapInstanceRef.current;
+    const labelGroup = labelLayerGroupRef.current;
+    if (!L || !map || !labelGroup) return;
+
+    labelGroup.clearLayers();
+    const zoom = map.getZoom();
+    // Hide all text labels when zoomed out (< 12) so panning/zooming wide areas has zero DOM clutter
+    if (zoom < 12) return;
+
+    const bounds = map.getBounds();
+    let count = 0;
+    const MAX_LABELS = 22;
+
+    // 1. Prioritize scheduled route stores visible in current viewport
+    if (!isAdmin || showStorePinpoints) {
+      for (let i = 0; i < scheduledStorePoints.length; i++) {
+        if (count >= MAX_LABELS) break;
+        const st = scheduledStorePoints[i];
+        if (bounds.contains([st.lat, st.lng])) {
+          const shortName = getMinimalistStoreLabel(st.name);
+          const icon = L.divIcon({
+            className: 'fmcu-fast-label',
+            html: `<div style="transform:translate(-50%,8px);pointer-events:none;background:#0F172A;color:#fff;font-size:8.5px;font-weight:800;padding:1px 4px;border-radius:4px;white-space:nowrap;line-height:1.2;">#${st.routeOrder || ''} ${shortName}</div>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          });
+          L.marker([st.lat, st.lng], { icon, interactive: false, keyboard: false }).addTo(
+            labelGroup
+          );
+          count++;
+        }
+      }
+
+      // 2. If zoomed in closely (zoom >= 14), also show regular store labels in viewport up to MAX_LABELS
+      if (zoom >= 14 && count < MAX_LABELS) {
+        for (let i = 0; i < displayedStorePoints.length; i++) {
+          if (count >= MAX_LABELS) break;
+          const st = displayedStorePoints[i];
+          if (scheduledByCodeMap.has(String(st.code).toUpperCase())) continue;
+          if (bounds.contains([st.lat, st.lng])) {
+            const shortName = getMinimalistStoreLabel(st.name);
+            const icon = L.divIcon({
+              className: 'fmcu-fast-label',
+              html: `<div style="transform:translate(-50%,7px);pointer-events:none;background:rgba(255,255,255,0.94);color:#0F172A;border:1px solid #CBD5E1;font-size:8px;font-weight:800;padding:0.5px 3.5px;border-radius:3px;white-space:nowrap;line-height:1.15;">${shortName}</div>`,
+              iconSize: [0, 0],
+              iconAnchor: [0, 0],
+            });
+            L.marker([st.lat, st.lng], { icon, interactive: false, keyboard: false }).addTo(
+              labelGroup
+            );
+            count++;
+          }
+        }
+      }
+    }
+  }, [isAdmin, showStorePinpoints, scheduledStorePoints, displayedStorePoints, scheduledByCodeMap]);
+
+  // Initialize Map Instance with Hardware-Accelerated HTML5 Canvas Renderer
   useEffect(() => {
     if (!isOpen || !leafletReady || !mapContainerRef.current) return;
     const L = (window as any).L;
@@ -307,22 +364,32 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
           ? [scheduledStorePoints[0].lat, scheduledStorePoints[0].lng]
           : [-6.2297, 106.8295];
 
+      const canvasRenderer = L.canvas({ padding: 0.5 });
+      canvasRendererRef.current = canvasRenderer;
+
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
         zoom: 11,
         zoomControl: false,
         preferCanvas: true,
+        renderer: canvasRenderer,
+        fadeAnimation: false,
+        markerZoomAnimation: false,
+        zoomAnimation: true,
+        wheelPxPerZoomLevel: 90,
       });
 
-      L.control.zoom({ position: 'topright' }).addTo(map);
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
 
       const provider = MAP_TILE_PROVIDERS[tileStyle];
       const tl = L.tileLayer(provider.url, {
         attribution: provider.attribution,
         maxZoom: provider.maxZoom,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
+        keepBuffer: 3,
       }).addTo(map);
 
-      // Auto-fallback to Esri Street Map if primary tile server fails
       tl.on('tileerror', () => {
         if (tileStyle === 'osm' && tileLayerRef.current) {
           tileLayerRef.current.setUrl(MAP_TILE_PROVIDERS.street.url);
@@ -330,35 +397,69 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       });
 
       tileLayerRef.current = tl;
-      layerGroupRef.current = L.layerGroup().addTo(map);
+      vectorLayerGroupRef.current = L.layerGroup().addTo(map);
+      labelLayerGroupRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
+
+      // Clear DOM labels during active zoom so pinch/wheel zoom is 100% pure Canvas (60fps)
+      map.on('zoomstart', () => {
+        labelLayerGroupRef.current?.clearLayers();
+      });
 
       setTimeout(() => {
         map.invalidateSize();
-      }, 150);
+      }, 60);
     }
   }, [isOpen, leafletReady]);
 
-  // Update Tile Style when switched by user
+  // Bind moveend / zoomend listener for viewport-culled labels
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const handleIdle = () => {
+      updateViewportLabels();
+    };
+
+    map.on('moveend', handleIdle);
+    map.on('zoomend', handleIdle);
+    updateViewportLabels();
+
+    return () => {
+      map.off('moveend', handleIdle);
+      map.off('zoomend', handleIdle);
+    };
+  }, [updateViewportLabels]);
+
+  // Switch Tile Style seamlessly
   useEffect(() => {
     if (!mapInstanceRef.current || !tileLayerRef.current) return;
     const provider = MAP_TILE_PROVIDERS[tileStyle];
     tileLayerRef.current.setUrl(provider.url);
   }, [tileStyle]);
 
-  // Render All Store Pinpoints, Scheduled Routes, Admin User Pinpoints & Radius
+  // Render All 610 Store Pinpoints, Routes, Geofences & User Pinpoints onto the single GPU <canvas>
   useEffect(() => {
-    if (!isOpen || !leafletReady || !mapInstanceRef.current || !layerGroupRef.current) return;
+    if (
+      !isOpen ||
+      !leafletReady ||
+      !mapInstanceRef.current ||
+      !vectorLayerGroupRef.current ||
+      !canvasRendererRef.current
+    ) {
+      return;
+    }
     const L = (window as any).L;
     if (!L) return;
 
     const map = mapInstanceRef.current;
-    const layerGroup = layerGroupRef.current;
-    layerGroup.clearLayers();
+    const vectorGroup = vectorLayerGroupRef.current;
+    const renderer = canvasRendererRef.current;
+    vectorGroup.clearLayers();
 
     const focusBoundsCoords: [number, number][] = [];
 
-    // A. ADMIN ONLY: RADIUS GEOFENCE CIRCLES (on scheduled stores or selected store)
+    // A. ADMIN ONLY: RADIUS GEOFENCE CIRCLES (Canvas-rendered)
     if (isAdmin && showRadiusCircle && showStorePinpoints) {
       const radiusTargets =
         scheduledStorePoints.length > 0
@@ -367,43 +468,43 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
       radiusTargets.forEach((st) => {
         L.circle([st.lat, st.lng], {
+          renderer,
           radius: radiusMeters,
           color: '#0D9488',
           weight: 1.5,
-          opacity: 0.75,
+          opacity: 0.7,
           fillColor: '#14B8A6',
-          fillOpacity: 0.14,
-          dashArray: '4, 4',
-        })
-          .bindTooltip(`Radius Geofence ${st.name}: ${radiusMeters}m`, {
-            direction: 'top',
-          })
-          .addTo(layerGroup);
+          fillOpacity: 0.12,
+          interactive: false,
+        }).addTo(vectorGroup);
       });
     }
 
-    // B. ROUTE LINES (RUTE TOKO YANG DIJADWALKAN)
+    // B. ROUTE LINES (Canvas-rendered)
     const shouldDrawRoute = (!isAdmin || showRouteLine) && scheduledStorePoints.length >= 2;
-
     if (shouldDrawRoute) {
       const routeLatLngs: [number, number][] = scheduledStorePoints.map((p) => [p.lat, p.lng]);
 
       L.polyline(routeLatLngs, {
+        renderer,
         color: '#0F766E',
-        weight: 6,
-        opacity: 0.22,
+        weight: 5,
+        opacity: 0.2,
         lineCap: 'round',
         lineJoin: 'round',
-      }).addTo(layerGroup);
+        interactive: false,
+      }).addTo(vectorGroup);
 
       L.polyline(routeLatLngs, {
+        renderer,
         color: '#0D9488',
-        weight: 3.2,
-        opacity: 0.95,
+        weight: 2.8,
+        opacity: 0.92,
         dashArray: '7, 5',
         lineCap: 'round',
         lineJoin: 'round',
-      }).addTo(layerGroup);
+        interactive: false,
+      }).addTo(vectorGroup);
     }
 
     // Admin route from User Pinpoint to Target Store
@@ -419,159 +520,134 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               [targetStore.lat, targetStore.lng],
             ],
             {
+              renderer,
               color: up.isInsideRadius ? '#10B981' : '#3B82F6',
-              weight: 2.2,
-              opacity: 0.85,
+              weight: 2,
+              opacity: 0.8,
               dashArray: '4, 4',
+              interactive: false,
             }
-          ).addTo(layerGroup);
+          ).addTo(vectorGroup);
         }
       });
     }
 
-    // C. STORE PINPOINTS (ALL 610 MASTER STORES + SCHEDULED HIGHLIGHTS)
-    // UI Pinpoint dibuat MINIMALIST (Pin bulat kecil + label pendek persegi kompak, BUKAN oval panjang!)
+    // C. STORE PINPOINTS ON SINGLE HTML5 CANVAS (Zero DOM Lag for all 610 Stores!)
     if (!isAdmin || showStorePinpoints) {
+      // First pass: regular unscheduled master stores
       displayedStorePoints.forEach((st) => {
         const schedInfo = scheduledByCodeMap.get(String(st.code).toUpperCase());
-        const isScheduled = Boolean(schedInfo);
-        const shortName = getMinimalistStoreLabel(st.name);
+        if (schedInfo) return;
 
-        if (isScheduled || searchQuery.trim()) {
+        if (searchQuery.trim()) {
           focusBoundsCoords.push([st.lat, st.lng]);
         }
 
-        // Minimalist Pinpoint HTML: circular pin + compact tiny square tag (no long oval!)
-        const pinHtml = isScheduled
-          ? `
-            <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-90%);">
-              <div style="width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#0D9488,#059669);color:#fff;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(13,148,136,0.5);">
-                ${schedInfo?.routeOrder || '•'}
-              </div>
-              <div style="margin-top:1px;background:rgba(15,23,42,0.88);color:#fff;font-size:8px;font-weight:700;padding:1px 3.5px;border-radius:3px;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15;box-shadow:0 1px 3px rgba(0,0,0,0.2);">
-                ${shortName}
-              </div>
-            </div>
-          `
-          : `
-            <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-85%);">
-              <div style="width:12px;height:12px;border-radius:50%;background:#0D9488;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>
-              <div style="margin-top:1px;background:rgba(255,255,255,0.92);color:#0F172A;border:1px solid rgba(148,163,184,0.45);font-size:7.5px;font-weight:800;padding:0.5px 3px;border-radius:3px;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.1;">
-                ${shortName}
-              </div>
-            </div>
-          `;
+        const dot = L.circleMarker([st.lat, st.lng], {
+          renderer,
+          radius: 5.5,
+          fillColor: '#0D9488',
+          fillOpacity: 0.9,
+          color: '#FFFFFF',
+          weight: 1.8,
+        }).addTo(vectorGroup);
 
-        const storeIcon = L.divIcon({
-          className: 'fmcu-minimal-store-pin',
-          html: pinHtml,
-          iconSize: [0, 0],
-          iconAnchor: [0, 0],
+        dot.on('click', () => {
+          setSelectedStore(st);
         });
+      });
 
-        const marker = L.marker([st.lat, st.lng], {
-          icon: storeIcon,
-          zIndexOffset: isScheduled ? 500 : 10,
-        }).addTo(layerGroup);
+      // Second pass: scheduled stores drawn on top with outer halo ring
+      displayedStorePoints.forEach((st) => {
+        const schedInfo = scheduledByCodeMap.get(String(st.code).toUpperCase());
+        if (!schedInfo) return;
 
-        const popupHtml = `
-          <div style="font-family:system-ui,-apple-system,sans-serif;min-width:205px;padding:2px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;">
-              <span style="background:#CCFBF1;color:#115E59;font-size:10px;font-weight:800;padding:2px 6px;border-radius:6px;">#${st.code} • ${st.type}</span>
-              <span style="font-size:10px;font-weight:700;color:#64748B;">${st.city}</span>
-            </div>
-            <div style="font-size:12.5px;font-weight:900;color:#0F172A;margin-bottom:3px;">Toko ${st.name}</div>
-            <div style="font-size:10px;color:#475569;line-height:1.35;margin-bottom:6px;">${st.address}</div>
-            <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:6px;font-size:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;">
-              <div>
-                <div style="color:#94A3B8;font-weight:700;font-size:8.5px;">LATITUDE</div>
-                <div style="color:#0F172A;font-weight:800;">${st.lat.toFixed(5)}°</div>
-              </div>
-              <div>
-                <div style="color:#94A3B8;font-weight:700;font-size:8.5px;">LONGITUDE</div>
-                <div style="color:#0F172A;font-weight:800;">${st.lng.toFixed(5)}°</div>
-              </div>
-              <div>
-                <div style="color:#94A3B8;font-weight:700;font-size:8.5px;">ALTITUDE</div>
-                <div style="color:#0D9488;font-weight:800;">${st.altitude} mdpl</div>
-              </div>
-            </div>
-            ${
-              schedInfo?.agendaPic
-                ? `<div style="font-size:10px;color:#334155;font-weight:700;margin-bottom:4px;">Jadwal: <span style="color:#0D9488;">${schedInfo.agendaPic}</span> (${schedInfo.agendaDate || ''} ${schedInfo.agendaTime || ''})</div>`
-                : ''
-            }
-            <a href="https://www.google.com/maps/dir/?api=1&destination=${st.lat},${st.lng}" target="_blank" rel="noopener noreferrer" style="display:block;text-align:center;background:#0D9488;color:#fff;text-decoration:none;font-size:10px;font-weight:800;padding:5px 8px;border-radius:8px;margin-top:4px;">
-              Buka Rute Google Maps
-            </a>
-          </div>
-        `;
+        focusBoundsCoords.push([st.lat, st.lng]);
 
-        marker.bindPopup(popupHtml);
-        marker.on('click', () => {
-          setSelectedStore(schedInfo || st);
+        // Outer subtle pulse ring on canvas
+        L.circleMarker([st.lat, st.lng], {
+          renderer,
+          radius: 11,
+          fillColor: '#10B981',
+          fillOpacity: 0.24,
+          weight: 0,
+          interactive: false,
+        }).addTo(vectorGroup);
+
+        // Crisp inner scheduled pin on canvas
+        const schedMarker = L.circleMarker([st.lat, st.lng], {
+          renderer,
+          radius: 7.5,
+          fillColor: '#059669',
+          fillOpacity: 1,
+          color: '#FFFFFF',
+          weight: 2.4,
+        }).addTo(vectorGroup);
+
+        schedMarker.on('click', () => {
+          setSelectedStore(schedInfo);
         });
       });
     }
 
-    // D. ADMIN ONLY: USER PINPOINTS (Minimalist circular avatar badge)
+    // D. ADMIN USER PINPOINTS ON CANVAS
     if (isAdmin && showUserPinpoints) {
       adminUserPinpoints.forEach((up) => {
         focusBoundsCoords.push([up.lat, up.lng]);
-        const initials = up.userName
-          .split(' ')
-          .map((w) => w[0])
-          .join('')
-          .slice(0, 2)
-          .toUpperCase();
-        const firstName = up.userName.split(' ')[0] || up.userName;
 
-        const userIcon = L.divIcon({
-          className: 'fmcu-minimal-user-pin',
-          html: `
-            <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-90%);">
-              <div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;font-weight:900;font-size:9px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(37,99,235,0.5);">
-                ${initials}
-              </div>
-              <div style="margin-top:1px;background:#1E40AF;color:#fff;font-size:7.5px;font-weight:800;padding:0.5px 3.5px;border-radius:3px;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15;">
-                ${firstName}
-              </div>
-            </div>
-          `,
-          iconSize: [0, 0],
-          iconAnchor: [0, 0],
+        L.circleMarker([up.lat, up.lng], {
+          renderer,
+          radius: 12,
+          fillColor: '#3B82F6',
+          fillOpacity: 0.22,
+          weight: 0,
+          interactive: false,
+        }).addTo(vectorGroup);
+
+        const uCircle = L.circleMarker([up.lat, up.lng], {
+          renderer,
+          radius: 7.5,
+          fillColor: '#2563EB',
+          fillOpacity: 1,
+          color: '#FFFFFF',
+          weight: 2.4,
+        }).addTo(vectorGroup);
+
+        uCircle.on('click', () => {
+          L.popup({ closeButton: true, autoPan: true })
+            .setLatLng([up.lat, up.lng])
+            .setContent(
+              `<div style="font-family:system-ui,-apple-system,sans-serif;min-width:185px;padding:2px;">
+                <div style="font-size:9.5px;font-weight:800;color:#2563EB;text-transform:uppercase;">PINPOINT USER LAPANGAN</div>
+                <div style="font-size:12.5px;font-weight:900;color:#0F172A;margin-top:2px;">${up.userName}</div>
+                <div style="font-size:10px;color:#64748B;margin-bottom:5px;">${up.role}</div>
+                <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:5px;font-size:10px;">
+                  <div><strong>Tujuan:</strong> Toko ${up.targetStoreName} (#${up.targetStoreCode})</div>
+                  <div><strong>Jarak:</strong> ${up.distanceToStoreMeters}m (${
+                up.isInsideRadius ? 'Dalam Radius' : 'Menuju Lokasi'
+              })</div>
+                  <div><strong>Koordinat:</strong> ${up.lat.toFixed(4)}°, ${up.lng.toFixed(4)}°</div>
+                </div>
+              </div>`
+            )
+            .openOn(map);
         });
-
-        const uMarker = L.marker([up.lat, up.lng], {
-          icon: userIcon,
-          zIndexOffset: 900,
-        }).addTo(layerGroup);
-
-        uMarker.bindPopup(`
-          <div style="font-family:system-ui,-apple-system,sans-serif;min-width:190px;padding:2px;">
-            <div style="font-size:10px;font-weight:800;color:#2563EB;text-transform:uppercase;">PINPOINT USER LAPANGAN</div>
-            <div style="font-size:13px;font-weight:900;color:#0F172A;margin-top:2px;">${up.userName}</div>
-            <div style="font-size:10px;color:#64748B;margin-bottom:6px;">${up.role}</div>
-            <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:5px;font-size:10px;margin-bottom:4px;">
-              <div><strong>Tujuan:</strong> Toko ${up.targetStoreName} (#${up.targetStoreCode})</div>
-              <div><strong>Jarak ke Toko:</strong> ${up.distanceToStoreMeters}m (${
-          up.isInsideRadius ? 'Di Dalam Radius' : 'Menuju Lokasi'
-        })</div>
-              <div><strong>Koordinat:</strong> ${up.lat.toFixed(5)}°, ${up.lng.toFixed(5)}° (${up.altitude} mdpl)</div>
-            </div>
-          </div>
-        `);
       });
     }
 
-    if (focusBoundsCoords.length > 0) {
+    // Only auto-fit bounds when filter scope / search / PIC changes (not on minor layer toggles)
+    const fitSignature = `${viewMode}|${selectedPicFilter}|${searchQuery.trim()}`;
+    if (focusBoundsCoords.length > 0 && lastFitSignatureRef.current !== fitSignature) {
+      lastFitSignatureRef.current = fitSignature;
       try {
         const bounds = L.latLngBounds(focusBoundsCoords);
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14, animate: false });
       } catch {
         // ignore bounds error
       }
     }
+
+    updateViewportLabels();
   }, [
     isOpen,
     leafletReady,
@@ -586,7 +662,9 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     radiusMeters,
     adminUserPinpoints,
     viewMode,
+    selectedPicFilter,
     searchQuery,
+    updateViewportLabels,
   ]);
 
   // Cleanup map instance when modal closes
@@ -595,72 +673,24 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
       tileLayerRef.current = null;
-      layerGroupRef.current = null;
-      setIsFullScreenMap(false);
+      canvasRendererRef.current = null;
+      vectorLayerGroupRef.current = null;
+      labelLayerGroupRef.current = null;
+      lastFitSignatureRef.current = '';
       setShowFloatingControls(false);
+      setShowBottomStrip(false);
+      setSelectedStore(null);
     }
   }, [isOpen]);
 
-  // Sync Leaflet canvas size whenever Fullscreen or Bottom Strip toggles
+  // Sync Leaflet canvas size when bottom strip drawer toggles
   useEffect(() => {
     if (!mapInstanceRef.current) return;
-    mapInstanceRef.current.invalidateSize();
     const timer = setTimeout(() => {
       mapInstanceRef.current?.invalidateSize();
-    }, 180);
+    }, 100);
     return () => clearTimeout(timer);
-  }, [isFullScreenMap, showBottomStripInFs, showFloatingControls]);
-
-  // Listen to native browser fullscreenchange (e.g. when user presses ESC)
-  useEffect(() => {
-    const handleFsChange = () => {
-      const isNativeFs = Boolean(
-        document.fullscreenElement || (document as any).webkitFullscreenElement
-      );
-      if (!isNativeFs && isFullScreenMap) {
-        // Keep map valid if user exited browser fullscreen via ESC
-        setTimeout(() => {
-          mapInstanceRef.current?.invalidateSize();
-        }, 120);
-      }
-    };
-    document.addEventListener('fullscreenchange', handleFsChange);
-    document.addEventListener('webkitfullscreenchange', handleFsChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFsChange);
-      document.removeEventListener('webkitfullscreenchange', handleFsChange);
-    };
-  }, [isFullScreenMap]);
-
-  const handleToggleFullScreenMap = async () => {
-    const nextState = !isFullScreenMap;
-    setIsFullScreenMap(nextState);
-    if (!nextState) {
-      setShowFloatingControls(false);
-    }
-
-    try {
-      const el = modalRootRef.current as any;
-      if (nextState && el) {
-        if (el.requestFullscreen && !document.fullscreenElement) {
-          await el.requestFullscreen();
-        } else if (el.webkitRequestFullscreen && !(document as any).webkitFullscreenElement) {
-          el.webkitRequestFullscreen();
-        }
-      } else if (!nextState) {
-        if (document.fullscreenElement && document.exitFullscreen) {
-          await document.exitFullscreen();
-        } else if (
-          (document as any).webkitFullscreenElement &&
-          (document as any).webkitExitFullscreen
-        ) {
-          (document as any).webkitExitFullscreen();
-        }
-      }
-    } catch {
-      // Fallback: Immersive 100dvh x 100vw HUD mode still works on iOS Safari & mobile webviews
-    }
-  };
+  }, [showBottomStrip]);
 
   const handleFitAllBounds = () => {
     if (!mapInstanceRef.current) return;
@@ -671,7 +701,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     if (targetPoints.length > 0) {
       try {
         const bounds = L.latLngBounds(targetPoints.map((p) => [p.lat, p.lng]));
-        mapInstanceRef.current.fitBounds(bounds, { padding: [45, 45], maxZoom: 14 });
+        mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
       } catch {
         // ignore
       }
@@ -681,7 +711,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   const handleFocusStore = (st: StoreGeoPoint) => {
     setSelectedStore(st);
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo([st.lat, st.lng], 16, { duration: 0.7 });
+      mapInstanceRef.current.setView([st.lat, st.lng], 16, { animate: true });
     }
   };
 
@@ -690,106 +720,55 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   const uniquePics = Array.from(new Set(agendas.map((a) => a.pic).filter(Boolean))).sort();
 
   return (
-    <div
-      ref={modalRootRef}
-      className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-md flex flex-col justify-between overflow-hidden animate-fadeIn"
-    >
-      <div className="relative w-full h-full bg-[#F8F9FD] flex flex-col overflow-hidden">
-        {/* Top Liquid Glass Header (Hidden when Fullscreen Map Mode is Active) */}
-        {!isFullScreenMap && (
-          <div className="z-20 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 px-4 py-2.5 flex flex-col gap-2 shadow-xs">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#2BB3A0] to-[#0D9488] text-white flex items-center justify-center shadow-xs shrink-0">
-                  <Compass className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <h2 className="text-sm sm:text-base font-black text-slate-900 truncate">
-                      FMCU Live Maps &amp; Master Store
-                    </h2>
-                    <span
-                      className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border uppercase tracking-wider ${
-                        isAdmin
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : 'bg-teal-50 text-teal-700 border-teal-200'
-                      }`}
-                    >
-                      {isAdmin
-                        ? 'ADMIN • USER, TOKO, RADIUS & RUTE'
-                        : 'USER • PINPOINT TOKO & RUTE JADWAL'}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-medium truncate">
-                    Menampilkan {allMasterStores.length} titik koordinat toko Master Data (Lat, Lng, Altitude) &amp; rute jadwal
-                  </p>
-                </div>
-              </div>
+    <div className="fixed inset-0 z-[9999] w-screen h-[100dvh] bg-slate-900 flex flex-col overflow-hidden select-none">
+      {/* 100% Fullscreen Edge-to-Edge Map Canvas */}
+      <div className="relative flex-1 w-full h-full bg-slate-200 overflow-hidden">
+        <div ref={mapContainerRef} className="w-full h-full z-10" />
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleToggleFullScreenMap}
-                  className="px-3 py-2 rounded-xl bg-gradient-to-r from-[#00A389] to-[#0D9488] hover:brightness-105 text-white text-[11px] font-extrabold flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
-                  title="Buka Mode Fullscreen Live Maps (Layar Penuh 100%)"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Mode Fullscreen</span>
-                  <span className="sm:hidden">Fullscreen</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0"
-                  title="Tutup Live Maps"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+        {/* TOP BAR HUD: Floating Stats, Tile Switcher, Filter Drawer Toggle & Close Button */}
+        <div className="absolute top-3 left-3 right-3 z-20 flex items-start justify-between gap-2 pointer-events-none">
+          {/* Left Group: Live Counter + Tile Switcher + Filter Button */}
+          <div className="flex flex-wrap items-center gap-1.5 pointer-events-auto max-w-[calc(100vw-4.5rem)]">
+            {/* Brand & Counter Pill */}
+            <div className="bg-white px-3 py-2 rounded-2xl shadow-lg border border-slate-200/90 flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-[#76C88D] text-white flex items-center justify-center shrink-0">
+                <Compass className="w-3.5 h-3.5" />
               </div>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="text-[11px] font-extrabold text-slate-900 whitespace-nowrap">
+                {displayedStorePoints.length} Toko
+              </span>
+              {scheduledStorePoints.length > 0 && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-[11px] font-extrabold text-teal-700 flex items-center gap-1 whitespace-nowrap">
+                    <Route className="w-3 h-3" />
+                    {scheduledStorePoints.length} Rute ({totalRouteKm} km)
+                  </span>
+                </>
+              )}
+              {isAdmin && showUserPinpoints && (
+                <>
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <span className="hidden sm:flex text-[11px] font-extrabold text-blue-700 items-center gap-1 whitespace-nowrap">
+                    <Users className="w-3 h-3" />
+                    {adminUserPinpoints.length} User
+                  </span>
+                </>
+              )}
             </div>
 
-          {/* Filter & Layer Controls Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* Mode Switcher: Semua Toko Master (610) vs Rute Terjadwal */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setViewMode('all')}
-                className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
-                  viewMode === 'all'
-                    ? 'bg-white text-teal-700 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Store className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Semua Toko ({allMasterStores.length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('scheduled')}
-                className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
-                  viewMode === 'scheduled'
-                    ? 'bg-white text-teal-700 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Route className="w-3.5 h-3.5 text-teal-600" />
-                <span>Rute Jadwal ({scheduledStorePoints.length})</span>
-              </button>
-            </div>
-
-            {/* Map Tile Switcher (OSM / Peta Jalan / Satelit - Bebas API Key) */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            {/* Map Tile Switcher Pill */}
+            <div className="bg-white p-1 rounded-2xl shadow-lg border border-slate-200/90 flex items-center gap-1">
               {(['osm', 'street', 'satellite'] as MapTileStyle[]).map((styleKey) => (
                 <button
                   key={styleKey}
                   type="button"
                   onClick={() => setTileStyle(styleKey)}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold transition cursor-pointer ${
                     tileStyle === styleKey
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-[#3A657C] text-white'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {MAP_TILE_PROVIDERS[styleKey].label}
@@ -797,25 +776,89 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               ))}
             </div>
 
-            {/* Search Input */}
-            <div className="relative flex-1 min-w-[150px] max-w-xs">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            {/* Filter & Search Drawer Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowFloatingControls((v) => !v)}
+              className={`px-3 py-2 rounded-2xl shadow-lg border text-[11px] font-extrabold flex items-center gap-1.5 transition cursor-pointer ${
+                showFloatingControls
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-800 border-slate-200/90 hover:bg-slate-50'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-[#76C88D]" />
+              <span>Filter &amp; Cari</span>
+            </button>
+          </div>
+
+          {/* Right Group: Direct Close Fullscreen Map Button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="pointer-events-auto h-10 px-3.5 rounded-2xl bg-slate-900 hover:bg-rose-600 text-white shadow-lg flex items-center gap-1.5 text-xs font-extrabold transition active:scale-95 cursor-pointer shrink-0"
+            title="Tutup Live Maps"
+          >
+            <X className="w-4 h-4" />
+            <span className="hidden sm:inline">Tutup Peta</span>
+          </button>
+        </div>
+
+        {/* FLOATING FILTER & SEARCH DRAWER */}
+        {showFloatingControls && (
+          <div className="absolute top-16 left-3 z-20 w-[min(92vw,360px)] bg-white rounded-3xl p-3.5 shadow-2xl border border-slate-200 space-y-2.5">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari dari 610 toko (kode/nama/kota)..."
-                className="w-full pl-8 pr-3 py-1 rounded-xl bg-slate-100 border border-slate-200/80 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-teal-500"
+                placeholder="Cari dari 610 toko (kode / nama / kota)..."
+                className="w-full pl-8 pr-7 py-2 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3A657C]"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            {/* ADMIN ONLY LAYER TOGGLES */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setViewMode('all')}
+                className={`flex-1 py-2 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1 border cursor-pointer ${
+                  viewMode === 'all'
+                    ? 'bg-[#3A657C] text-white border-[#3A657C]'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                <Store className="w-3 h-3" />
+                <span>Semua Toko ({allMasterStores.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('scheduled')}
+                className={`flex-1 py-2 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1 border cursor-pointer ${
+                  viewMode === 'scheduled'
+                    ? 'bg-[#3A657C] text-white border-[#3A657C]'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                <Route className="w-3 h-3" />
+                <span>Rute Jadwal ({scheduledStorePoints.length})</span>
+              </button>
+            </div>
+
             {isAdmin && (
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="space-y-2 pt-2 border-t border-slate-100">
                 <select
                   value={selectedPicFilter}
                   onChange={(e) => setSelectedPicFilter(e.target.value)}
-                  className="px-2.5 py-1 rounded-xl bg-blue-50 border border-blue-200 text-[10px] font-bold text-blue-800 focus:outline-none cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-800 outline-none cursor-pointer"
                 >
                   <option value="ALL">Semua Personel ({uniquePics.length})</option>
                   {uniquePics.map((p) => (
@@ -825,488 +868,286 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                   ))}
                 </select>
 
-                <button
-                  type="button"
-                  onClick={() => setShowUserPinpoints((v) => !v)}
-                  className={`px-2 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
-                    showUserPinpoints
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-slate-500 border-slate-200'
-                  }`}
-                >
-                  <Users className="w-3 h-3" />
-                  <span>User</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowStorePinpoints((v) => !v)}
-                  className={`px-2 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
-                    showStorePinpoints
-                      ? 'bg-teal-600 text-white border-teal-600'
-                      : 'bg-white text-slate-500 border-slate-200'
-                  }`}
-                >
-                  <MapPin className="w-3 h-3" />
-                  <span>Toko</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowRadiusCircle((v) => !v)}
-                  className={`px-2 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
-                    showRadiusCircle
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-white text-slate-500 border-slate-200'
-                  }`}
-                >
-                  <Radio className="w-3 h-3" />
-                  <span>Radius {radiusMeters}m</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowRouteLine((v) => !v)}
-                  className={`px-2 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
-                    showRouteLine
-                      ? 'bg-amber-500 text-white border-amber-500'
-                      : 'bg-white text-slate-500 border-slate-200'
-                  }`}
-                >
-                  <Route className="w-3 h-3" />
-                  <span>Rute</span>
-                </button>
+                <div className="grid grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowUserPinpoints((v) => !v)}
+                    className={`py-1.5 rounded-xl text-[10px] font-extrabold border cursor-pointer ${
+                      showUserPinpoints
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    User
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowStorePinpoints((v) => !v)}
+                    className={`py-1.5 rounded-xl text-[10px] font-extrabold border cursor-pointer ${
+                      showStorePinpoints
+                        ? 'bg-teal-600 text-white border-teal-600'
+                        : 'bg-white text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    Toko
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRadiusCircle((v) => !v)}
+                    className={`py-1.5 rounded-xl text-[10px] font-extrabold border cursor-pointer ${
+                      showRadiusCircle
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    Radius
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRouteLine((v) => !v)}
+                    className={`py-1.5 rounded-xl text-[10px] font-extrabold border cursor-pointer ${
+                      showRouteLine
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-white text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    Rute
+                  </button>
+                </div>
 
                 {showRadiusCircle && (
-                  <select
-                    value={radiusMeters}
-                    onChange={(e) => setRadiusMeters(Number(e.target.value))}
-                    className="px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 cursor-pointer"
-                  >
-                    <option value={150}>150m</option>
-                    <option value={250}>250m</option>
-                    <option value={500}>500m</option>
-                  </select>
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 pt-0.5">
+                    <span className="flex items-center gap-1">
+                      <Radio className="w-3 h-3 text-emerald-600" />
+                      Radius Geofence Toko:
+                    </span>
+                    <select
+                      value={radiusMeters}
+                      onChange={(e) => setRadiusMeters(Number(e.target.value))}
+                      className="px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[10px] font-extrabold text-slate-800 cursor-pointer"
+                    >
+                      <option value={150}>150 Meter</option>
+                      <option value={250}>250 Meter</option>
+                      <option value={500}>500 Meter</option>
+                    </select>
+                  </div>
                 )}
               </div>
             )}
           </div>
-          </div>
         )}
 
-        {/* Center Map Canvas Area (100% Edge-to-Edge in Fullscreen Mode) */}
-        <div className="relative flex-1 w-full bg-slate-200 overflow-hidden">
-          <div ref={mapContainerRef} className="w-full h-full z-10" />
+        {/* BOTTOM-LEFT FLOATING DOCK: Pusatkan Peta & Toggle Daftar Rute Toko */}
+        <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleFitAllBounds}
+            className="px-3 py-2 rounded-2xl bg-white hover:bg-slate-50 text-slate-900 border border-slate-200/90 shadow-lg text-[11px] font-extrabold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+            title="Pusatkan Rute Peta"
+          >
+            <LocateFixed className="w-3.5 h-3.5 text-[#3A657C]" />
+            <span>Pusatkan Peta</span>
+          </button>
 
-          {/* Floating Summary Stats Pill + Quick Fullscreen HUD on Map Top-Left */}
-          <div className="absolute top-3 left-3 right-16 z-20 flex flex-wrap items-center gap-1.5 pointer-events-none">
-            <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-2xl shadow-md border border-slate-200/80 flex items-center gap-2 pointer-events-auto">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[11px] font-black text-slate-800">
-                {displayedStorePoints.length} Pinpoint Toko Aktif
-              </span>
-              {scheduledStorePoints.length > 0 && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-[11px] font-extrabold text-teal-700 flex items-center gap-1">
-                    <Route className="w-3 h-3" />
-                    {scheduledStorePoints.length} Rute ({totalRouteKm} km)
-                  </span>
-                </>
-              )}
-              {isAdmin && showUserPinpoints && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-[11px] font-extrabold text-blue-700 flex items-center gap-1">
-                    <Users className="w-3 h-3" />
-                    {adminUserPinpoints.length} User
-                  </span>
-                </>
-              )}
-            </div>
-
-            {/* Extra Floating HUD Controls when in Fullscreen Mode */}
-            {isFullScreenMap && (
-              <div className="flex flex-wrap items-center gap-1.5 pointer-events-auto">
-                {/* Quick Tile Switcher Pill in Fullscreen */}
-                <div className="bg-white/95 backdrop-blur-md p-1 rounded-2xl shadow-md border border-slate-200/80 flex items-center gap-1">
-                  {(['osm', 'street', 'satellite'] as MapTileStyle[]).map((styleKey) => (
-                    <button
-                      key={styleKey}
-                      type="button"
-                      onClick={() => setTileStyle(styleKey)}
-                      className={`px-2 py-1 rounded-xl text-[10px] font-extrabold transition cursor-pointer ${
-                        tileStyle === styleKey
-                          ? 'bg-slate-900 text-white'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      {MAP_TILE_PROVIDERS[styleKey].label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Toggle Floating Search & Filter Drawer */}
-                <button
-                  type="button"
-                  onClick={() => setShowFloatingControls((v) => !v)}
-                  className={`px-3 py-1.5 rounded-2xl shadow-md border text-[10px] font-extrabold flex items-center gap-1.5 transition cursor-pointer ${
-                    showFloatingControls
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white/95 backdrop-blur-md text-slate-800 border-slate-200/80 hover:bg-white'
-                  }`}
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-teal-500" />
-                  <span>Filter &amp; Cari</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Floating Search & Filter Drawer in Fullscreen Mode */}
-          {isFullScreenMap && showFloatingControls && (
-            <div className="absolute top-14 left-3 z-20 w-[min(92vw,360px)] bg-white/95 backdrop-blur-xl rounded-2xl p-3 shadow-xl border border-slate-200/90 space-y-2.5 animate-fadeIn">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari kode / nama toko / kota..."
-                  className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-teal-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('all')}
-                  className={`flex-1 py-1.5 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1 border cursor-pointer ${
-                    viewMode === 'all'
-                      ? 'bg-teal-600 text-white border-teal-600'
-                      : 'bg-slate-50 text-slate-600 border-slate-200'
-                  }`}
-                >
-                  <Store className="w-3 h-3" />
-                  <span>Semua ({allMasterStores.length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('scheduled')}
-                  className={`flex-1 py-1.5 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1 border cursor-pointer ${
-                    viewMode === 'scheduled'
-                      ? 'bg-teal-600 text-white border-teal-600'
-                      : 'bg-slate-50 text-slate-600 border-slate-200'
-                  }`}
-                >
-                  <Route className="w-3 h-3" />
-                  <span>Rute ({scheduledStorePoints.length})</span>
-                </button>
-              </div>
-
-              {isAdmin && (
-                <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                  <select
-                    value={selectedPicFilter}
-                    onChange={(e) => setSelectedPicFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-[10px] font-bold text-blue-800 outline-none"
-                  >
-                    <option value="ALL">Semua Personel ({uniquePics.length})</option>
-                    {uniquePics.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-4 gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowUserPinpoints((v) => !v)}
-                      className={`py-1 rounded-lg text-[9.5px] font-extrabold border cursor-pointer ${
-                        showUserPinpoints
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-slate-500 border-slate-200'
-                      }`}
-                    >
-                      User
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowStorePinpoints((v) => !v)}
-                      className={`py-1 rounded-lg text-[9.5px] font-extrabold border cursor-pointer ${
-                        showStorePinpoints
-                          ? 'bg-teal-600 text-white border-teal-600'
-                          : 'bg-white text-slate-500 border-slate-200'
-                      }`}
-                    >
-                      Toko
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowRadiusCircle((v) => !v)}
-                      className={`py-1 rounded-lg text-[9.5px] font-extrabold border cursor-pointer ${
-                        showRadiusCircle
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : 'bg-white text-slate-500 border-slate-200'
-                      }`}
-                    >
-                      Radius
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowRouteLine((v) => !v)}
-                      className={`py-1 rounded-lg text-[9.5px] font-extrabold border cursor-pointer ${
-                        showRouteLine
-                          ? 'bg-amber-500 text-white border-amber-500'
-                          : 'bg-white text-slate-500 border-slate-200'
-                      }`}
-                    >
-                      Rute
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Floating Action Dock on Map Bottom-Left / Top-Right (Fullscreen Toggle + Fit Bounds + Close) */}
-          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={handleToggleFullScreenMap}
-              className={`px-3 py-2 rounded-2xl shadow-lg border text-[11px] font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
-                isFullScreenMap
-                  ? 'bg-slate-900/95 hover:bg-black text-white border-slate-700'
-                  : 'bg-white/95 hover:bg-white text-slate-900 border-slate-200/90'
-              }`}
-              title={isFullScreenMap ? 'Keluar dari Mode Fullscreen' : 'Buka Mode Fullscreen Live Maps'}
-            >
-              {isFullScreenMap ? (
-                <>
-                  <Minimize2 className="w-3.5 h-3.5 text-teal-400" />
-                  <span>Keluar Fullscreen</span>
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Layar Penuh</span>
-                </>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleFitAllBounds}
-              className="px-2.5 py-2 rounded-2xl bg-white/95 hover:bg-white text-slate-800 border border-slate-200/90 shadow-lg text-[11px] font-extrabold flex items-center gap-1 transition active:scale-95 cursor-pointer"
-              title="Fokus & Pusatkan Rute Peta"
-            >
-              <LocateFixed className="w-3.5 h-3.5 text-teal-600" />
-              <span className="hidden sm:inline">Pusatkan Peta</span>
-            </button>
-
-            {isFullScreenMap && (
+          <button
+            type="button"
+            onClick={() => setShowBottomStrip((v) => !v)}
+            className={`px-3 py-2 rounded-2xl border shadow-lg text-[11px] font-extrabold flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
+              showBottomStrip
+                ? 'bg-[#3A657C] text-white border-[#3A657C]'
+                : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-200/90'
+            }`}
+            title="Tampilkan / Sembunyikan Daftar Rute Toko"
+          >
+            {showBottomStrip ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => setShowBottomStripInFs((v) => !v)}
-                  className="px-2.5 py-2 rounded-2xl bg-white/95 hover:bg-white text-slate-800 border border-slate-200/90 shadow-lg text-[11px] font-extrabold flex items-center gap-1 transition active:scale-95 cursor-pointer"
-                  title="Tampilkan / Sembunyikan Daftar Rute Bawah"
-                >
-                  {showBottomStripInFs ? (
-                    <>
-                      <ChevronDown className="w-3.5 h-3.5 text-teal-600" />
-                      <span className="hidden sm:inline">Sembunyikan Daftar</span>
-                    </>
-                  ) : (
-                    <>
-                      <ChevronUp className="w-3.5 h-3.5 text-teal-600" />
-                      <span className="hidden sm:inline">Daftar Toko ({bottomStripPoints.length})</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-9 h-9 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer"
-                  title="Tutup Live Maps"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <ChevronDown className="w-3.5 h-3.5" />
+                <span>Tutup Daftar</span>
+              </>
+            ) : (
+              <>
+                <ChevronUp className="w-3.5 h-3.5 text-[#76C88D]" />
+                <span>Daftar Toko ({bottomStripPoints.length})</span>
               </>
             )}
-          </div>
-
-          {/* Selected Store Floating Coordinate Card */}
-          {selectedStore && (
-            <div className="absolute bottom-14 left-3 right-3 sm:bottom-3 sm:left-auto sm:right-3 sm:w-80 z-20 bg-white/95 backdrop-blur-xl rounded-2xl p-3.5 shadow-xl border border-teal-200 animate-fadeIn">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div>
-                  <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
-                    #{selectedStore.code} • {selectedStore.type}
-                  </span>
-                  <h4 className="text-sm font-black text-slate-900 mt-1">
-                    Toko {selectedStore.name}
-                  </h4>
-                  <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">
-                    {selectedStore.address}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedStore(null)}
-                  className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center shrink-0 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Lat / Lng / Altitude Grid */}
-              <div className="grid grid-cols-3 gap-1.5 bg-slate-50 p-2 rounded-xl border border-slate-200/70 mb-2.5 text-center">
-                <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase block">
-                    Latitude
-                  </span>
-                  <span className="text-[11px] font-black text-slate-800 tabular-nums">
-                    {selectedStore.lat.toFixed(5)}°
-                  </span>
-                </div>
-                <div className="border-x border-slate-200/70">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase block">
-                    Longitude
-                  </span>
-                  <span className="text-[11px] font-black text-slate-800 tabular-nums">
-                    {selectedStore.lng.toFixed(5)}°
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase block">
-                    Altitude
-                  </span>
-                  <span className="text-[11px] font-black text-teal-700 tabular-nums">
-                    {selectedStore.altitude} mdpl
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] text-slate-500 truncate">
-                  SH: <strong className="text-slate-700">{selectedStore.storeHead}</strong>
-                </div>
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${selectedStore.lat},${selectedStore.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-extrabold flex items-center gap-1 shadow-xs shrink-0"
-                >
-                  <Navigation className="w-3 h-3" />
-                  <span>Navigasi Rute</span>
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              </div>
-            </div>
-          )}
+          </button>
         </div>
 
-        {/* Bottom Horizontal Route & Store Pinpoints Strip (Auto-Hidden in Fullscreen unless toggled) */}
-        {(!isFullScreenMap || showBottomStripInFs) && (
-          <div className="z-20 bg-white border-t border-slate-200/80 px-4 py-2">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-teal-600" />
-                <span>
-                  Rute &amp; Koordinat Toko ({displayedStorePoints.length} Titik Master Data)
+        {/* SELECTED STORE FLOATING DETAIL CARD */}
+        {selectedStore && (
+          <div className="absolute bottom-14 left-3 right-3 sm:bottom-3 sm:left-auto sm:right-14 sm:w-80 z-20 bg-white rounded-3xl p-4 shadow-2xl border border-slate-200">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                  #{selectedStore.code} • {selectedStore.type}
                 </span>
-              </span>
-              {scheduledStorePoints.length >= 2 && (
-                <a
-                  href={`https://www.google.com/maps/dir/${scheduledStorePoints
-                    .slice(0, 10)
-                    .map((p) => `${p.lat},${p.lng}`)
-                    .join('/')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] font-extrabold text-teal-700 hover:text-teal-800 flex items-center gap-1 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200"
-                >
-                  <Navigation className="w-3 h-3" />
-                  <span>Buka Multi-Rute di Google Maps</span>
-                </a>
-              )}
+                <h4 className="text-sm font-black text-slate-900 mt-1">
+                  Toko {selectedStore.name}
+                </h4>
+                <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">
+                  {selectedStore.address}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedStore(null)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-              {bottomStripPoints.length === 0 ? (
-                <div className="text-xs text-slate-400 py-2">
-                  Tidak ada titik toko yang cocok dengan pencarian.
-                </div>
-              ) : (
-                bottomStripPoints.map((st, idx) => {
-                  const isSelected = selectedStore?.code === st.code;
-                  const isSched = scheduledByCodeMap.has(String(st.code).toUpperCase());
+            <div className="grid grid-cols-3 gap-1.5 bg-slate-50 p-2 rounded-2xl border border-slate-200/70 mb-2.5 text-center">
+              <div>
+                <span className="text-[9px] font-bold text-slate-400 uppercase block">
+                  Latitude
+                </span>
+                <span className="text-[11px] font-black text-slate-800 tabular-nums">
+                  {selectedStore.lat.toFixed(5)}°
+                </span>
+              </div>
+              <div className="border-x border-slate-200/70">
+                <span className="text-[9px] font-bold text-slate-400 uppercase block">
+                  Longitude
+                </span>
+                <span className="text-[11px] font-black text-slate-800 tabular-nums">
+                  {selectedStore.lng.toFixed(5)}°
+                </span>
+              </div>
+              <div>
+                <span className="text-[9px] font-bold text-slate-400 uppercase block">
+                  Altitude
+                </span>
+                <span className="text-[11px] font-black text-teal-700 tabular-nums">
+                  {selectedStore.altitude} mdpl
+                </span>
+              </div>
+            </div>
 
-                  return (
-                    <button
-                      key={`${st.code}-${idx}`}
-                      type="button"
-                      onClick={() => handleFocusStore(st)}
-                      className={`shrink-0 text-left p-2 rounded-2xl border transition-all cursor-pointer min-w-[205px] max-w-[225px] ${
-                        isSelected
-                          ? 'bg-teal-50/90 border-teal-500 shadow-xs'
-                          : isSched
-                          ? 'bg-emerald-50/50 hover:bg-white border-teal-200'
-                          : 'bg-slate-50/80 hover:bg-white border-slate-200/80'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1.5 mb-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span
-                            className={`w-4 h-4 rounded-full text-white text-[9px] font-black flex items-center justify-center shrink-0 ${
-                              isSched ? 'bg-teal-600' : 'bg-slate-500'
-                            }`}
-                          >
-                            {isSched ? st.routeOrder || idx + 1 : '•'}
-                          </span>
-                          <span className="text-[11px] font-black text-slate-800 truncate">
-                            {st.name}
-                          </span>
-                        </div>
-                        <span className="text-[9px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
-                          #{st.code}
-                        </span>
-                      </div>
+            {selectedStore.agendaPic && (
+              <div className="text-[10px] text-slate-600 font-semibold mb-2 bg-emerald-50/70 px-2.5 py-1 rounded-xl border border-emerald-200/70">
+                Jadwal: <strong className="text-emerald-800">{selectedStore.agendaPic}</strong> (
+                {selectedStore.agendaDate || ''} {selectedStore.agendaTime || ''})
+              </div>
+            )}
 
-                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-500 tabular-nums">
-                        <span>{st.lat.toFixed(4)}°</span>
-                        <span>•</span>
-                        <span>{st.lng.toFixed(4)}°</span>
-                        <span>•</span>
-                        <span className="text-teal-700 flex items-center gap-0.5">
-                          <Mountain className="w-2.5 h-2.5" />
-                          {st.altitude}m
-                        </span>
-                      </div>
-
-                      {st.agendaDate && (
-                        <div className="mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[9px] text-slate-500 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-2.5 h-2.5 text-teal-600" />
-                            {st.agendaDate} ({st.agendaTime})
-                          </span>
-                          {st.agendaPic && (
-                            <span className="text-teal-700 font-bold truncate max-w-[85px]">
-                              {st.agendaPic}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })
-              )}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] text-slate-500 truncate">
+                SH: <strong className="text-slate-700">{selectedStore.storeHead}</strong>
+              </div>
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${selectedStore.lat},${selectedStore.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-xl bg-[#3A657C] hover:bg-slate-900 text-white text-[10px] font-extrabold flex items-center gap-1 shadow-xs shrink-0"
+              >
+                <Navigation className="w-3 h-3" />
+                <span>Rute Google Maps</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
             </div>
           </div>
         )}
       </div>
+
+      {/* OPTIONAL COLLAPSIBLE BOTTOM STRIP DRAWER */}
+      {showBottomStrip && (
+        <div className="z-20 bg-white border-t border-slate-200 px-4 py-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-[#3A657C]" />
+              <span>
+                Rute &amp; Koordinat Toko ({displayedStorePoints.length} Titik Master Data)
+              </span>
+            </span>
+            {scheduledStorePoints.length >= 2 && (
+              <a
+                href={`https://www.google.com/maps/dir/${scheduledStorePoints
+                  .slice(0, 10)
+                  .map((p) => `${p.lat},${p.lng}`)
+                  .join('/')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-extrabold text-teal-700 hover:text-teal-800 flex items-center gap-1 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200"
+              >
+                <Navigation className="w-3 h-3" />
+                <span>Buka Multi-Rute di Google Maps</span>
+              </a>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+            {bottomStripPoints.length === 0 ? (
+              <div className="text-xs text-slate-400 py-2">
+                Tidak ada titik toko yang cocok dengan pencarian.
+              </div>
+            ) : (
+              bottomStripPoints.map((st, idx) => {
+                const isSelected = selectedStore?.code === st.code;
+                const isSched = scheduledByCodeMap.has(String(st.code).toUpperCase());
+
+                return (
+                  <button
+                    key={`${st.code}-${idx}`}
+                    type="button"
+                    onClick={() => handleFocusStore(st)}
+                    className={`shrink-0 text-left p-2 rounded-2xl border transition cursor-pointer min-w-[205px] max-w-[225px] ${
+                      isSelected
+                        ? 'bg-teal-50 border-teal-500'
+                        : isSched
+                        ? 'bg-emerald-50/50 hover:bg-slate-50 border-teal-200'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={`w-4 h-4 rounded-full text-white text-[9px] font-black flex items-center justify-center shrink-0 ${
+                            isSched ? 'bg-teal-600' : 'bg-slate-500'
+                          }`}
+                        >
+                          {isSched ? st.routeOrder || idx + 1 : '•'}
+                        </span>
+                        <span className="text-[11px] font-black text-slate-800 truncate">
+                          {st.name}
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+                        #{st.code}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-500 tabular-nums">
+                      <span>{st.lat.toFixed(4)}°</span>
+                      <span>•</span>
+                      <span>{st.lng.toFixed(4)}°</span>
+                      <span>•</span>
+                      <span className="text-teal-700 flex items-center gap-0.5">
+                        <Mountain className="w-2.5 h-2.5" />
+                        {st.altitude}m
+                      </span>
+                    </div>
+
+                    {st.agendaDate && (
+                      <div className="mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[9px] text-slate-500 font-semibold">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-2.5 h-2.5 text-teal-600" />
+                          {st.agendaDate} ({st.agendaTime})
+                        </span>
+                        {st.agendaPic && (
+                          <span className="text-teal-700 font-bold truncate max-w-[85px]">
+                            {st.agendaPic}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
