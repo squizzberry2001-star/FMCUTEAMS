@@ -18,6 +18,7 @@ import {
   Eye,
   Maximize2
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { VisitReportData } from '../../types/visitReport';
 import {
   generatePdfDoc,
@@ -65,6 +66,49 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   const [useIframeFallback, setUseIframeFallback] = useState<boolean>(false);
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const renderGenerationRef = useRef<number>(0);
+
+  // Pinch-to-zoom & Mouse Scroll Zoom State
+  const [zoomScale, setZoomScale] = useState<number>(1);
+  const pinchDistRef = useRef<number | null>(null);
+  const isPinchingRef = useRef<boolean>(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      isPinchingRef.current = true;
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      pinchDistRef.current = dist;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchDistRef.current !== null) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const factor = dist / pinchDistRef.current;
+      if (Math.abs(factor - 1) > 0.02) {
+        setZoomScale((prev) => Math.min(2.8, Math.max(0.6, prev * (factor > 1 ? 1.03 : 0.97))));
+        pinchDistRef.current = dist;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isPinchingRef.current = false;
+    pinchDistRef.current = null;
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoomScale((prev) => Math.min(2.8, Math.max(0.6, Number((prev + delta).toFixed(2)))));
+    }
+  };
 
   const pdfFileName = useMemo(() => {
     return getPdfFileName(data);
@@ -141,13 +185,13 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
           const totalPages = pdfDoc.numPages;
           const pages: RenderedPdfPage[] = [];
 
-          // Render with 2.0 scale for retina sharpness
-          const dpr = Math.min(window.devicePixelRatio || 1, 2.0);
-          const targetScale = Math.max(1.5, Math.min(2.2, dpr * 1.5));
+          // Render with optimized scale for fast mobile performance & sharpness
+          const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+          const targetScale = isMobile ? 1.15 : 1.5;
 
           for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
             if (isCancelled || renderGenerationRef.current !== currentGen) return;
-            setLoadingProgressText(`Merender halaman ${pageNum} dari ${totalPages}...`);
+            setLoadingProgressText(`Memuat halaman ${pageNum} dari ${totalPages}...`);
 
             const page = await pdfDoc.getPage(pageNum);
             const viewport = page.getViewport({ scale: targetScale });
@@ -159,18 +203,28 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
             const ctx = canvas.getContext('2d', { alpha: false });
             if (ctx) {
               await page.render({ canvasContext: ctx, viewport }).promise;
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-              pages.push({
+              const dataUrl = canvas.toDataURL('image/jpeg', isMobile ? 0.88 : 0.92);
+              const newPage: RenderedPdfPage = {
                 pageNum,
                 dataUrl,
                 width: viewport.width,
                 height: viewport.height,
-              });
+              };
+              pages.push(newPage);
+
+              // PROGRESSIVE STREAMING: Langsung tampilkan per halaman tanpa menunggu loop selesai
+              if (!isCancelled && renderGenerationRef.current === currentGen) {
+                setRenderedPages([...pages]);
+                if (pageNum === 1) {
+                  setIsLoadingPdf(false); // Langsung tampilkan halaman 1 dalam hitungan milidetik!
+                }
+              }
             }
           }
 
           if (!isCancelled && renderGenerationRef.current === currentGen) {
-            setRenderedPages(pages);
+            setRenderedPages([...pages]);
+            setIsLoadingPdf(false);
             setUseIframeFallback(false);
           }
         } catch (pdfJsErr) {
@@ -235,6 +289,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       setSyncResult(result);
       setIsSyncingGdrive(false);
       showToast('Laporan sukses tersimpan dan disinkronkan ke Google Drive Toko!', 'success');
+      confetti({ particleCount: 85, spread: 70, origin: { y: 0.6 } });
       if (onSyncGdrive) {
         try {
           onSyncGdrive();
@@ -248,6 +303,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       setSyncStatusStep(4);
       setIsSyncingGdrive(false);
       showToast('Laporan berhasil disinkronkan (Offline Mode / Antre GDrive)', 'success');
+      confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
     }
   };
 
@@ -448,39 +504,84 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
         )}
 
         {/* ================================================================== */}
-        {/* CONTINUOUS REAL PDF PAGES STREAM (SEMUA HALAMAN)                   */}
+        {/* CONTINUOUS REAL PDF PAGES STREAM (SEMUA HALAMAN DENGAN PINCH ZOOM) */}
         {/* ================================================================== */}
         {!isLoadingPdf && !useIframeFallback && renderedPages.length > 0 && (
-          <div className="space-y-6 max-w-5xl mx-auto w-full">
-            {renderedPages.map((page) => (
-              <div
-                key={page.pageNum}
-                className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden p-2.5 sm:p-4 transition hover:shadow-lg print:shadow-none print:border-none print:rounded-none print:p-0 print:m-0 print:h-screen print:page-break-after-always"
-              >
-                {/* Header card */}
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-2 mb-2 border-b border-slate-100 print:hidden">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-teal-500" />
-                    <span>
-                      Halaman {page.pageNum} dari {renderedPages.length}
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onWheel={handleWheel}
+            className="w-full flex-1 overflow-x-auto overflow-y-visible touch-pan-x touch-pan-y transition-all"
+          >
+            <div
+              style={{
+                transform: `scale(${zoomScale})`,
+                transformOrigin: 'top center',
+                transition: isPinchingRef.current ? 'none' : 'transform 0.15s ease-out',
+              }}
+              className="space-y-6 max-w-5xl mx-auto w-full transition-transform"
+            >
+              {renderedPages.map((page) => (
+                <div
+                  key={page.pageNum}
+                  className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden p-2.5 sm:p-4 transition hover:shadow-lg print:shadow-none print:border-none print:rounded-none print:p-0 print:m-0 print:h-screen print:page-break-after-always"
+                >
+                  {/* Header card */}
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-2 mb-2 border-b border-slate-100 print:hidden">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-teal-500" />
+                      <span>
+                        Halaman {page.pageNum} dari {renderedPages.length}
+                      </span>
                     </span>
-                  </span>
-                  <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                    Dokumen PDF Asli (16:9 Landscape)
-                  </span>
-                </div>
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      Dokumen PDF Asli (16:9 Landscape)
+                    </span>
+                  </div>
 
-                {/* Rendered PDF Page Image */}
-                <div className="w-full bg-slate-50 rounded-xl overflow-hidden border border-slate-100 shadow-inner flex items-center justify-center">
-                  <img
-                    src={page.dataUrl}
-                    alt={`Halaman PDF ${page.pageNum}`}
-                    className="w-full h-auto object-contain select-none"
-                    loading="lazy"
-                  />
+                  {/* Rendered PDF Page Image */}
+                  <div className="w-full bg-slate-50 rounded-xl overflow-hidden border border-slate-100 shadow-inner flex items-center justify-center">
+                    <img
+                      src={page.dataUrl}
+                      alt={`Halaman PDF ${page.pageNum}`}
+                      className="w-full h-auto object-contain select-none pointer-events-none"
+                      loading="lazy"
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Floating Zoom Controls Bar (Pinch-to-zoom & Mouse Wheel Indicator) */}
+        {!isLoadingPdf && renderedPages.length > 0 && (
+          <div className="fixed bottom-6 right-6 z-40 bg-slate-900/90 backdrop-blur-xl border border-white/20 text-white rounded-full p-1.5 shadow-2xl flex items-center gap-1 select-none print:hidden">
+            <button
+              type="button"
+              onClick={() => setZoomScale((prev) => Math.max(0.6, Number((prev - 0.15).toFixed(2))))}
+              className="w-8 h-8 rounded-full hover:bg-white/20 active:scale-95 flex items-center justify-center font-bold text-base transition cursor-pointer"
+              title="Perkecil Halaman PDF (Zoom Out)"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomScale(1)}
+              className="px-2.5 py-1 rounded-full hover:bg-white/20 text-[11px] font-black text-teal-300 transition cursor-pointer"
+              title="Reset Zoom ke 100% (Fit Layar)"
+            >
+              {Math.round(zoomScale * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomScale((prev) => Math.min(2.8, Number((prev + 0.15).toFixed(2))))}
+              className="w-8 h-8 rounded-full hover:bg-white/20 active:scale-95 flex items-center justify-center font-bold text-base transition cursor-pointer"
+              title="Perbesar Halaman PDF (Zoom In)"
+            >
+              +
+            </button>
           </div>
         )}
 

@@ -135,19 +135,64 @@ function drawImageProportional(
 }
 
 /**
- * Helper to draw watermark in bottom-right corner of PDF page
+ * Convert watermark image into pure white semi-transparent silhouette
+ */
+async function convertImageToWhiteTransparent(dataUrl: string, opacity: number = 0.38): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith('data:image')) return dataUrl;
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width || 200;
+        canvas.height = img.naturalHeight || img.height || 100;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        ctx.globalCompositeOperation = 'source-in';
+        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch {
+      resolve(dataUrl);
+    }
+  });
+}
+
+/**
+ * Helper to draw watermark in bottom-right corner of PDF page (White Transparent)
  */
 function drawPageFooter(doc: jsPDF, watermarkBase64?: string) {
   if (!doc || !watermarkBase64) return;
   try {
     const pageWidth = 320;
     const pageHeight = 180;
-    const wtrW = 14;
+    const wtrW = 16;
     const wtrH = wtrW / 1.767;
-    const wtrX = pageWidth - wtrW - 4;
-    const wtrY = pageHeight - wtrH - 3;
+    const wtrX = pageWidth - wtrW - 5;
+    const wtrY = pageHeight - wtrH - 4;
 
-    doc.addImage(watermarkBase64, 'PNG', wtrX, wtrY, wtrW, wtrH, undefined, 'NONE');
+    try {
+      if ((doc as any).GState) {
+        const gState = new (doc as any).GState({ opacity: 0.45 });
+        (doc as any).saveGraphicsState();
+        (doc as any).setGState(gState);
+        doc.addImage(watermarkBase64, 'PNG', wtrX, wtrY, wtrW, wtrH, undefined, 'NONE');
+        (doc as any).restoreGraphicsState();
+      } else {
+        doc.addImage(watermarkBase64, 'PNG', wtrX, wtrY, wtrW, wtrH, undefined, 'NONE');
+      }
+    } catch {
+      doc.addImage(watermarkBase64, 'PNG', wtrX, wtrY, wtrW, wtrH, undefined, 'NONE');
+    }
   } catch (e) {
     console.warn('drawPageFooter watermark error:', e);
   }
@@ -180,7 +225,7 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
   // Pre-load essential graphic assets as Base64
   const [
     coverB64,
-    watermarkB64,
+    rawWatermarkB64,
     dividerQscB64,
     dividerEvidenceB64,
     dividerAssignmentB64
@@ -191,6 +236,8 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
     loadImageAsBase64('/assets/divider-finding-evidence.jpg'),
     loadImageAsBase64('/assets/divider-store-assignment.jpg')
   ]);
+
+  const watermarkB64 = await convertImageToWhiteTransparent(rawWatermarkB64, 0.4);
 
   const reportTitle = 'FMCU Visit Store Report';
   const visitDateText = formatIndonesianDate(report.visitDate, false);
@@ -719,9 +766,9 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
         const evB64 = await loadImageAsBase64(ev.photoUrl);
         if (evB64 && evB64.startsWith('data:image')) {
           try {
-            doc.addImage(evB64, 'JPEG', imgX, imgY, imgW, imgH, undefined, 'MEDIUM');
+            drawImageProportional(doc, evB64, imgX, imgY, imgW, imgH, 'JPEG');
           } catch (e) {
-            console.warn('Evidence photo error:', e);
+            console.warn('Evidence photo proportional draw error:', e);
           }
         } else {
           doc.setFillColor(241, 245, 249);
@@ -1303,10 +1350,10 @@ export function buildHtmlSlides(report: VisitReportData): HtmlSlide[] {
     `
   });
 
-  // Attach watermark to slides (except those with skipFooterWatermark)
+  // Attach watermark to slides (except those with skipFooterWatermark) - Pure White Transparent
   const watermarkSnippet = `
-    <div class="absolute bottom-[1.2%] right-[1.2%] pointer-events-none select-none z-30 opacity-60" title="WTRMRK">
-      <img src="/assets/WTRMRK.png" class="h-[clamp(8px,1.2cqw,15px)] w-auto object-contain" alt="WTRMRK" />
+    <div class="absolute bottom-[1.2%] right-[1.2%] pointer-events-none select-none z-30" title="WTRMRK">
+      <img src="/assets/WTRMRK.png" class="h-[clamp(8px,1.2cqw,15px)] w-auto object-contain" style="filter: brightness(0) invert(1); opacity: 0.35;" alt="WTRMRK" />
     </div>
   `;
 
@@ -1346,18 +1393,97 @@ export interface GDriveSyncResult {
 }
 
 /**
+ * Format Nama File Lembar QSC: "Lembar QSC-FAMITRACK-{nama store}-{DD-MM-YYYY}.pdf"
+ */
+export function getVerticalQscFileName(report: VisitReportData): string {
+  if (!report) return 'Lembar QSC-Fami track-STORE.pdf';
+  const cleanStore = String(report.storeName || 'STORE').replace(/[/\\:*?"<>|]/g, ' ').trim();
+  const d = report.visitDate ? new Date(report.visitDate) : new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `Lembar QSC-Fami track-${cleanStore}-${dd}-${mm}-${yyyy}.pdf`;
+}
+
+/**
+ * Generate Vertical QSC Collage PDF (A4 Portrait, Full Pages) matching FMCU Standard
+ */
+export async function generateVerticalQscCollagePdf(report: VisitReportData): Promise<jsPDF | null> {
+  const topB64 = report.qscSheetTop ? await loadImageAsBase64(report.qscSheetTop) : null;
+  const bottomB64 = report.qscSheetBottom ? await loadImageAsBase64(report.qscSheetBottom) : null;
+
+  const validPhotos = [
+    { b64: topB64, title: 'Lembar Form QSC / FamiTrack #1 (Bagian Atas)' },
+    { b64: bottomB64, title: 'Lembar Form QSC / FamiTrack #2 (Bagian Bawah)' },
+  ].filter((p) => p.b64 && p.b64.startsWith('data:image'));
+
+  if (validPhotos.length === 0) return null;
+
+  // A4 Portrait [210mm x 297mm]
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+    compress: true,
+  });
+
+  const pageWidth = 210;
+  const cleanStore = String(report.storeName || 'STORE').replace(/[/\\:*?"<>|]/g, ' ').trim();
+  const dateFormatted = formatIndonesianDate(report.visitDate, false);
+
+  validPhotos.forEach((photo, pIdx) => {
+    if (pIdx > 0) doc.addPage();
+
+    // Header Banner
+    doc.setFillColor(0, 153, 68);
+    doc.rect(0, 0, pageWidth, 22, 'F');
+    doc.setFillColor(0, 153, 166);
+    doc.rect(0, 22, pageWidth, 2, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('LEMBAR QSC / FAMITRACK (SECTION 1 FORM VISIT)', 12, 10);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(
+      `Store: ${cleanStore} (${report.storeCode || '-'}) | Auditor: ${report.visitorName || '-'} | Tanggal: ${dateFormatted} | Lembar ${pIdx + 1}/${validPhotos.length}`,
+      12,
+      17
+    );
+
+    const boxX = 10;
+    const boxY = 28;
+    const boxW = 190;
+    const boxH = 260; // Mengisi penuh halaman A4 tanpa footer
+
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(203, 213, 225);
+    doc.roundedRect(boxX, boxY, boxW, boxH, 3, 3, 'FD');
+
+    drawImageProportional(doc, photo.b64!, boxX + 2, boxY + 2, boxW - 4, boxH - 4, 'JPEG');
+  });
+
+  return doc;
+}
+
+/**
  * Live upload & sync report to official FMCU Google Drive folder (15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8)
  */
 export async function syncReportToGoogleDrive(
   report: VisitReportData,
   onProgress?: (pct: number, stage: string) => void
 ): Promise<GDriveSyncResult> {
-  onProgress?.(25, 'Merender dokumen PDF HD 16:9 & kompresi foto...');
-  const doc = await generatePdfDoc(report);
+  onProgress?.(25, 'Merender dokumen PDF HD 16:9 & menyusun Lembar QSC...');
+  const [doc, qscDoc] = await Promise.all([
+    generatePdfDoc(report),
+    generateVerticalQscCollagePdf(report),
+  ]);
   const pdfBase64 = doc.output('datauristring');
+  const qscPdfBase64 = qscDoc ? qscDoc.output('datauristring') : '';
   const fileName = getPdfFileName(report);
 
-  onProgress?.(65, 'Mengunggah berkas ke Google Apps Script & Google Drive...');
+  onProgress?.(65, 'Mengunggah laporan PDF & Lembar QSC ke Google Apps Script & Google Drive...');
 
   const sanitizedReport = {
     id: report.id,
@@ -1387,6 +1513,7 @@ export async function syncReportToGoogleDrive(
     report: sanitizedReport,
     visitorName: report.visitorName || 'Visitor',
     pdfBase64,
+    qscPdfBase64,
     fileName,
     gdriveFolderId: FMCU_REPORT_GDRIVE_FOLDER_ID,
     sendEmail: false

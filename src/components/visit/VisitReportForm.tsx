@@ -57,6 +57,7 @@ import { VisitPdfPreview } from './VisitPdfPreview';
 import { PageTransitionLoader } from '../PageTransitionLoader';
 import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from './HoldingTimeR23Modal';
+import { PhotoEditModal } from './PhotoEditModal';
 import { generateTaroObservationAnalysis } from '../../services/taroAiService';
 import {
   findMasterStoreByCodeOrName,
@@ -372,9 +373,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       gasSyncStatus: 'idle',
       crews: [
         { id: 'c-1', role: 'Store Head', name: resolvedStoreHead, jobLevel: '1A' },
-        { id: 'c-2', role: 'Shift Leader', name: 'Fikri S.', jobLevel: 'NS3' },
-        { id: 'c-3', role: 'Crew Store 1', name: 'Tini Pratiwi', jobLevel: 'MG1' },
-        { id: 'c-4', role: 'Crew Store 2', name: 'Zildzian Azhar Permana', jobLevel: 'MG1' },
+        { id: 'c-2', role: 'Shift Leader', name: '', jobLevel: 'NS3' },
+        { id: 'c-3', role: 'Crew Store 1', name: '', jobLevel: 'MG1' },
+        { id: 'c-4', role: 'Crew Store 2', name: '', jobLevel: 'MG1' },
       ],
       enableQsc: true,
       enableOpi: true,
@@ -1228,15 +1229,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }
   };
 
-  // Evidence Photos Management (Supports Single or Multiple Files + Auto GAS GDrive Upload)
+  // Evidence Photos Management (Instant Attach First + Local Storage + Background GDrive Sync)
   const handleAddEvidencePhoto = async (e: React.ChangeEvent<HTMLInputElement>, isCa = false) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
     const files: File[] = Array.from(fileList);
     e.target.value = '';
-
-    setIsUploadingPhoto(true);
-    setUploadStatusMsg(`Memproses ${files.length} foto & mengunggah otomatis ke GDrive (GAS)...`);
 
     try {
       const createdPhotos: EvidencePhoto[] = [];
@@ -1244,58 +1242,85 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const stamped = await processAndStampImage(file);
-        const photoId = `ev-${Date.now()}-${i}`;
-        const filename = `${isCa ? 'CA' : 'EVIDENCE'}_${formData.storeCode}_${formData.visitDate}_${i + 1}.jpg`;
-
-        const gdriveRes = await uploadPhotoToGasGDrive({
-          base64Data: stamped,
-          filename,
-          storeCode: formData.storeCode,
-          storeName: formData.storeName,
-          visitorName: formData.visitorName,
-          visitDate: formData.visitDate,
-          section: isCa ? 'CORRECTIVE_ACTION' : 'EVIDENCE_FINDING',
-        });
+        const photoId = `ev-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`;
 
         createdPhotos.push({
           id: photoId,
           photoUrl: stamped,
-          caption: isCa
-            ? 'Hasil perbaikan dan follow-up operasional telah sesuai standar SOP'
-            : 'Temuan kebersihan dan penataan di area operasional toko',
+          caption: '', // DEFAULT KOSONG SESUAI PERMINTAAN USER!
           timestamp: getCurrentWibTime(),
           gpsLocation: formData.liveGps || 'Verified',
-          driveFileId: gdriveRes.driveFileId,
-          driveUrl: gdriveRes.driveUrl,
           isCa,
         });
       }
 
+      // 1. INSTANT ATTACH KE FORM DATA (USER TIDAK PERLU MENUNGGU LOADING)
       if (isCa) {
         setFormData((prev) => ({
           ...prev,
           caPhotos: [...(prev.caPhotos || []), ...createdPhotos],
-          gasSyncStatus: 'synced',
-          lastSyncedAt: getCurrentWibTime(),
         }));
       } else {
         setFormData((prev) => ({
           ...prev,
           evidencePhotos: [...prev.evidencePhotos, ...createdPhotos],
-          gasSyncStatus: 'synced',
-          lastSyncedAt: getCurrentWibTime(),
         }));
       }
 
-      setUploadStatusMsg(`${createdPhotos.length} foto berhasil ditambahkan & tersimpan di GDrive!`);
-      setTimeout(() => setUploadStatusMsg(null), 3500);
+      setUploadStatusMsg(`${createdPhotos.length} foto berhasil ter-attach ke form visit!`);
+      setTimeout(() => setUploadStatusMsg(null), 3000);
       confetti({ particleCount: 25, spread: 45, origin: { y: 0.6 } });
+
+      // 2. BACKGROUND SYNC KE GDRIVE SECARA ASINKRON (FIRST LOCAL STORAGE JIKA GAGAL/OFFLINE)
+      (async () => {
+        try {
+          for (let i = 0; i < createdPhotos.length; i++) {
+            const p = createdPhotos[i];
+            const filename = `${isCa ? 'CA' : 'EVIDENCE'}_${formData.storeCode}_${formData.visitDate}_${Date.now()}_${i + 1}.jpg`;
+            const gdriveRes = await uploadPhotoToGasGDrive({
+              base64Data: p.photoUrl,
+              filename,
+              storeCode: formData.storeCode,
+              storeName: formData.storeName,
+              visitorName: formData.visitorName,
+              visitDate: formData.visitDate,
+              section: isCa ? 'CORRECTIVE_ACTION' : 'EVIDENCE_FINDING',
+            });
+
+            if (gdriveRes.synced) {
+              if (isCa) {
+                setFormData((prev) => ({
+                  ...prev,
+                  caPhotos: prev.caPhotos?.map((cp) =>
+                    cp.id === p.id
+                      ? { ...cp, driveFileId: gdriveRes.driveFileId, driveUrl: gdriveRes.driveUrl }
+                      : cp
+                  ),
+                  gasSyncStatus: 'synced',
+                  lastSyncedAt: getCurrentWibTime(),
+                }));
+              } else {
+                setFormData((prev) => ({
+                  ...prev,
+                  evidencePhotos: prev.evidencePhotos.map((ep) =>
+                    ep.id === p.id
+                      ? { ...ep, driveFileId: gdriveRes.driveFileId, driveUrl: gdriveRes.driveUrl }
+                      : ep
+                  ),
+                  gasSyncStatus: 'synced',
+                  lastSyncedAt: getCurrentWibTime(),
+                }));
+              }
+            }
+          }
+        } catch (bgErr) {
+          console.warn('Background GDrive sync queued (saved in local storage):', bgErr);
+        }
+      })();
     } catch (err) {
-      console.error('Evidence Photo Upload Error:', err);
-      setUploadStatusMsg('Gagal memproses beberapa foto. Silakan ulangi.');
-      setTimeout(() => setUploadStatusMsg(null), 3500);
-    } finally {
-      setIsUploadingPhoto(false);
+      console.error('Evidence Photo Attach Error:', err);
+      setUploadStatusMsg('Gagal memproses beberapa gambar.');
+      setTimeout(() => setUploadStatusMsg(null), 3000);
     }
   };
 
@@ -1382,19 +1407,15 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }
   };
 
-  const handleSaveEditingPhoto = async () => {
+  const handleSavePhotoFromModal = (updated: { photoUrl: string; caption: string }) => {
     if (!editingPhotoState) return;
-    let finalUrl = editingPhotoState.photoUrl;
-    if (editingPhotoState.rotation !== 0) {
-      finalUrl = await rotateImageBase64(finalUrl, editingPhotoState.rotation);
-    }
 
     if (editingPhotoState.isCa) {
       setFormData((prev) => ({
         ...prev,
         caPhotos: (prev.caPhotos || []).map((p) =>
           p.id === editingPhotoState.photoId
-            ? { ...p, photoUrl: finalUrl, caption: editingPhotoState.caption }
+            ? { ...p, photoUrl: updated.photoUrl, caption: updated.caption }
             : p
         ),
       }));
@@ -1403,7 +1424,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         ...prev,
         evidencePhotos: prev.evidencePhotos.map((p) =>
           p.id === editingPhotoState.photoId
-            ? { ...p, photoUrl: finalUrl, caption: editingPhotoState.caption }
+            ? { ...p, photoUrl: updated.photoUrl, caption: updated.caption }
             : p
         ),
       }));
@@ -1416,7 +1437,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         ...prev,
         photos: prev.photos.map((p) =>
           p.id === editingPhotoState.photoId
-            ? { ...p, photoUrl: finalUrl, caption: editingPhotoState.caption }
+            ? { ...p, photoUrl: updated.photoUrl, caption: updated.caption }
             : p
         ),
       };
@@ -1890,143 +1911,15 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         );
       })()}
 
-      {/* Modal Edit Foto & Keterangan */}
+      {/* Full-Screen Photo Edit Modal (Crop, Markup / Tandai, Rotate, & Caption) */}
       {editingPhotoState && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
-          <div className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl p-5 sm:p-6 space-y-4 my-auto max-h-[92vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
-                  <Pencil className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">
-                    Edit Foto &amp; Keterangan #{editingPhotoState.index + 1}
-                  </h3>
-                  <span className="text-[10px] font-bold text-slate-400 block">
-                    {editingPhotoState.isCa ? 'Hasil Perbaikan (CA)' : 'Bukti Temuan Lapangan'}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingPhotoState(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Photo Preview with Rotation */}
-            <div className="relative h-56 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center">
-              <img
-                src={editingPhotoState.photoUrl}
-                alt="Preview"
-                style={{
-                  transform: `rotate(${editingPhotoState.rotation}deg)`,
-                  transition: 'transform 0.25s ease',
-                }}
-                className="max-h-full max-w-full object-contain"
-              />
-
-              {/* Action Overlay: Rotate & Replace */}
-              <div className="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={handleRotateEditingPhoto}
-                  className="px-3 py-1.5 rounded-xl bg-black/70 hover:bg-black text-white text-xs font-bold backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <RotateCw className="w-3.5 h-3.5 text-teal-400" />
-                  <span>Putar 90° ({editingPhotoState.rotation}°)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => editPhotoFileInputRef.current?.click()}
-                  className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  <span>Ganti Foto</span>
-                </button>
-                <input
-                  type="file"
-                  ref={editPhotoFileInputRef}
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleReplaceEditingPhotoFile}
-                />
-              </div>
-            </div>
-
-            {/* Edit Caption Textarea with Speech Dictation */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider">
-                  Keterangan / Deskripsi Foto *
-                </label>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleToggleVoiceDictation(
-                      'modal-edit-photo',
-                      editingPhotoState.caption,
-                      (val) => setEditingPhotoState((p) => (p ? { ...p, caption: val } : null))
-                    )
-                  }
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                    activeVoiceKey === 'modal-edit-photo'
-                      ? 'bg-rose-600 text-white animate-pulse'
-                      : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
-                  }`}
-                >
-                  <Mic className="w-3 h-3 text-rose-500" />
-                  <span>{activeVoiceKey === 'modal-edit-photo' ? 'Mendengarkan...' : 'Dikte Suara'}</span>
-                </button>
-              </div>
-              <textarea
-                rows={3}
-                value={editingPhotoState.caption}
-                onChange={(e) =>
-                  setEditingPhotoState((p) => (p ? { ...p, caption: e.target.value } : null))
-                }
-                placeholder="Tuliskan keterangan detail temuan / hasil perbaikan foto ini..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-teal-400 resize-none leading-relaxed"
-              />
-            </div>
-
-            {/* GPS & Timestamp Information */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[10.5px] font-semibold text-slate-500 flex items-center justify-between">
-              <span className="flex items-center gap-1 truncate">
-                <MapPin className="w-3 h-3 text-teal-600" />
-                <span>{editingPhotoState.originalPhoto.gpsLocation || 'GPS Verified'}</span>
-              </span>
-              <span className="flex items-center gap-1 shrink-0">
-                <Clock className="w-3 h-3 text-slate-400" />
-                <span>{editingPhotoState.originalPhoto.timestamp || ''}</span>
-              </span>
-            </div>
-
-            {/* Submit / Cancel Buttons */}
-            <div className="pt-2 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setEditingPhotoState(null)}
-                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveEditingPhoto}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 transition flex items-center gap-1.5 cursor-pointer"
-              >
-                <Check className="w-4 h-4" />
-                <span>Simpan Perubahan</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <PhotoEditModal
+          photo={editingPhotoState.originalPhoto}
+          index={editingPhotoState.index}
+          isCa={editingPhotoState.isCa}
+          onSave={handleSavePhotoFromModal}
+          onClose={() => setEditingPhotoState(null)}
+        />
       )}
 
       {/* Live Toast Notification for GAS GDrive Photo Upload */}
@@ -2509,21 +2402,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
             {/* Sub-bagian 1B: Tim Store yang Bertugas (Zero-Swipe Mobile Card Layout — Tanpa Geser Tabel) */}
             <div className="pt-4 border-t border-slate-100 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h4 className="font-black text-sm text-slate-800">Tim Store yang Bertugas</h4>
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    Store Head, Shift Leader, dan seluruh Crew Store on-duty
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddCrew}
-                  className="text-xs font-extrabold bg-teal-600 hover:bg-teal-700 text-white px-3.5 py-2 rounded-xl shadow-2xs transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Tambah Crew</span>
-                </button>
+              <div>
+                <h4 className="font-black text-sm text-slate-800">Tim Store yang Bertugas</h4>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Store Head (Auto-fill), Shift Leader, dan seluruh Crew Store on-duty
+                </p>
               </div>
 
               {/* Zero-Swipe Responsive Crew Grid/List */}
@@ -2587,7 +2470,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                               className="w-full h-10 bg-teal-50 border border-teal-200 rounded-xl px-2.5 text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 outline-none cursor-pointer"
                               title="Pilih Job Level"
                             >
-                              {['1A', '1B', '2A', '2B', '3A', '3B', '4A', 'NS1', 'NS2', 'NS3', 'MG1', 'MG2'].map(
+                              {['1A', 'NS3', 'NS2', 'NS1', 'MG3', 'MG2', 'MG1', 'OJT'].map(
                                 (lvl) => (
                                   <option key={lvl} value={lvl}>
                                     Lvl: {lvl}
@@ -2602,6 +2485,16 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   );
                 })}
               </div>
+
+              {/* Tombol Tambah Crew Pindah Posisi Tepat di Bawah Card Crew */}
+              <button
+                type="button"
+                onClick={handleAddCrew}
+                className="w-full py-2.5 rounded-2xl border-2 border-dashed border-teal-300 hover:border-teal-500 bg-teal-50/60 hover:bg-teal-100/70 text-teal-800 font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] shadow-2xs"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span>+ Tambah Crew Store yang Bertugas</span>
+              </button>
             </div>
 
             {/* Sub-bagian 1C: Evidence Form QSC / FamiTrack Result (Slide 2 PDF) */}
@@ -3044,8 +2937,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                             : 'border-slate-200/90 hover:border-slate-300'
                         }`}
                       >
-                        {/* Card Header Bar: Single Row aligned with Delete Button */}
-                        <div className="flex items-center justify-between gap-2">
+                        {/* Card Header Bar: Tombol Delete 100% SEJAJAR dengan Badge Nomor Temuan */}
+                        <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-100">
+                          {/* Sisi Kiri: Badge Nomor Temuan, Tipe, & Deadline */}
                           <div className="flex items-center gap-2 flex-wrap min-w-0">
                             <span className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-black text-xs shadow-2xs shrink-0">
                               Temuan #{idx + 1}
@@ -3067,17 +2961,17 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                             </div>
                           </div>
 
-                          {/* Delete Button (Aligned in the same row) */}
+                          {/* Sisi Kanan: Tombol Delete Sejajar Horisontal Sempurna */}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleRemoveObs(obs.id);
                             }}
-                            className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition cursor-pointer shrink-0"
-                            title="Hapus Temuan"
+                            className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition cursor-pointer shrink-0 self-center"
+                            title="Hapus Temuan Ini"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
 
