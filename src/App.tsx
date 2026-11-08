@@ -254,6 +254,13 @@ export const App: React.FC = () => {
         }
 
         setAgendas((prev) => {
+          // Cloud is the master cross-device source of truth, but preserve any unsynced local agenda
+          const cloudIdSet = new Set(hydratedCloud.map((a) => a.id));
+          const unsyncedLocal = prev.filter(
+            (a) => !cloudIdSet.has(a.id) && (a.id.startsWith('sch-') || a.id.startsWith('local-'))
+          );
+          const merged = unsyncedLocal.length > 0 ? [...unsyncedLocal, ...hydratedCloud] : hydratedCloud;
+
           const buildSig = (list: ScheduleAgenda[]) =>
             list
               .map(
@@ -262,8 +269,8 @@ export const App: React.FC = () => {
               )
               .sort()
               .join('|');
-          if (buildSig(prev) !== buildSig(hydratedCloud)) {
-            return hydratedCloud;
+          if (buildSig(prev) !== buildSig(merged)) {
+            return merged;
           }
           return prev;
         });
@@ -305,6 +312,7 @@ export const App: React.FC = () => {
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', handleStorage);
+    window.addEventListener('online', syncSchedulesFromCloud);
     const unsubBroadcast = subscribeToLocalSync(() => {
       syncSchedulesFromCloud();
     });
@@ -314,6 +322,7 @@ export const App: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('online', syncSchedulesFromCloud);
       unsubBroadcast();
     };
   }, []);
@@ -654,6 +663,14 @@ export const App: React.FC = () => {
               onOpenVisitForm={(agenda) => {
                 setSelectedAgenda(agenda);
                 setMobileScreen('visit-form');
+              }}
+              onUpdateAgenda={handleUpdateAgenda}
+              onDeleteAgenda={handleDeleteAgenda}
+              onToggleComplete={(id) => {
+                const target = agendas.find((a) => a.id === id);
+                if (target) {
+                  handleUpdateAgenda({ ...target, completed: !target.completed });
+                }
               }}
               onLogout={handleLogout}
               onOpenAdminPortal={user.isAdmin ? () => setAdminPreviewMode(false) : undefined}

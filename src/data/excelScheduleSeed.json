@@ -327,6 +327,32 @@
   ],
   "agendas": [
     {
+      "id": "sch-1794143069109",
+      "storeCode": "3003",
+      "storeName": "BDG CIHAMPELAS",
+      "storeType": "CVS",
+      "storeHead": "Muhammad Nur Rizqi Ramadhan",
+      "areaManager": "Hadi Ilman",
+      "regionalManager": "Novy Rusnani",
+      "storeEmail": "store.bdgcihampelas@familymartindonesia.com",
+      "title": "Audit & Store Visit - Cabang BDG CIHAMPELAS",
+      "pic": "Aan Bagus Permana",
+      "category": "VISIT",
+      "date": "2026-11-08",
+      "time": "08:30",
+      "endTime": "17:30",
+      "location": "BDG CIHAMPELAS (3003) - Bandung",
+      "description": "Visit Store BDG CIHAMPELAS (3003) — SH: Muhammad Nur Rizqi Ramadhan | AM: Hadi Ilman",
+      "priority": "NORMAL",
+      "tags": [
+        "VISIT",
+        "3003",
+        "Admin Created"
+      ],
+      "completed": false,
+      "createdBy": "Admin FMCU (Portal)"
+    },
+    {
       "id": "xl-02-08Nov-1-0",
       "title": "Weekly Work Plan",
       "date": "2026-11-02",

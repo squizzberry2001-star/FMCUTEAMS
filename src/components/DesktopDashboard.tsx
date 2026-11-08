@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Bell,
   Search,
@@ -23,6 +23,8 @@ import {
   Tag,
   CheckCircle2,
   Sparkles,
+  Users,
+  Trash2,
 } from 'lucide-react';
 import { ScheduleAgenda, User, SCHEDULE_CATEGORY_OPTIONS } from '../types';
 import { CalendarStrip, CalendarFocusTrigger } from './CalendarStrip';
@@ -49,6 +51,8 @@ interface DesktopDashboardProps {
   onOpenExcelUpload?: () => void;
   onOpenLiveMaps?: () => void;
   onOpenVisitForm?: (agenda: ScheduleAgenda) => void;
+  onUpdateAgenda?: (updatedAgenda: ScheduleAgenda) => void;
+  onDeleteAgenda?: (id: string) => void;
   onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
   onOpenAdminPortal?: () => void;
@@ -67,6 +71,9 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   onOpenExcelUpload,
   onOpenLiveMaps,
   onOpenVisitForm,
+  onUpdateAgenda,
+  onDeleteAgenda,
+  onToggleComplete,
   onLogout,
   onOpenAdminPortal,
   onUpdateUser,
@@ -74,6 +81,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'AllTeam'>('Today');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedPersonDropdown, setSelectedPersonDropdown] = useState<string>('ALL');
   const [calendarFocus, setCalendarFocus] = useState<CalendarFocusTrigger>({
     mode: 'today',
     ts: Date.now(),
@@ -102,8 +110,24 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
     now.getDate()
   ).padStart(2, '0')}`;
 
+  // Daftar seluruh nama tim unik terurut A-Z untuk dropdown filter
+  const allTeamNamesAZ = useMemo(() => {
+    const names = Array.from(
+      new Set(agendas.map((a) => (a.pic || '').trim()).filter(Boolean))
+    );
+    return names.sort((a, b) => a.localeCompare(b, 'id', { sensitivity: 'base' }));
+  }, [agendas]);
+
   // 2. Reference Monday for running week
-  const [currentWeekMonday, setCurrentWeekMonday] = useState<string>(() => getMondayOfWeek());
+  const [currentWeekMonday, setCurrentWeekMonday] = useState<string>(() => getMondayOfWeek(selectedDate));
+
+  // Otomatis sinkronkan currentWeekMonday ketika selectedDate berpindah minggu
+  useEffect(() => {
+    if (selectedDate) {
+      const mon = getMondayOfWeek(selectedDate);
+      setCurrentWeekMonday(mon);
+    }
+  }, [selectedDate]);
 
   const handlePrevWeek = () => {
     const dt = new Date(currentWeekMonday + 'T12:00:00');
@@ -126,6 +150,27 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   const weekEndStr = activeWeekDays[activeWeekDays.length - 1]?.dateStr || currentWeekMonday;
   const isCurrentRunningWeek = currentWeekMonday === getMondayOfWeek();
 
+  // Rentang 1 Minggu Penuh untuk tab Semua Tim (mengikuti minggu dari pill yang dipilih atau minggu berjalan)
+  const { teamWeekStartStr, teamWeekEndStr } = useMemo(() => {
+    if (selectedDate >= weekStartStr && selectedDate <= weekEndStr) {
+      return { teamWeekStartStr: weekStartStr, teamWeekEndStr: weekEndStr };
+    }
+
+    const selDate = new Date(selectedDate + 'T00:00:00');
+    if (isNaN(selDate.getTime())) {
+      return { teamWeekStartStr: weekStartStr, teamWeekEndStr: weekEndStr };
+    }
+    const day = selDate.getDay();
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const calMon = new Date(selDate);
+    calMon.setDate(selDate.getDate() + diffToMon);
+    const calSun = new Date(calMon);
+    calSun.setDate(calMon.getDate() + 6);
+    const toYmd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { teamWeekStartStr: toYmd(calMon), teamWeekEndStr: toYmd(calSun) };
+  }, [selectedDate, weekStartStr, weekEndStr]);
+
   const handleSelectPeriodTab = (period: 'Today' | 'Week' | 'AllTeam') => {
     setSelectedPeriod(period);
     if (period === 'Today') {
@@ -144,12 +189,19 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
     return `${shortDayNames[dt.getDay()]}, ${String(dt.getDate()).padStart(2, '0')} ${shortMonthNames[dt.getMonth()]}`;
   };
 
-  // 3. Filter Agendas Sesuai User, Periode, Kategori, & Pencarian
+  // 3. Filter Agendas Sesuai User, Periode, Kategori, & Pencarian (100% IDENTIK DENGAN MOBILE)
   const filteredAgendas = useMemo(() => {
     return agendas.filter((item) => {
       // Filter Kategori
       if (selectedCategory !== 'ALL' && item.category !== selectedCategory) {
         return false;
+      }
+
+      // Filter Dropdown Nama Personel (khusus tab Semua Tim)
+      if (selectedPersonDropdown !== 'ALL' && selectedPeriod === 'AllTeam') {
+        if (!isSamePersonName(item.pic, selectedPersonDropdown) && item.pic !== selectedPersonDropdown) {
+          return false;
+        }
       }
 
       // Filter Pencarian Text
@@ -166,7 +218,8 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
       const isMyAgenda =
         !item.pic ||
         isSamePersonName(item.pic, fullName) ||
-        item.pic.toLowerCase().includes(fullName.toLowerCase());
+        item.pic.toLowerCase().includes(fullName.toLowerCase()) ||
+        fullName.toLowerCase().includes(item.pic.toLowerCase());
 
       if (selectedPeriod === 'Today') {
         return isMyAgenda && item.date === selectedDate;
@@ -175,7 +228,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         return isMyAgenda && item.date >= weekStartStr && item.date <= weekEndStr;
       }
       // 'AllTeam' -> Seluruh Tim pada 1 Minggu Berjalan
-      return item.date >= weekStartStr && item.date <= weekEndStr;
+      return item.date >= teamWeekStartStr && item.date <= teamWeekEndStr;
     }).sort((a, b) => {
       if (selectedPeriod === 'AllTeam') {
         return (
@@ -186,7 +239,19 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
       }
       return (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || '');
     });
-  }, [agendas, selectedCategory, searchQuery, fullName, selectedPeriod, selectedDate, weekStartStr, weekEndStr]);
+  }, [
+    agendas,
+    selectedCategory,
+    selectedPersonDropdown,
+    searchQuery,
+    fullName,
+    selectedPeriod,
+    selectedDate,
+    weekStartStr,
+    weekEndStr,
+    teamWeekStartStr,
+    teamWeekEndStr,
+  ]);
 
   const groupedAllTeamWeekByPerson = useMemo(() => {
     if (selectedPeriod !== 'AllTeam') return [];
@@ -417,6 +482,9 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               agendas={agendas}
               onBack={() => setActiveMenu('dashboard')}
               onSelectAgenda={onSelectAgenda}
+              onOpenNewAgenda={onOpenNewAgenda}
+              onOpenExcelUpload={onOpenExcelUpload}
+              onToggleComplete={onToggleComplete}
             />
           ) : activeMenu === 'coverage' ? (
             /* Halaman Coverage Store & Leaderboard */
@@ -481,6 +549,28 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                       ))}
                     </select>
                   </div>
+
+                  {/* Dropdown Nama Tim (Hanya jika tab Semua Tim dipilih) */}
+                  {selectedPeriod === 'AllTeam' && (
+                    <div className="relative flex items-center">
+                      <Users className="w-3.5 h-3.5 text-teal-600 absolute left-3 pointer-events-none" />
+                      <select
+                        value={selectedPersonDropdown}
+                        onChange={(e) => setSelectedPersonDropdown(e.target.value)}
+                        className="bg-white border border-slate-200/90 rounded-full pl-8 pr-7 py-2 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer shadow-2xs max-w-[170px] truncate transition-all"
+                        title="Filter berdasarkan Nama Personel Tim (A-Z)"
+                      >
+                        <option value="ALL" className="text-xs font-semibold text-slate-800">
+                          Semua Personel ({allTeamNamesAZ.length})
+                        </option>
+                        {allTeamNamesAZ.map((name) => (
+                          <option key={name} value={name} className="text-xs font-medium text-slate-800">
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Live Maps Pinpoint Shortcut */}
                   {onOpenLiveMaps && (
@@ -589,7 +679,10 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 </div>
                 <CalendarStrip
                   selectedDate={selectedDate}
-                  onSelectDate={onSelectDate}
+                  onSelectDate={(d) => {
+                    onSelectDate(d);
+                    setSelectedPeriod('Today');
+                  }}
                   baseDate={currentWeekMonday}
                   focusTrigger={calendarFocus}
                 />
@@ -778,6 +871,22 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 </div>
               </div>
 
+              {/* Action 0: Toggle Selesai / Belum Selesai */}
+              {onToggleComplete && (
+                <button
+                  type="button"
+                  onClick={() => onToggleComplete(selectedAgenda.id)}
+                  className={`w-full py-2.5 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 cursor-pointer mt-3 shadow-2xs ${
+                    selectedAgenda.completed
+                      ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200/90'
+                  }`}
+                >
+                  <CheckCircle2 className={`w-4 h-4 ${selectedAgenda.completed ? 'text-white' : 'text-slate-400'}`} />
+                  <span>{selectedAgenda.completed ? 'Agenda Selesai Dikerjakan' : 'Tandai Sebagai Selesai'}</span>
+                </button>
+              )}
+
               {/* Action 1: Tombol Rute Google Maps */}
               <button
                 type="button"
@@ -820,6 +929,23 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                     <span>Buka Form Visit Report</span>
                   </button>
                 </div>
+              )}
+
+              {/* Action 4: Hapus Agenda (Khusus Admin) */}
+              {user.isAdmin && onDeleteAgenda && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Hapus agenda "${selectedAgenda.title}"? Perubahan akan langsung disinkronkan ke cloud.`)) {
+                      onDeleteAgenda(selectedAgenda.id);
+                    }
+                  }}
+                  className="w-full py-2 px-3 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] flex items-center justify-center gap-1.5 border border-rose-200 transition-all active:scale-95 cursor-pointer mt-3"
+                  title="Hapus Agenda dari Sistem"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                  <span>Hapus Agenda (Admin)</span>
+                </button>
               )}
             </div>
           ) : (

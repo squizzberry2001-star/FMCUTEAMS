@@ -227,12 +227,12 @@ async function postCloudEndpoint(url: string, payload: Record<string, any>): Pro
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
       },
-      cache: 'no-store',
       body: JSON.stringify(payload),
     });
     if (!res.ok) return null;
     return await res.json();
-  } catch {
+  } catch (err) {
+    console.warn('postCloudEndpoint fetch warning for', url, err);
     return null;
   }
 }

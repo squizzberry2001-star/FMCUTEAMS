@@ -160,9 +160,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
     // Validasi sandi saat ini
     if (currentPassword !== actualExpectedPassword) {
-      setPasswordError(
-        `Sandi saat ini salah. Sandi awal akun Anda adalah ${user.isAdmin ? '607090' : '0000'}.`
-      );
+      setPasswordError('Sandi saat ini salah. Pastikan sandi yang dimasukkan benar.');
       return;
     }
 
@@ -257,11 +255,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card flex flex-col items-center text-center relative border border-slate-100">
             {/* Avatar Container with Interactive Pencil Overlay */}
             <div className="relative group mb-3">
-              <img
-                src={user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
-                alt={user.name}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover ring-4 ring-teal-100 shadow-md group-hover:brightness-95 transition-all"
-              />
+              {user.avatar &&
+              !user.avatar.includes('dicebear.com') &&
+              !user.avatar.includes('images.unsplash.com') ? (
+                <img
+                  src={user.avatar}
+                  alt={user.name}
+                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover ring-4 ring-teal-100 shadow-md group-hover:brightness-95 transition-all"
+                />
+              ) : (
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-[#32C2AD] to-[#20A894] text-white flex items-center justify-center font-black text-2xl sm:text-3xl ring-4 ring-teal-100 shadow-md">
+                  {user.name ? user.name.substring(0, 2).toUpperCase() : <UserIcon className="w-8 h-8 text-white/90" />}
+                </div>
+              )}
 
               {/* Tombol Pensil Ubah Foto Profil */}
               <button
@@ -374,7 +380,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <div>
                 <h4 className="text-sm font-black text-slate-800">Ubah Kata Sandi Akun</h4>
                 <p className="text-[11px] text-slate-400 font-medium">
-                  Amankan akun Anda dengan mengganti sandi default ({user.isAdmin ? '607090' : '0000'})
+                  Amankan akun Anda dengan memperbarui kata sandi secara berkala.
                 </p>
               </div>
             </div>
@@ -398,11 +404,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <form onSubmit={handlePasswordSubmit} className="space-y-3 mt-3">
               {/* 1. Sandi Saat Ini */}
               <div>
-                <label className="block text-xs text-slate-600 font-bold mb-1 flex items-center justify-between">
+                <label className="block text-xs text-slate-600 font-bold mb-1">
                   <span>Sandi Saat Ini</span>
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    Default: {user.isAdmin ? '607090' : '0000'}
-                  </span>
                 </label>
                 <div className="relative flex items-center">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
@@ -413,7 +416,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     autoComplete="off"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value.replace(/\D/g, ''))}
-                    placeholder={user.isAdmin ? 'Masukkan 607090' : 'Masukkan 0000'}
+                    placeholder="Masukkan sandi saat ini..."
                     required
                     style={
                       !showPassword
