@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ChevronLeft,
   Trophy,
@@ -8,11 +8,16 @@ import {
   Search,
   X,
   UserCheck,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from '../types';
 import { initialUsers } from '../data/mockData';
 import { isSamePersonName, getStoresWithOwnership } from '../data/masterStoresData';
 import { getMondayOfWeek, getFullWeekDays } from '../services/scheduleExcelService';
+import { fetchAllVisitReportsFromCloud } from '../services/crossDeviceVisitSyncService';
+import { VisitReportData } from '../types/visitReport';
 
 export type LeaderboardPeriod = 'Daily' | 'Weekly' | 'Monthly' | 'AllTime';
 
@@ -31,6 +36,7 @@ export interface LeaderboardRankItem {
   role: string;
   visitCount: number;
   completedVisits: number;
+  gdriveReportsCount: number;
   score: number;
   isCurrentUser: boolean;
 }
@@ -43,6 +49,8 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<LeaderboardPeriod>('Daily');
   const [searchQuery, setSearchQuery] = useState('');
+  const [gdriveReports, setGdriveReports] = useState<(VisitReportData & { updatedAtMs?: number })[]>([]);
+  const [isSyncingGdrive, setIsSyncingGdrive] = useState(false);
 
   const currentUserName = user?.name || '';
 
@@ -58,30 +66,98 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
   const weekStartStr = activeWeekDays[0]?.dateStr || currentWeekMonday;
   const weekEndStr = activeWeekDays[activeWeekDays.length - 1]?.dateStr || currentWeekMonday;
 
-  // 2. Filter 36 Staff Users (exclude Admin)
+  // 2. Tarikan Data Laporan Visit Tersimpan di GDrive / Cloud
+  const loadGdriveReports = async () => {
+    setIsSyncingGdrive(true);
+    try {
+      const cloudReports = await fetchAllVisitReportsFromCloud(true);
+      const localReports: (VisitReportData & { updatedAtMs?: number })[] = [];
+      if (typeof window !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('fmcu_visit_report_')) {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              try {
+                const parsed = JSON.parse(raw);
+                if (parsed && (parsed.agendaId || parsed.id)) {
+                  localReports.push(parsed);
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+      }
+
+      const reportMap = new Map<string, VisitReportData & { updatedAtMs?: number }>();
+      localReports.forEach((r) => {
+        const id = r.agendaId || r.id;
+        if (id) reportMap.set(id, r);
+      });
+      (cloudReports || []).forEach((r) => {
+        const id = r.agendaId || r.id;
+        if (id) reportMap.set(id, r);
+      });
+
+      setGdriveReports(Array.from(reportMap.values()));
+    } catch (err) {
+      console.warn('Gdrive reports fetch error:', err);
+    } finally {
+      setIsSyncingGdrive(false);
+    }
+  };
+
+  useEffect(() => {
+    loadGdriveReports();
+  }, []);
+
+  // 3. Efek Animasi Confetti (Celebration) saat Mount & Ganti Periode
+  const fireConfetti = () => {
+    try {
+      // Dual-cannon celebration confetti
+      confetti({
+        particleCount: 65,
+        spread: 60,
+        origin: { y: 0.6, x: 0.25 },
+        colors: ['#a855f7', '#ec4899', '#f59e0b', '#10b981', '#38bdf8', '#ffffff'],
+      });
+      confetti({
+        particleCount: 65,
+        spread: 60,
+        origin: { y: 0.6, x: 0.75 },
+        colors: ['#a855f7', '#ec4899', '#f59e0b', '#10b981', '#38bdf8', '#ffffff'],
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fireConfetti();
+  }, [selectedPeriod]);
+
+  // 4. Filter 36 Staff Users (exclude Admin)
   const staffMembers = useMemo(() => {
     return users.filter((u) => !u.isAdmin && u.name !== 'Admin FMCU');
   }, [users]);
 
-  // 3. Hitung Skor & Peringkat Leaderboard Berdasarkan Periode
+  // 5. Hitung Skor & Peringkat Leaderboard Berdasarkan Tarikan Laporan GDrive
   const leaderboardData: LeaderboardRankItem[] = useMemo(() => {
     // Kumpulkan agenda yang relevan sesuai periode
     const relevantAgendas = agendas.filter((item) => {
       if (item.category === 'OFF' || item.category === 'CUTI') return false;
 
       if (selectedPeriod === 'Daily') {
-        // Daily: agenda pada hari ini
         return item.date === todayYmd;
       }
       if (selectedPeriod === 'Weekly') {
-        // Weekly: agenda pada minggu berjalan
         return item.date >= weekStartStr && item.date <= weekEndStr;
       }
       if (selectedPeriod === 'Monthly') {
-        // Monthly: agenda pada bulan berjalan
         return (item.date || '').startsWith(currentMonthPrefix);
       }
-      // 'AllTime': seluruh agenda
       return true;
     });
 
@@ -92,6 +168,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         visitCount: number;
         completedCount: number;
         otherCount: number;
+        gdriveReportCount: number;
       }
     >();
 
@@ -101,6 +178,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         visitCount: 0,
         completedCount: 0,
         otherCount: 0,
+        gdriveReportCount: 0,
       });
     }
 
@@ -119,7 +197,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
 
       if (!targetKey) {
         targetKey = picKey;
-        statsMap.set(targetKey, { visitCount: 0, completedCount: 0, otherCount: 0 });
+        statsMap.set(targetKey, { visitCount: 0, completedCount: 0, otherCount: 0, gdriveReportCount: 0 });
       }
 
       const st = statsMap.get(targetKey)!;
@@ -133,35 +211,36 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       }
     }
 
-    // Tambahkan bobot laporan lokal jika ada di localStorage
-    if (typeof window !== 'undefined') {
-      try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('fmcu_visit_report_')) {
-            const raw = localStorage.getItem(key);
-            if (raw) {
-              const rep = JSON.parse(raw);
-              const repVisitor = (rep.visitorName || '').trim().toLowerCase();
-              if (repVisitor && statsMap.has(repVisitor)) {
-                statsMap.get(repVisitor)!.completedCount += 1;
-              }
-            }
-          }
+    // DETEKSI JUMLAH LAPORAN VISIT YANG SUDAH DISIMPAN DI GDRIVE
+    for (const rep of gdriveReports) {
+      const visitor = (rep.visitorName || (rep as Record<string, any>).pic || (rep as Record<string, any>).auditorName || '').trim().toLowerCase();
+      if (!visitor) continue;
+
+      let targetKey: string | null = null;
+      for (const [key] of statsMap.entries()) {
+        if (key === visitor || isSamePersonName(key, visitor)) {
+          targetKey = key;
+          break;
         }
-      } catch {
-        // Ignore localStorage error
+      }
+
+      if (targetKey && statsMap.has(targetKey)) {
+        const st = statsMap.get(targetKey)!;
+        st.gdriveReportCount += 1;
+        st.completedCount += 1;
       }
     }
 
     // Bangun daftar peringkat lengkap dengan rumus skor kompetitif
     const entries: LeaderboardRankItem[] = staffMembers.map((staff) => {
       const staffKey = staff.name.trim().toLowerCase();
-      const st = statsMap.get(staffKey) || { visitCount: 0, completedCount: 0, otherCount: 0 };
+      const st = statsMap.get(staffKey) || {
+        visitCount: 0,
+        completedCount: 0,
+        otherCount: 0,
+        gdriveReportCount: 0,
+      };
 
-      // Skor performa:
-      // Visit = 50 pts, Completed report = 25 pts, other store activity = 15 pts
-      // Ditambah base consistency dari jumlah toko kepemilikan bestie
       const ownedStoresCount = getStoresWithOwnership(staff.name).filter(
         (s) => s.isOwnedByBestie
       ).length;
@@ -171,15 +250,15 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       else if (selectedPeriod === 'Weekly') periodMultiplier = 1.4;
       else if (selectedPeriod === 'Monthly') periodMultiplier = 1.1;
 
-      // Rumus skor realistis mirip angka referensi (misal 410, 301, 175, 160...)
+      // TARIKAN DATA UTAMA: LAPORAN VISIT TERSIMPAN DI GDRIVE
       const rawScore =
-        st.visitCount * 65 * periodMultiplier +
+        st.gdriveReportCount * 125 * periodMultiplier +
+        st.visitCount * 55 * periodMultiplier +
         st.completedCount * 30 +
         st.otherCount * 15 +
         Math.min(ownedStoresCount * 6, 80);
 
-      const finalScore = Math.max(25, Math.round(rawScore));
-
+      const finalScore = Math.max(35, Math.round(rawScore));
       const avatarUrl = staff.avatar || '';
 
       return {
@@ -190,6 +269,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         role: staff.role || 'Bestie Field FMCU',
         visitCount: st.visitCount,
         completedVisits: st.completedCount,
+        gdriveReportsCount: st.gdriveReportCount,
         score: finalScore,
         isCurrentUser: Boolean(
           currentUserName && isSamePersonName(staff.name, currentUserName)
@@ -197,8 +277,9 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       };
     });
 
-    // Urutkan berdasarkan Skor tertinggi -> Visit Count terbanyak -> Abjad A-Z
+    // Urutkan berdasarkan Laporan GDrive Terbanyak -> Skor tertinggi -> Visit Count terbanyak -> Abjad A-Z
     entries.sort((a, b) => {
+      if (b.gdriveReportsCount !== a.gdriveReportsCount) return b.gdriveReportsCount - a.gdriveReportsCount;
       if (b.score !== a.score) return b.score - a.score;
       if (b.visitCount !== a.visitCount) return b.visitCount - a.visitCount;
       return a.name.localeCompare(b.name, 'id', { sensitivity: 'base' });
@@ -218,6 +299,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
     weekEndStr,
     currentMonthPrefix,
     currentUserName,
+    gdriveReports,
   ]);
 
   // Top 3 Podium
@@ -249,13 +331,13 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         <div className="absolute -top-16 -right-16 w-48 h-48 bg-fuchsia-500/25 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute top-1/2 -left-20 w-48 h-48 bg-purple-400/20 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Header: Tombol Back & Judul Leaderboard */}
-        <div className="relative z-10 flex items-center justify-between mb-5">
+        {/* Header: Tombol Back, Judul Leaderboard, & Selebrasi Confetti */}
+        <div className="relative z-10 flex items-center justify-between mb-4">
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-transform flex items-center justify-center text-white backdrop-blur-md border border-white/20 cursor-pointer"
+              className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-transform flex items-center justify-center text-white backdrop-blur-md border border-white/20 cursor-pointer shadow-sm"
               title="Kembali"
             >
               <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
@@ -269,17 +351,49 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               Leaderboard
             </h2>
             <p className="text-[10px] font-medium text-purple-200">
-              Top Visit Personel FMCU
+              Top Visit Personel FMCU • Live Real-time
             </p>
           </div>
 
-          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-amber-300 border border-white/10">
-            <Trophy className="w-5 h-5" />
+          {/* Interactive Confetti Trophy Button */}
+          <button
+            type="button"
+            onClick={fireConfetti}
+            className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 active:scale-90 transition-all flex items-center justify-center text-amber-300 border border-white/20 shadow-md cursor-pointer hover:rotate-12"
+            title="Selebrasi Confetti! 🎉 (Klik untuk memicu confetti)"
+          >
+            <Trophy className="w-5 h-5 drop-shadow" />
+          </button>
+        </div>
+
+        {/* Realtime GDrive Reports Detection Status Bar */}
+        <div className="relative z-10 flex items-center justify-between gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-black/35 backdrop-blur-md border border-white/15 mb-4 text-[10.5px]">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-white">Cloud GDrive: </span>
+              <span className="text-emerald-300 font-black">
+                {gdriveReports.length} Laporan Visit Tersimpan
+              </span>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={loadGdriveReports}
+            disabled={isSyncingGdrive}
+            className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold flex items-center gap-1 shrink-0 transition-all cursor-pointer disabled:opacity-50"
+            title="Sinkronkan data laporan dari Google Drive"
+          >
+            <RefreshCw className={`w-3 h-3 ${isSyncingGdrive ? 'animate-spin text-emerald-300' : 'text-slate-300'}`} />
+            <span className="text-[10px] font-medium">Sync</span>
+          </button>
         </div>
 
         {/* Filter Pills: Daily, Weekly, Monthly, All Time */}
-        <div className="relative z-10 flex items-center justify-center gap-1.5 sm:gap-2 mb-8">
+        <div className="relative z-10 flex items-center justify-center gap-1.5 sm:gap-2 mb-7">
           {(
             [
               { id: 'Daily', label: 'Daily' },
@@ -308,12 +422,12 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
 
         {/* =====================================================================
             TOP 3 PODIUM DISPLAY (JUARA 2 DI KIRI, JUARA 1 DI TENGAH, JUARA 3 DI KANAN)
-            Stepped 3D Blocks Sesuai Gambar Referensi
+            Dengan Animasi 60fps Motion Slide-Up, Confetti & Deteksi Laporan GDrive
             ===================================================================== */}
         <div className="relative z-10 flex items-end justify-center gap-2 sm:gap-3 pt-4 pb-2">
           {/* PODIUM 2: RANK 2 (KIRI - KEDUA TERTINGGI) */}
           {rank2 && (
-            <div className="flex-1 max-w-[105px] sm:max-w-[120px] flex flex-col items-center">
+            <div className="flex-1 max-w-[105px] sm:max-w-[120px] flex flex-col items-center animate-in slide-in-from-bottom-10 fade-in duration-700 ease-out">
               {/* Avatar + Badge 2 */}
               <div className="relative mb-2 flex flex-col items-center">
                 <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full ring-3 ring-slate-300 shadow-xl overflow-hidden bg-slate-800 flex items-center justify-center">
@@ -341,10 +455,18 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               </span>
 
               {/* Score Pill dengan Sparkle */}
-              <div className="mt-1 mb-2 px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center gap-1 shadow-sm">
+              <div className="mt-1 mb-1 px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center gap-1 shadow-sm">
                 <span className="text-[10px]">💥</span>
                 <span className="text-[11px] font-black text-purple-200">
                   {rank2.score}
+                </span>
+              </div>
+
+              {/* GDrive Reports Pill */}
+              <div className="mb-2 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-400/30 flex items-center gap-1 shadow-2xs">
+                <Cloud className="w-2.5 h-2.5 text-emerald-300" />
+                <span className="text-[9px] font-black text-emerald-200">
+                  {rank2.gdriveReportsCount} GDrive
                 </span>
               </div>
 
@@ -363,10 +485,13 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
 
           {/* PODIUM 1: RANK 1 (TENGAH - PALING TINGGI & TERBESAR) */}
           {rank1 && (
-            <div className="flex-1 max-w-[120px] sm:max-w-[135px] flex flex-col items-center z-10">
-              {/* Avatar + Crown / Gold Medal 1 */}
+            <div className="flex-1 max-w-[120px] sm:max-w-[135px] flex flex-col items-center z-10 animate-in slide-in-from-bottom-16 fade-in duration-700 ease-out">
+              {/* Avatar + Crown / Gold Medal 1 dengan Glowing Aura */}
               <div className="relative mb-2 flex flex-col items-center">
-                <div className="w-16 h-16 sm:w-19 sm:h-19 rounded-full ring-4 ring-amber-400 shadow-2xl overflow-hidden bg-slate-900 flex items-center justify-center">
+                {/* Glowing Aura Ring */}
+                <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-amber-400/40 via-yellow-300/30 to-amber-500/40 blur-sm animate-pulse pointer-events-none" />
+
+                <div className="relative w-16 h-16 sm:w-19 sm:h-19 rounded-full ring-4 ring-amber-400 shadow-2xl overflow-hidden bg-slate-900 flex items-center justify-center">
                   {rank1.avatar ? (
                     <img
                       src={rank1.avatar}
@@ -379,10 +504,15 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                     </div>
                   )}
                 </div>
-                {/* Crown / Gold Badge 1 */}
-                <div className="absolute -top-2 -right-1 w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-200 text-slate-950 font-black text-xs flex items-center justify-center shadow-lg ring-2 ring-[#7c3aed]">
-                  <Crown className="w-3.5 h-3.5 text-slate-950 fill-amber-300" />
-                </div>
+                {/* Crown Interaktif: Klik untuk Confetti! */}
+                <button
+                  type="button"
+                  onClick={fireConfetti}
+                  className="absolute -top-3 -right-1 w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-200 text-slate-950 font-black text-xs flex items-center justify-center shadow-lg ring-2 ring-[#7c3aed] cursor-pointer animate-bounce hover:scale-110 active:scale-95 transition-transform"
+                  title="Klik untuk Selebrasi Juara! 🎉"
+                >
+                  <Crown className="w-4 h-4 text-slate-950 fill-amber-300" />
+                </button>
               </div>
 
               {/* Nama Juara 1 */}
@@ -391,10 +521,18 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               </span>
 
               {/* Score Pill Juara 1 */}
-              <div className="mt-1 mb-2 px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/40 flex items-center gap-1 shadow-sm">
+              <div className="mt-1 mb-1 px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/40 flex items-center gap-1 shadow-sm">
                 <span className="text-xs">💥</span>
                 <span className="text-xs font-black text-amber-300">
                   {rank1.score}
+                </span>
+              </div>
+
+              {/* GDrive Reports Pill Juara 1 */}
+              <div className="mb-2 px-2.5 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-300/40 flex items-center gap-1 shadow-2xs">
+                <Cloud className="w-2.5 h-2.5 text-emerald-300 animate-pulse" />
+                <span className="text-[9.5px] font-black text-emerald-200">
+                  {rank1.gdriveReportsCount} GDrive
                 </span>
               </div>
 
@@ -414,7 +552,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
 
           {/* PODIUM 3: RANK 3 (KANAN - KETIGA) */}
           {rank3 && (
-            <div className="flex-1 max-w-[105px] sm:max-w-[120px] flex flex-col items-center">
+            <div className="flex-1 max-w-[105px] sm:max-w-[120px] flex flex-col items-center animate-in slide-in-from-bottom-8 fade-in duration-700 ease-out">
               {/* Avatar + Badge 3 */}
               <div className="relative mb-2 flex flex-col items-center">
                 <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full ring-3 ring-amber-600 shadow-xl overflow-hidden bg-slate-800 flex items-center justify-center">
@@ -442,10 +580,18 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               </span>
 
               {/* Score Pill */}
-              <div className="mt-1 mb-2 px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center gap-1 shadow-sm">
+              <div className="mt-1 mb-1 px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center gap-1 shadow-sm">
                 <span className="text-[10px]">💥</span>
                 <span className="text-[11px] font-black text-purple-200">
                   {rank3.score}
+                </span>
+              </div>
+
+              {/* GDrive Reports Pill */}
+              <div className="mb-2 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-400/30 flex items-center gap-1 shadow-2xs">
+                <Cloud className="w-2.5 h-2.5 text-emerald-300" />
+                <span className="text-[9px] font-black text-emerald-200">
+                  {rank3.gdriveReportsCount} GDrive
                 </span>
               </div>
 
@@ -551,11 +697,19 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-400 font-medium">
-                      {item.visitCount > 0
-                        ? `${item.visitCount} Visit Toko`
-                        : `${item.role}`}
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {item.visitCount > 0
+                          ? `${item.visitCount} Visit`
+                          : `${item.role}`}
+                      </span>
+                      {item.gdriveReportsCount > 0 && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-emerald-950/80 border border-emerald-400/30 text-emerald-300 text-[9px] font-extrabold shadow-2xs">
+                          <Cloud className="w-2.5 h-2.5 text-emerald-400" />
+                          <span>{item.gdriveReportsCount} GDrive</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -585,7 +739,8 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                 Posisi Anda Saat Ini
               </p>
               <p className="text-[10px] text-purple-200">
-                {currentUserRank.visitCount} Visit Terjadwal • {currentUserRank.completedVisits} Kunjungan Selesai
+                {currentUserRank.visitCount} Visit • {currentUserRank.completedVisits} Selesai •{' '}
+                <span className="text-emerald-300 font-bold">{currentUserRank.gdriveReportsCount} Laporan GDrive</span>
               </p>
             </div>
           </div>

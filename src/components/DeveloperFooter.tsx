@@ -4,11 +4,11 @@ import {
   X,
   Code2,
   Cpu,
-  Building2,
   Layers,
   ShieldCheck,
   Sparkles,
   Terminal,
+  Coffee,
 } from 'lucide-react';
 
 interface DeveloperFooterProps {
@@ -43,8 +43,8 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
             {/* Developer Header Profile */}
             <div className="flex flex-col items-center text-center pt-1 pb-3 border-b border-slate-100">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-600 via-emerald-500 to-blue-600 p-[2px] shadow-md mb-2.5">
-                <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-white font-black text-base tracking-wider">
-                  ABP
+                <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-emerald-400 font-mono font-black text-xl tracking-tighter shadow-inner">
+                  &lt;/&gt;
                 </div>
               </div>
 
@@ -81,25 +81,7 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
                 </div>
               </div>
 
-              {/* 2. Institusi */}
-              <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-100 flex items-start gap-2.5">
-                <div className="w-7 h-7 rounded-xl bg-blue-100/80 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
-                  <Building2 className="w-3.5 h-3.5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    Institusi / Divisi
-                  </span>
-                  <span className="block text-xs font-extrabold text-slate-800 leading-snug">
-                    FMCU Division — FamilyMart Indonesia
-                  </span>
-                  <span className="block text-[10px] text-slate-500 font-medium">
-                    Operational &amp; Store Quality Control Management
-                  </span>
-                </div>
-              </div>
-
-              {/* 3. Bahasa Pemrograman */}
+              {/* 2. Bahasa Pemrograman */}
               <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-100 flex items-start gap-2.5">
                 <div className="w-7 h-7 rounded-xl bg-indigo-100/80 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5">
                   <Terminal className="w-3.5 h-3.5" />
@@ -114,7 +96,7 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
                 </div>
               </div>
 
-              {/* 4. Tech Stack */}
+              {/* 3. Tech Stack */}
               <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-100 flex items-start gap-2.5">
                 <div className="w-7 h-7 rounded-xl bg-emerald-100/80 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
                   <Layers className="w-3.5 h-3.5" />
@@ -144,6 +126,33 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* 4. Trakteer Coffee Direct Link */}
+              <a
+                href="https://trakteer.id/HEHBESTIE/tip"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-3 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200/90 flex items-center justify-between text-amber-900 hover:brightness-95 transition-all group cursor-pointer shadow-2xs"
+                title="Trakteer Hai BESTIE! (@HEHBESTIE) di Trakteer - Trakteer.id"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                    <Coffee className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="block text-[10.5px] font-black uppercase tracking-wider text-amber-900">
+                      TRAKTEER COFFEE
+                    </span>
+                    <span className="block text-[9.5px] text-amber-700 font-medium">
+                      Trakteer Hai BESTIE! (@HEHBESTIE)
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-extrabold text-amber-800 bg-amber-200/80 px-2.5 py-1 rounded-full group-hover:bg-amber-300 transition-colors flex items-center gap-1">
+                  <span>Tip</span>
+                  <span>☕</span>
+                </span>
+              </a>
             </div>
 
             {/* Bottom Action */}
@@ -170,17 +179,34 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
   return (
     <>
       <footer className={className}>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen(true);
-          }}
-          className="inline-flex items-center gap-1 text-[10px] font-light text-slate-400/90 hover:text-teal-600 tracking-widest transition-colors cursor-pointer py-1 px-2 rounded-full"
-        >
-          <Code2 className="w-3 h-3 opacity-70" />
-          <span>Pengembang Web</span>
-        </button>
+        <div className="inline-flex items-center justify-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 text-[10.5px] font-medium text-slate-400 hover:text-teal-600 tracking-wider transition-colors cursor-pointer py-1 px-2.5 rounded-full hover:bg-slate-100/70"
+          >
+            <span className="font-mono text-xs font-black text-teal-600">&lt;/&gt;</span>
+            <span>Pengembang Web</span>
+          </button>
+
+          {/* Garis Pembatas */}
+          <span className="h-3.5 w-px bg-slate-300/80 block shrink-0" />
+
+          {/* Button Trakteer Coffee */}
+          <a
+            href="https://trakteer.id/HEHBESTIE/tip"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-[10px] font-black text-amber-800 hover:text-amber-950 bg-amber-50 hover:bg-amber-100/90 border border-amber-200/90 px-3 py-1 rounded-full shadow-2xs transition-all active:scale-95 cursor-pointer tracking-wider uppercase"
+            title="Trakteer Hai BESTIE! (@HEHBESTIE) di Trakteer - Trakteer.id"
+          >
+            <Coffee className="w-3 h-3 text-amber-600 shrink-0" />
+            <span>TRAKTEER COFFEE</span>
+          </a>
+        </div>
       </footer>
       {modalContent}
     </>
