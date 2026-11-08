@@ -50,10 +50,63 @@ const EXCEL_STORE_ALIAS_MAP: Record<string, string> = {
   'BULUNGAN': 'BULUNGAN 2',
 };
 
+/**
+ * Snap date input to Monday of its week (matching corporate rules from FMCUVISITREPORT)
+ */
+export function getMondayOfWeek(dateInput?: string): string {
+  const d = dateInput ? new Date(dateInput + 'T00:00:00') : new Date();
+  if (isNaN(d.getTime())) {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+  const day = d.getDay(); // 0=Minggu, 1=Senin, 2=Selasa, 3=Rabu, 4=Kamis, 5=Jumat, 6=Sabtu
+  let offsetToNearestMonday = 0;
+  if (day === 0) {
+    offsetToNearestMonday = 1;
+  } else if (day >= 1 && day <= 4) {
+    offsetToNearestMonday = 1 - day;
+  } else {
+    offsetToNearestMonday = 8 - day;
+  }
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + offsetToNearestMonday);
+  const yyyy = monday.getFullYear();
+  const mm = String(monday.getMonth() + 1).padStart(2, '0');
+  const dd = String(monday.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Generate 7 work days (Senin s/d Minggu) for a given week Monday
+ */
+export function getFullWeekDays(
+  mondayStr: string
+): { dayIndex: number; dayName: string; dateStr: string; isWeekend: boolean }[] {
+  const baseMon = getMondayOfWeek(mondayStr);
+  const dayNames = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
+  const result: { dayIndex: number; dayName: string; dateStr: string; isWeekend: boolean }[] = [];
+
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(baseMon + 'T00:00:00');
+    dt.setDate(dt.getDate() + i);
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    result.push({
+      dayIndex: i,
+      dayName: dayNames[i],
+      dateStr: `${yyyy}-${mm}-${dd}`,
+      isWeekend: i === 5 || i === 6,
+    });
+  }
+  return result;
+}
+
 export function parseExcelSerialDate(val: any): string | null {
   if (val === undefined || val === null || val === '') return null;
   if (typeof val === 'number') {
-    const utcDays = Math.floor(val - 25569);
+    // Excel 1900 date epoch without local timezone offset shift
+    const utcDays = Math.round(val - 25569);
     const d = new Date(utcDays * 86400 * 1000);
     const yyyy = d.getUTCFullYear();
     const mm = String(d.getUTCMonth() + 1).padStart(2, '0');

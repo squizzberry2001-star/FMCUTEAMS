@@ -13,22 +13,29 @@ import {
   Users,
   GraduationCap,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
-import { ScheduleAgenda, ScheduleCategory } from '../types';
+import { ScheduleAgenda, ScheduleCategory, User } from '../types';
 import { DeveloperFooter } from './DeveloperFooter';
+import { isSamePersonName } from '../data/masterStoresData';
 
 interface AgendaDetailViewProps {
   agenda: ScheduleAgenda;
+  currentUser?: User | null;
   onBack: () => void;
   onOpenVisitForm?: () => void;
 }
 
 export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   agenda,
+  currentUser,
   onBack,
   onOpenVisitForm,
 }) => {
+  const isOwner =
+    Boolean(currentUser?.isAdmin) ||
+    isSamePersonName(agenda.pic, currentUser?.name);
   const renderCategoryIcon = (category: ScheduleCategory) => {
     switch (category) {
       case 'VISIT':
@@ -203,34 +210,50 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
           </div>
         </div>
 
-        {/* KHUSUS AGENDA VISIT: Tombol BUKA FORM VISIT */}
+        {/* KHUSUS AGENDA VISIT: Tombol BUKA FORM VISIT (HANYA MUNCUL JIKA MILIK USER / PIC TERKAIT) */}
         {agenda.category === 'VISIT' && (
-          <div className="bg-gradient-to-br from-emerald-500/10 via-teal-50 to-white rounded-[28px] p-5 border-2 border-emerald-500/30 shadow-soft-card space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#00A389] text-white flex items-center justify-center font-black text-xs">
-                  FM
+          isOwner ? (
+            <div className="bg-gradient-to-br from-emerald-500/10 via-teal-50 to-white rounded-[28px] p-5 border-2 border-emerald-500/30 shadow-soft-card space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#00A389] text-white flex items-center justify-center font-black text-xs">
+                    FM
+                  </div>
+                  <span className="text-xs font-black text-slate-900 tracking-tight">
+                    FMCU Visit Store Report
+                  </span>
                 </div>
-                <span className="text-xs font-black text-slate-900 tracking-tight">
-                  FMCU Visit Store Report
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  Agenda Anda
                 </span>
               </div>
-              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                Khusus Agenda Visit
-              </span>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                Buka formulir inspeksi toko, input lembar QSC/FamiTrack, data store crew, observasi temuan OPI & QSC, serta unggah bukti foto lapangan.
+              </p>
+              <button
+                onClick={onOpenVisitForm}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Camera className="w-4 h-4" />
+                <span>BUKA FORM VISIT REPORT</span>
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+              </button>
             </div>
-            <p className="text-xs text-slate-600 leading-relaxed font-medium">
-              Buka formulir inspeksi toko, input lembar QSC/FamiTrack, data store crew, observasi temuan OPI & QSC, serta unggah bukti foto lapangan.
-            </p>
-            <button
-              onClick={onOpenVisitForm}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-            >
-              <Camera className="w-4 h-4" />
-              <span>BUKA FORM VISIT REPORT</span>
-              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-            </button>
-          </div>
+          ) : (
+            <div className="bg-slate-50/80 rounded-[28px] p-4 border border-slate-200/80 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-200/70 text-slate-500 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                  Akses Form Visit Terbatas
+                </span>
+                <p className="text-xs font-bold text-slate-700 mt-0.5">
+                  Form visit ini ditugaskan kepada <span className="text-teal-700">{agenda.pic}</span>. Tombol buka form hanya tersedia untuk akun yang bersangkutan.
+                </p>
+              </div>
+            </div>
+          )
         )}
 
         {/* Minimalist Page Footer */}

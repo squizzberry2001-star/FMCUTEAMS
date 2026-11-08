@@ -42,7 +42,8 @@ import {
   Cloud,
   WifiOff,
   Navigation,
-  Star
+  Star,
+  Pencil
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from '../../types';
@@ -485,8 +486,35 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     // Scroll handling is smoothly controlled by handleSwitchSection
   }, [showPreview]);
 
-  // Modal zoom photo & R23 Holding Time Standards
-  const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
+  // Modal zoom photo with Tap & Swipe + Description di Atas Foto
+  const [zoomModalState, setZoomModalState] = useState<{
+    isOpen: boolean;
+    currentIndex: number;
+    photos: EvidencePhoto[];
+    isCa: boolean;
+  }>({
+    isOpen: false,
+    currentIndex: 0,
+    photos: [],
+    isCa: false,
+  });
+
+  // Modal Edit Foto State
+  const [editingPhotoState, setEditingPhotoState] = useState<{
+    photoId: string;
+    index: number;
+    isCa: boolean;
+    photoUrl: string;
+    caption: string;
+    rotation: number;
+    originalPhoto: EvidencePhoto;
+  } | null>(null);
+  const editPhotoFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Swipe detection refs
+  const touchStartXRef = useRef<number>(0);
+  const touchStartYRef = useRef<number>(0);
+
   const [showR23Modal, setShowR23Modal] = useState(false);
 
   // AI Loading state per observation card & Global compile
@@ -1299,6 +1327,185 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }
   };
 
+  // Helper to rotate image base64 on client canvas
+  const rotateImageBase64 = (base64Url: string, degrees: number): Promise<string> => {
+    return new Promise((resolve) => {
+      if (degrees % 360 === 0) return resolve(base64Url);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const rad = (degrees * Math.PI) / 180;
+        const is90or270 = Math.abs(degrees) % 180 === 90;
+        canvas.width = is90or270 ? img.height : img.width;
+        canvas.height = is90or270 ? img.width : img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(base64Url);
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(rad);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+        resolve(canvas.toDataURL('image/jpeg', 0.90));
+      };
+      img.onerror = () => resolve(base64Url);
+      img.src = base64Url;
+    });
+  };
+
+  const handleOpenEditPhotoModal = (photo: EvidencePhoto, index: number, isCa: boolean) => {
+    setEditingPhotoState({
+      photoId: photo.id,
+      index,
+      isCa,
+      photoUrl: photo.photoUrl,
+      caption: photo.caption || '',
+      rotation: 0,
+      originalPhoto: photo,
+    });
+  };
+
+  const handleRotateEditingPhoto = () => {
+    setEditingPhotoState((prev) => {
+      if (!prev) return null;
+      return { ...prev, rotation: (prev.rotation + 90) % 360 };
+    });
+  };
+
+  const handleReplaceEditingPhotoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingPhotoState) return;
+    e.target.value = '';
+    try {
+      const stamped = await processAndStampImage(file);
+      setEditingPhotoState((prev) => (prev ? { ...prev, photoUrl: stamped, rotation: 0 } : null));
+    } catch (err) {
+      console.warn('Gagal memproses foto baru:', err);
+    }
+  };
+
+  const handleSaveEditingPhoto = async () => {
+    if (!editingPhotoState) return;
+    let finalUrl = editingPhotoState.photoUrl;
+    if (editingPhotoState.rotation !== 0) {
+      finalUrl = await rotateImageBase64(finalUrl, editingPhotoState.rotation);
+    }
+
+    if (editingPhotoState.isCa) {
+      setFormData((prev) => ({
+        ...prev,
+        caPhotos: (prev.caPhotos || []).map((p) =>
+          p.id === editingPhotoState.photoId
+            ? { ...p, photoUrl: finalUrl, caption: editingPhotoState.caption }
+            : p
+        ),
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        evidencePhotos: prev.evidencePhotos.map((p) =>
+          p.id === editingPhotoState.photoId
+            ? { ...p, photoUrl: finalUrl, caption: editingPhotoState.caption }
+            : p
+        ),
+      }));
+    }
+
+    // Also update zoom modal state if open
+    setZoomModalState((prev) => {
+      if (!prev.isOpen) return prev;
+      return {
+        ...prev,
+        photos: prev.photos.map((p) =>
+          p.id === editingPhotoState.photoId
+            ? { ...p, photoUrl: finalUrl, caption: editingPhotoState.caption }
+            : p
+        ),
+      };
+    });
+
+    setEditingPhotoState(null);
+    confetti({ particleCount: 30, spread: 50, origin: { y: 0.6 } });
+  };
+
+  const handleOpenZoomPhoto = (idx: number, isCa: boolean) => {
+    const list = isCa ? (formData.caPhotos || []) : formData.evidencePhotos;
+    setZoomModalState({
+      isOpen: true,
+      currentIndex: idx,
+      photos: list,
+      isCa,
+    });
+  };
+
+  const handleOpenSinglePhotoZoom = (url: string, title: string) => {
+    setZoomModalState({
+      isOpen: true,
+      currentIndex: 0,
+      photos: [
+        {
+          id: 'single-preview',
+          photoUrl: url,
+          caption: title,
+          timestamp: formData.visitDate || '',
+          gpsLocation: formData.storeName || '',
+        },
+      ],
+      isCa: false,
+    });
+  };
+
+  const handleCloseZoomModal = () => {
+    setZoomModalState((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handlePrevZoomPhoto = () => {
+    setZoomModalState((prev) => {
+      if (!prev.isOpen || prev.photos.length <= 1) return prev;
+      const nextIdx = prev.currentIndex > 0 ? prev.currentIndex - 1 : prev.photos.length - 1;
+      return { ...prev, currentIndex: nextIdx };
+    });
+  };
+
+  const handleNextZoomPhoto = () => {
+    setZoomModalState((prev) => {
+      if (!prev.isOpen || prev.photos.length <= 1) return prev;
+      const nextIdx = prev.currentIndex < prev.photos.length - 1 ? prev.currentIndex + 1 : 0;
+      return { ...prev, currentIndex: nextIdx };
+    });
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) {
+        handleNextZoomPhoto();
+      } else {
+        handlePrevZoomPhoto();
+      }
+    }
+  };
+
+  // Keyboard navigation for Zoom Modal
+  useEffect(() => {
+    if (!zoomModalState.isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        handlePrevZoomPhoto();
+      } else if (e.key === 'ArrowRight') {
+        handleNextZoomPhoto();
+      } else if (e.key === 'Escape') {
+        handleCloseZoomModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomModalState.isOpen]);
+
   // Functional Voice Dictation Helper (Active Toggle + Indonesian Speech Recognition + Fallback)
   const handleToggleVoiceDictation = (voiceKey: string, currentVal: string, onAppend: (newText: string) => void) => {
     // If already listening on this key, stop it
@@ -1564,20 +1771,260 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* Zoom Photo Modal */}
-      {zoomPhotoUrl && (
-        <div
-          onClick={() => setZoomPhotoUrl(null)}
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in"
-        >
-          <div className="relative max-w-4xl max-h-[90vh]">
-            <img src={zoomPhotoUrl} alt="Zoom" className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl" />
-            <button
-              onClick={() => setZoomPhotoUrl(null)}
-              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-slate-800 flex items-center justify-center font-bold shadow-lg"
-            >
-              <X className="w-4 h-4" />
-            </button>
+      {/* Zoom Photo Lightbox Modal with Tap & Swipe Navigation + Description di ATAS Foto */}
+      {zoomModalState.isOpen && zoomModalState.photos[zoomModalState.currentIndex] && (() => {
+        const activePhoto = zoomModalState.photos[zoomModalState.currentIndex];
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col items-center justify-between p-3 sm:p-5 animate-in fade-in select-none"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* TOP BAR & PHOTO DESCRIPTION (DI ATAS FOTO) */}
+            <div className="w-full max-w-4xl z-10 flex flex-col gap-2 shrink-0">
+              {/* Header: Photo Counter & Close */}
+              <div className="flex items-center justify-between text-white pb-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 text-xs font-black">
+                    Foto {zoomModalState.currentIndex + 1} dari {zoomModalState.photos.length}
+                  </span>
+                  <span className="text-xs font-bold text-slate-300">
+                    {zoomModalState.isCa ? 'Hasil Perbaikan (CA)' : 'Bukti Temuan Operasional'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleOpenEditPhotoModal(
+                        activePhoto,
+                        zoomModalState.currentIndex,
+                        zoomModalState.isCa
+                      );
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-extrabold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                    title="Edit Foto Ini"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-teal-300" />
+                    <span className="hidden sm:inline">Edit Foto</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseZoomModal}
+                    className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold transition active:scale-95 cursor-pointer"
+                    title="Tutup (Esc)"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Description Card directly ABOVE the photo */}
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900/90 backdrop-blur-xl border border-white/20 text-white shadow-2xl">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-teal-300 mb-1">
+                  <span>Deskripsi Temuan Lapangan</span>
+                  <span className="text-slate-400 font-semibold">
+                    {activePhoto.timestamp || ''} • {activePhoto.gpsLocation || 'GPS Verified'}
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm font-semibold text-slate-100 leading-snug break-words">
+                  {activePhoto.caption || 'Tidak ada deskripsi untuk foto ini.'}
+                </p>
+              </div>
+            </div>
+
+            {/* CENTER: IMAGE VIEWER WITH TAP NAVIGATION & TOUCH SWIPE */}
+            <div className="relative flex-1 w-full max-w-4xl flex items-center justify-center min-h-0 my-2">
+              {/* Left Tap Zone & Chevron */}
+              {zoomModalState.photos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handlePrevZoomPhoto}
+                  className="absolute left-2 sm:left-4 z-20 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center transition active:scale-90 border border-white/20 shadow-xl cursor-pointer"
+                  title="Foto Sebelumnya (Geser Kiri / Panah Kiri)"
+                >
+                  <ChevronLeft className="w-6 h-6 stroke-[2.5]" />
+                </button>
+              )}
+
+              {/* Main Image */}
+              <div className="w-full h-full flex items-center justify-center p-1 sm:p-3 overflow-hidden">
+                <img
+                  src={activePhoto.photoUrl}
+                  alt={`Evidence ${zoomModalState.currentIndex + 1}`}
+                  className="max-w-full max-h-[58vh] sm:max-h-[64vh] object-contain rounded-2xl shadow-2xl transition-all duration-200"
+                />
+              </div>
+
+              {/* Right Tap Zone & Chevron */}
+              {zoomModalState.photos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleNextZoomPhoto}
+                  className="absolute right-2 sm:right-4 z-20 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center transition active:scale-90 border border-white/20 shadow-xl cursor-pointer"
+                  title="Foto Berikutnya (Geser Kanan / Panah Kanan)"
+                >
+                  <ChevronRight className="w-6 h-6 stroke-[2.5]" />
+                </button>
+              )}
+            </div>
+
+            {/* BOTTOM DOTS INDICATOR & QUICK THUMBNAILS */}
+            <div className="w-full max-w-xl flex items-center justify-center gap-1.5 py-1 shrink-0">
+              {zoomModalState.photos.map((_, dotIdx) => (
+                <button
+                  key={dotIdx}
+                  type="button"
+                  onClick={() => setZoomModalState((prev) => ({ ...prev, currentIndex: dotIdx }))}
+                  className={`transition-all rounded-full cursor-pointer ${
+                    dotIdx === zoomModalState.currentIndex
+                      ? 'w-7 h-2 bg-teal-400'
+                      : 'w-2 h-2 bg-white/40 hover:bg-white/70'
+                  }`}
+                  title={`Pindah ke foto ${dotIdx + 1}`}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal Edit Foto & Keterangan */}
+      {editingPhotoState && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl p-5 sm:p-6 space-y-4 my-auto max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Edit Foto &amp; Keterangan #{editingPhotoState.index + 1}
+                  </h3>
+                  <span className="text-[10px] font-bold text-slate-400 block">
+                    {editingPhotoState.isCa ? 'Hasil Perbaikan (CA)' : 'Bukti Temuan Lapangan'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPhotoState(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Photo Preview with Rotation */}
+            <div className="relative h-56 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center">
+              <img
+                src={editingPhotoState.photoUrl}
+                alt="Preview"
+                style={{
+                  transform: `rotate(${editingPhotoState.rotation}deg)`,
+                  transition: 'transform 0.25s ease',
+                }}
+                className="max-h-full max-w-full object-contain"
+              />
+
+              {/* Action Overlay: Rotate & Replace */}
+              <div className="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={handleRotateEditingPhoto}
+                  className="px-3 py-1.5 rounded-xl bg-black/70 hover:bg-black text-white text-xs font-bold backdrop-blur-sm transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCw className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Putar 90° ({editingPhotoState.rotation}°)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => editPhotoFileInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Ganti Foto</span>
+                </button>
+                <input
+                  type="file"
+                  ref={editPhotoFileInputRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleReplaceEditingPhotoFile}
+                />
+              </div>
+            </div>
+
+            {/* Edit Caption Textarea with Speech Dictation */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-black text-slate-600 uppercase tracking-wider">
+                  Keterangan / Deskripsi Foto *
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleToggleVoiceDictation(
+                      'modal-edit-photo',
+                      editingPhotoState.caption,
+                      (val) => setEditingPhotoState((p) => (p ? { ...p, caption: val } : null))
+                    )
+                  }
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                    activeVoiceKey === 'modal-edit-photo'
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
+                  }`}
+                >
+                  <Mic className="w-3 h-3 text-rose-500" />
+                  <span>{activeVoiceKey === 'modal-edit-photo' ? 'Mendengarkan...' : 'Dikte Suara'}</span>
+                </button>
+              </div>
+              <textarea
+                rows={3}
+                value={editingPhotoState.caption}
+                onChange={(e) =>
+                  setEditingPhotoState((p) => (p ? { ...p, caption: e.target.value } : null))
+                }
+                placeholder="Tuliskan keterangan detail temuan / hasil perbaikan foto ini..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-teal-400 resize-none leading-relaxed"
+              />
+            </div>
+
+            {/* GPS & Timestamp Information */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[10.5px] font-semibold text-slate-500 flex items-center justify-between">
+              <span className="flex items-center gap-1 truncate">
+                <MapPin className="w-3 h-3 text-teal-600" />
+                <span>{editingPhotoState.originalPhoto.gpsLocation || 'GPS Verified'}</span>
+              </span>
+              <span className="flex items-center gap-1 shrink-0">
+                <Clock className="w-3 h-3 text-slate-400" />
+                <span>{editingPhotoState.originalPhoto.timestamp || ''}</span>
+              </span>
+            </div>
+
+            {/* Submit / Cancel Buttons */}
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setEditingPhotoState(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditingPhoto}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Simpan Perubahan</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2249,7 +2696,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                         src={formData.qscSheetTop}
                         alt="Preview QSC Bagian Atas"
                         className="w-full h-full object-cover cursor-zoom-in"
-                        onClick={() => setZoomPhotoUrl(formData.qscSheetTop)}
+                        onClick={() => handleOpenSinglePhotoZoom(formData.qscSheetTop, 'Lembar QSC Bagian Atas')}
                       />
                     ) : (
                       <div className="text-center p-4">
@@ -2283,7 +2730,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                         src={formData.qscSheetBottom}
                         alt="Preview QSC Bagian Bawah"
                         className="w-full h-full object-cover cursor-zoom-in"
-                        onClick={() => setZoomPhotoUrl(formData.qscSheetBottom)}
+                        onClick={() => handleOpenSinglePhotoZoom(formData.qscSheetBottom, 'Lembar QSC Bagian Bawah')}
                       />
                     ) : (
                       <div className="text-center p-4">
@@ -2959,16 +3406,37 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   >
                     {/* Viewfinder Thumbnail */}
                     <div className="h-44 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
+                      {/* Tombol Icon Pencil di Kiri Atas Foto untuk Edit Foto & Keterangan */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditPhotoModal(ev, idx, evidenceSubTab === 'ca');
+                        }}
+                        className="absolute top-2 left-2 z-20 w-8 h-8 rounded-full bg-slate-900/80 hover:bg-black text-white flex items-center justify-center shadow-md backdrop-blur-xs transition active:scale-90 cursor-pointer border border-white/30"
+                        title="Edit Foto (Ganti, Putar 90°, Edit Keterangan)"
+                      >
+                        <Pencil className="w-4 h-4 text-teal-300" />
+                      </button>
+
+                      {/* Badge Index Foto di Kanan Atas */}
+                      <span className="absolute top-2 right-2 z-20 text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-xs text-white border border-white/20">
+                        #{idx + 1}
+                      </span>
+
                       <img
                         src={ev.photoUrl}
                         alt={`Evidence ${idx + 1}`}
                         className="w-full h-full object-cover cursor-zoom-in"
-                        onClick={() => setZoomPhotoUrl(ev.photoUrl)}
+                        onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
                       />
-                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                        <span className="bg-slate-900/80 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
-                          <Maximize2 className="w-3 h-3" />
-                          <span>Perbesar</span>
+                      <div
+                        onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
+                        className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-zoom-in"
+                      >
+                        <span className="bg-slate-900/85 text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                          <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
+                          <span>Perbesar (Tap / Swipe)</span>
                         </span>
                       </div>
                     </div>

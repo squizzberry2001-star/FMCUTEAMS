@@ -19,12 +19,14 @@ import {
   Camera,
   User as UserIcon,
   Shield,
-  ArrowRight
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
 import { CalendarStrip } from './CalendarStrip';
 import { DeveloperFooter } from './DeveloperFooter';
 import { ScheduleCard } from './ScheduleCard';
+import { isSamePersonName } from '../data/masterStoresData';
 
 interface DesktopDashboardProps {
   user: User;
@@ -442,23 +444,32 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               ))}
             </div>
 
-            {/* Khusus Agenda Visit Button */}
+            {/* Khusus Agenda Visit Button (Hanya jika milik user) */}
             {selectedAgenda.category === 'VISIT' && (
-              <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
-                <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
-                  Khusus Agenda Visit
-                </span>
-                <p className="text-xs text-slate-600 mb-3">
-                  Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
-                </p>
-                <button
-                  onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
-                  className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>Buka Form Visit Report</span>
-                </button>
-              </div>
+              Boolean(user.isAdmin) || isSamePersonName(selectedAgenda.pic, user.name) ? (
+                <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
+                  <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
+                    Agenda Visit Anda
+                  </span>
+                  <p className="text-xs text-slate-600 mb-3">
+                    Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
+                  </p>
+                  <button
+                    onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
+                    className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>Buka Form Visit Report</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-6 p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-2.5">
+                  <ShieldAlert className="w-5 h-5 text-slate-400 shrink-0" />
+                  <p className="text-xs font-bold text-slate-600">
+                    Form visit ini ditugaskan kepada <span className="text-teal-700">{selectedAgenda.pic}</span>. Tombol buka form hanya tersedia untuk akun yang bersangkutan.
+                  </p>
+                </div>
+              )
             )}
           </div>
         ) : (
