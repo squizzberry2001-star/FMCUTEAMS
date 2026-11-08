@@ -349,20 +349,20 @@
   background: #CBD5E1;
 }
 
-/* Running Text Marquee for AI Attention Banner */
+/* Running Text Marquee for AI Attention Banner (Single Repeat Running from Right to Left) */
 @keyframes fmcuMarquee {
   0% {
-    transform: translateX(0%);
+    transform: translateX(100%);
   }
   100% {
-    transform: translateX(-50%);
+    transform: translateX(-100%);
   }
 }
 
 .animate-marquee {
   display: inline-flex;
   white-space: nowrap;
-  animation: fmcuMarquee 22s linear infinite;
+  animation: fmcuMarquee 24s linear infinite;
 }
 
 .animate-marquee:hover {
