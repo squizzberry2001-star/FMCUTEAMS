@@ -11,6 +11,8 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  ChevronLeft,
+  FileSpreadsheet,
   TrendingUp,
   Clock,
   Sparkles,
@@ -27,6 +29,11 @@ import { CalendarStrip } from './CalendarStrip';
 import { DeveloperFooter } from './DeveloperFooter';
 import { ScheduleCard } from './ScheduleCard';
 import { isSamePersonName } from '../data/masterStoresData';
+import {
+  getMondayOfWeek,
+  getFullWeekDays,
+  formatWeekRangeDisplay,
+} from '../services/scheduleExcelService';
 
 interface DesktopDashboardProps {
   user: User;
@@ -36,6 +43,7 @@ interface DesktopDashboardProps {
   onSelectDate: (date: string) => void;
   onSelectAgenda: (agenda: ScheduleAgenda) => void;
   onOpenNewAgenda: () => void;
+  onOpenExcelUpload?: () => void;
   onOpenVisitForm?: (agenda: ScheduleAgenda) => void;
   onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
@@ -50,6 +58,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   onSelectDate,
   onSelectAgenda,
   onOpenNewAgenda,
+  onOpenExcelUpload,
   onOpenVisitForm,
   onLogout,
   onOpenAdminPortal,
@@ -76,6 +85,37 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   const now = new Date();
   const currentMonthYear = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
 
+  // Reference Monday for active week view (Default: Monday of running week)
+  const [currentWeekMonday, setCurrentWeekMonday] = useState<string>(() => getMondayOfWeek());
+
+  const handlePrevWeek = () => {
+    const dt = new Date(currentWeekMonday + 'T12:00:00');
+    dt.setDate(dt.getDate() - 7);
+    const prevMon = getMondayOfWeek(dt.toISOString().split('T')[0]);
+    setCurrentWeekMonday(prevMon);
+    onSelectDate(prevMon);
+  };
+
+  const handleNextWeek = () => {
+    const dt = new Date(currentWeekMonday + 'T12:00:00');
+    dt.setDate(dt.getDate() + 7);
+    const nextMon = getMondayOfWeek(dt.toISOString().split('T')[0]);
+    setCurrentWeekMonday(nextMon);
+    onSelectDate(nextMon);
+  };
+
+  const handleResetToCurrentWeek = () => {
+    const runningMon = getMondayOfWeek();
+    setCurrentWeekMonday(runningMon);
+    const todayStr = new Date().toISOString().split('T')[0];
+    onSelectDate(todayStr);
+  };
+
+  const activeWeekDays = getFullWeekDays(currentWeekMonday);
+  const weekStartStr = activeWeekDays[0]?.dateStr || currentWeekMonday;
+  const weekEndStr = activeWeekDays[6]?.dateStr || currentWeekMonday;
+  const isCurrentRunningWeek = currentWeekMonday === getMondayOfWeek();
+
   const filteredAgendas = agendas.filter((item) => {
     const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -86,6 +126,10 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
 
     if (selectedPeriod === 'Today') {
       return item.date === selectedDate;
+    }
+    if (selectedPeriod === 'Week') {
+      // Auto Default hanya fokus pada minggu yang berjalan (atau minggu yang sedang dipilih navigasi)
+      return item.date >= weekStartStr && item.date <= weekEndStr;
     }
     return true;
   });
@@ -237,14 +281,29 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               <span className="w-2 h-2 rounded-full bg-[#2BB3A0] absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
             </button>
 
-            {/* Add New Schedule Agenda Button */}
-            <button
-              onClick={onOpenNewAgenda}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal hover:brightness-105 active:scale-95 transition-all"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>+ Buat Schedule</span>
-            </button>
+            {/* Action Buttons: Upload Schedule by Excel & Create New Schedule */}
+            <div className="flex items-center gap-2">
+              {onOpenExcelUpload && (
+                <button
+                  type="button"
+                  onClick={onOpenExcelUpload}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white hover:bg-slate-50 text-teal-700 border border-teal-300/80 text-xs font-black shadow-soft-sm hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  title="Upload Schedule by Excel (Auto Extract)"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span>Upload Jadwal (Excel)</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={onOpenNewAgenda}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span>+ Buat Schedule</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -319,11 +378,11 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               </span>
             </div>
           </div>
-          <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} />
+          <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} baseDate={currentWeekMonday} />
         </div>
 
-        {/* Period Filter Tabs */}
-        <div className="flex items-center justify-between mb-4">
+        {/* Period Filter Tabs & Sub Section "Semua Agenda" Week Navigator */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-6 px-1">
             {(['Today', 'Week', 'Month'] as const).map((period) => {
               const isActive = selectedPeriod === period;
@@ -331,7 +390,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 <button
                   key={period}
                   onClick={() => setSelectedPeriod(period)}
-                  className="relative pb-1.5 transition-colors"
+                  className="relative pb-1.5 transition-colors cursor-pointer"
                 >
                   <span
                     className={`text-sm font-bold transition-colors ${
@@ -348,9 +407,50 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
             })}
           </div>
 
-          <span className="text-xs text-slate-400 font-medium">
-            Menampilkan {filteredAgendas.length} agenda
-          </span>
+          {/* Sub Section "Semua Agenda" Week Navigator Controls (Tombol Kiri-Kanan) */}
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shadow-xs">
+              <button
+                type="button"
+                onClick={handlePrevWeek}
+                className="w-7 h-7 rounded-xl bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center transition shadow-xs cursor-pointer active:scale-95"
+                title="Lihat Minggu Sebelumnya"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <div className="px-2 text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <span>{formatWeekRangeDisplay(currentWeekMonday)}</span>
+                {isCurrentRunningWeek ? (
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                    Minggu Berjalan
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResetToCurrentWeek}
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 hover:bg-teal-500 hover:text-white text-slate-700 transition cursor-pointer"
+                    title="Kembali ke Minggu Ini"
+                  >
+                    Reset Minggu Ini
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleNextWeek}
+                className="w-7 h-7 rounded-xl bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center transition shadow-xs cursor-pointer active:scale-95"
+                title="Lihat Minggu Berikutnya"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            <span className="text-xs text-slate-400 font-medium whitespace-nowrap">
+              {filteredAgendas.length} agenda
+            </span>
+          </div>
         </div>
 
         {/* Section 1 Item 3: List Schedule Agenda Grid */}
@@ -358,14 +458,27 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
           {filteredAgendas.length === 0 ? (
             <div className="col-span-full py-10 text-center bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
               <p className="text-slate-400 text-xs font-medium">
-                Belum ada schedule agenda untuk tanggal {selectedDate}.
+                Belum ada schedule agenda untuk {selectedPeriod === 'Today' ? `tanggal ${selectedDate}` : `minggu ${formatWeekRangeDisplay(currentWeekMonday)}`}.
               </p>
-              <button
-                onClick={onOpenNewAgenda}
-                className="mt-3 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal"
-              >
-                + Buat Schedule Sekarang
-              </button>
+              <div className="mt-3 flex items-center justify-center gap-2.5">
+                {onOpenExcelUpload && (
+                  <button
+                    type="button"
+                    onClick={onOpenExcelUpload}
+                    className="px-4 py-2.5 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span>Upload Jadwal (Excel)</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onOpenNewAgenda}
+                  className="px-5 py-2.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal cursor-pointer"
+                >
+                  + Buat Schedule Sekarang
+                </button>
+              </div>
             </div>
           ) : (
             filteredAgendas.map((agenda) => (

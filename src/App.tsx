@@ -7,6 +7,7 @@ import { CalendarScheduleView } from './components/CalendarScheduleView';
 import { HistoryView } from './components/HistoryView';
 import { ProfileView } from './components/ProfileView';
 import { NewAgendaModal } from './components/NewAgendaModal';
+import { ExcelScheduleUploadModal } from './components/ExcelScheduleUploadModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
 import { LoginPage } from './components/LoginPage';
 import { SplashScreen } from './components/SplashScreen';
@@ -191,8 +192,9 @@ export const App: React.FC = () => {
   // Screen routing: 'main' (normal tabs), 'detail' (agenda detail), 'visit-form' (UI/UX Form Visit)
   const [mobileScreen, setMobileScreen] = useState<'main' | 'detail' | 'visit-form'>('main');
 
-  // Modal State for New Agenda
+  // Modal State for New Agenda & Excel Schedule Upload
   const [showNewAgendaModal, setShowNewAgendaModal] = useState(false);
+  const [showExcelUploadModal, setShowExcelUploadModal] = useState(false);
 
   // Forced layout override (auto / desktop / mobile) for testing on PC
   const [layoutMode, setLayoutMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
@@ -314,8 +316,12 @@ export const App: React.FC = () => {
     }
   };
 
-  // Handlers for Admin Excel Import & Sync
-  const handleImportExcel = (importedUsers: User[], importedAgendas: ScheduleAgenda[]) => {
+  // Handlers for Admin & User Excel Import & Sync
+  const handleImportExcel = (
+    importedUsers: User[],
+    importedAgendas: ScheduleAgenda[],
+    mode: 'merge' | 'replace' = 'merge'
+  ) => {
     // Merge users
     const existingMap = new Map(users.map((u) => [u.name.toLowerCase(), u]));
     importedUsers.forEach((u) => {
@@ -325,7 +331,25 @@ export const App: React.FC = () => {
     });
 
     setUsers(Array.from(existingMap.values()));
-    setAgendas(importedAgendas);
+
+    if (mode === 'replace') {
+      setAgendas(importedAgendas);
+    } else {
+      // Merge agendas: hindari duplikasi persis (tanggal + waktu + pic + lokasi)
+      const existingKeys = new Set(
+        agendas.map(
+          (a) =>
+            `${a.date}_${a.time}_${(a.pic || '').toLowerCase()}_${(a.location || '').toLowerCase()}`
+        )
+      );
+      const toAdd = importedAgendas.filter(
+        (a) =>
+          !existingKeys.has(
+            `${a.date}_${a.time}_${(a.pic || '').toLowerCase()}_${(a.location || '').toLowerCase()}`
+          )
+      );
+      setAgendas([...toAdd, ...agendas]);
+    }
   };
 
   const handleAddUser = (newUser: User) => {
@@ -573,6 +597,8 @@ export const App: React.FC = () => {
                   selectedDate={selectedDate}
                   onSelectDate={setSelectedDate}
                   onSelectAgenda={handleSelectAgenda}
+                  onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+                  onOpenExcelUpload={() => setShowExcelUploadModal(true)}
                   onOpenCalendar={() => setMobileTab('calendar')}
                   onOpenHistory={() => setMobileTab('history')}
                   onOpenProfile={() => setMobileTab('profile')}
@@ -587,6 +613,8 @@ export const App: React.FC = () => {
                   agendas={agendas}
                   onBack={() => setMobileTab('home')}
                   onSelectAgenda={handleSelectAgenda}
+                  onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+                  onOpenExcelUpload={() => setShowExcelUploadModal(true)}
                 />
               )}
 
@@ -622,6 +650,7 @@ export const App: React.FC = () => {
             onSelectDate={setSelectedDate}
             onSelectAgenda={handleSelectAgenda}
             onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+            onOpenExcelUpload={() => setShowExcelUploadModal(true)}
             onOpenVisitForm={(agenda) => {
               if (user?.isAdmin || isSamePersonName(agenda.pic, user?.name)) {
                 setSelectedAgenda(agenda);
@@ -642,6 +671,19 @@ export const App: React.FC = () => {
           initialDate={selectedDate}
           onClose={() => setShowNewAgendaModal(false)}
           onAddAgenda={handleAddNewAgenda}
+        />
+      )}
+
+      {/* Upload Schedule by Excel Modal (Desktop & Mobile) */}
+      {showExcelUploadModal && (
+        <ExcelScheduleUploadModal
+          existingUsers={users}
+          currentAgendasCount={agendas.length}
+          onClose={() => setShowExcelUploadModal(false)}
+          onImportSuccess={(updatedUsers, newAgendas, mode, summaryMsg) => {
+            handleImportExcel(updatedUsers, newAgendas, mode);
+            alert(summaryMsg);
+          }}
         />
       )}
     </div>

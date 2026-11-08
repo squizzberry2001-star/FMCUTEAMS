@@ -1,11 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Plus, CalendarDays, Sparkles } from 'lucide-react';
+import {
+  Bell,
+  Plus,
+  CalendarDays,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  FileSpreadsheet
+} from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
 import { CalendarStrip } from './CalendarStrip';
 import { ScheduleCard } from './ScheduleCard';
 import { BottomNavbar, NavTabType } from './BottomNavbar';
 import { EmployeeStoriesBar } from './EmployeeStoriesBar';
 import { DeveloperFooter } from './DeveloperFooter';
+import {
+  getMondayOfWeek,
+  getFullWeekDays,
+  formatWeekRangeDisplay,
+} from '../services/scheduleExcelService';
 
 interface HomeScreenProps {
   user?: User | null;
@@ -14,6 +27,7 @@ interface HomeScreenProps {
   onSelectDate: (date: string) => void;
   onSelectAgenda?: (agenda: ScheduleAgenda) => void;
   onOpenNewAgenda?: () => void;
+  onOpenExcelUpload?: () => void;
   onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onOpenProfile?: () => void;
   onOpenCalendar?: () => void;
@@ -29,6 +43,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectDate,
   onSelectAgenda,
   onOpenNewAgenda,
+  onOpenExcelUpload,
   onToggleComplete,
   onOpenProfile,
   onOpenCalendar,
@@ -39,6 +54,37 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'Month'>('Today');
   const [isScrolled, setIsScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reference Monday for active week view (Default: Monday of running week)
+  const [currentWeekMonday, setCurrentWeekMonday] = useState<string>(() => getMondayOfWeek());
+
+  const handlePrevWeek = () => {
+    const dt = new Date(currentWeekMonday + 'T12:00:00');
+    dt.setDate(dt.getDate() - 7);
+    const prevMon = getMondayOfWeek(dt.toISOString().split('T')[0]);
+    setCurrentWeekMonday(prevMon);
+    onSelectDate(prevMon);
+  };
+
+  const handleNextWeek = () => {
+    const dt = new Date(currentWeekMonday + 'T12:00:00');
+    dt.setDate(dt.getDate() + 7);
+    const nextMon = getMondayOfWeek(dt.toISOString().split('T')[0]);
+    setCurrentWeekMonday(nextMon);
+    onSelectDate(nextMon);
+  };
+
+  const handleResetToCurrentWeek = () => {
+    const runningMon = getMondayOfWeek();
+    setCurrentWeekMonday(runningMon);
+    const todayStr = new Date().toISOString().split('T')[0];
+    onSelectDate(todayStr);
+  };
+
+  const activeWeekDays = getFullWeekDays(currentWeekMonday);
+  const weekStartStr = activeWeekDays[0]?.dateStr || currentWeekMonday;
+  const weekEndStr = activeWeekDays[6]?.dateStr || currentWeekMonday;
+  const isCurrentRunningWeek = currentWeekMonday === getMondayOfWeek();
 
   // Salam waktu berdasarkan actual jam (Pagi, Siang, Sore, Malam)
   const getTimeGreeting = () => {
@@ -92,7 +138,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       return item.date === selectedDate;
     }
     if (selectedPeriod === 'Week') {
-      return true; // Tampilkan agenda minggu ini
+      // Auto Default hanya fokus pada minggu yang berjalan (atau minggu yang sedang dipilih navigasi)
+      return item.date >= weekStartStr && item.date <= weekEndStr;
     }
     return true; // Bulan ini
   });
@@ -212,31 +259,67 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
       <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top,16px))] pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 transition-all">
-        {/* Section 1 Item 3: Bulan dan Tahun Aktual di pojok kanan atas tepat di atas calendar strip */}
+        {/* Section 1 Item 3: Bulan dan Tahun Aktual di pojok kanan atas tepat di atas calendar strip & Navigasi Minggu */}
         <div className="flex items-center justify-between mb-2 px-1">
-          <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
-            Kalender Mingguan
-          </span>
-          <span className="text-[11px] font-bold text-teal-800 bg-white/90 backdrop-blur-sm px-2.5 py-0.5 rounded-full border border-teal-200/80 shadow-xs flex items-center gap-1.5">
-            <CalendarDays className="w-3.5 h-3.5 text-teal-600" />
-            <span>{currentMonthYear}</span>
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
+              Kalender Mingguan
+            </span>
+            {/* Week Navigator Pill */}
+            <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-xl text-[10px]">
+              <button
+                type="button"
+                onClick={handlePrevWeek}
+                className="w-5 h-5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 flex items-center justify-center transition cursor-pointer"
+                title="Minggu Sebelumnya"
+              >
+                <ChevronLeft className="w-3 h-3" />
+              </button>
+              <span className="font-extrabold text-slate-800 px-1 text-[10px]">
+                {formatWeekRangeDisplay(currentWeekMonday)}
+              </span>
+              <button
+                type="button"
+                onClick={handleNextWeek}
+                className="w-5 h-5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 flex items-center justify-center transition cursor-pointer"
+                title="Minggu Berikutnya"
+              >
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {!isCurrentRunningWeek && (
+              <button
+                type="button"
+                onClick={handleResetToCurrentWeek}
+                className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200 hover:bg-teal-100 transition cursor-pointer"
+              >
+                Reset Minggu Ini
+              </button>
+            )}
+            <span className="text-[10px] sm:text-[11px] font-bold text-teal-800 bg-white/90 backdrop-blur-sm px-2 py-0.5 rounded-full border border-teal-200/80 shadow-xs flex items-center gap-1">
+              <CalendarDays className="w-3 h-3 text-teal-600" />
+              <span>{currentMonthYear}</span>
+            </span>
+          </div>
         </div>
 
         {/* Section 1 Item 2: Horizontal Calendar Strip */}
-        <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} />
+        <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} baseDate={currentWeekMonday} />
 
         {/* Section 1 Item 4: Sub section tab filter & Counter */}
         <div className="mt-3.5 pt-3 border-t border-slate-200/60 space-y-2.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-4 sm:gap-5">
               {(['Today', 'Week', 'Month'] as const).map((period) => {
                 const isActive = selectedPeriod === period;
                 return (
                   <button
                     key={period}
                     onClick={() => setSelectedPeriod(period)}
-                    className="relative pb-1 transition-colors"
+                    className="relative pb-1 transition-colors cursor-pointer"
                   >
                     <span
                       className={`text-xs sm:text-sm font-bold transition-colors ${
@@ -253,36 +336,52 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               })}
             </div>
 
-            {/* Scope Switcher: Jadwal Saya vs Semua Tim */}
-            <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg text-[10px] font-bold">
-              <button
-                type="button"
-                onClick={() => setScopeFilter('my')}
-                className={`px-2 py-0.5 rounded-md transition-all ${
-                  scopeFilter === 'my'
-                    ? 'bg-white text-teal-700 shadow-xs'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Jadwal Saya
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeFilter('all')}
-                className={`px-2 py-0.5 rounded-md transition-all ${
-                  scopeFilter === 'all'
-                    ? 'bg-white text-teal-700 shadow-xs'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Semua Tim
-              </button>
+            {/* Scope Switcher: Jadwal Saya vs Semua Tim & Tombol Upload Excel */}
+            <div className="flex items-center gap-1.5">
+              {onOpenExcelUpload && (
+                <button
+                  type="button"
+                  onClick={onOpenExcelUpload}
+                  className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10px] font-bold flex items-center gap-1 transition shadow-2xs cursor-pointer"
+                  title="Upload Schedule by Excel"
+                >
+                  <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
+                  <span className="hidden xs:inline">Upload Excel</span>
+                </button>
+              )}
+
+              <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter('my')}
+                  className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                    scopeFilter === 'my'
+                      ? 'bg-white text-teal-700 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Jadwal Saya
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter('all')}
+                  className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                    scopeFilter === 'all'
+                      ? 'bg-white text-teal-700 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Semua Tim
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
             <span className="truncate pr-2">
-              {scopeFilter === 'my' ? `Jadwal untuk: ${fullName}` : 'Menampilkan jadwal seluruh tim'}
+              {scopeFilter === 'my'
+                ? `Jadwal untuk: ${fullName}`
+                : `Menampilkan jadwal seluruh tim (${formatWeekRangeDisplay(currentWeekMonday)})`}
             </span>
             <span className="font-bold text-slate-500 flex-shrink-0">
               {displayedAgendas.length} agenda

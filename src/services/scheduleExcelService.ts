@@ -102,6 +102,27 @@ export function getFullWeekDays(
   return result;
 }
 
+/**
+ * Format 1 week range display (e.g. "09 - 15 Nov 2026" or "28 Okt - 03 Nov 2026")
+ */
+export function formatWeekRangeDisplay(mondayStr: string): string {
+  const days = getFullWeekDays(mondayStr);
+  if (days.length < 7) return mondayStr;
+  const startParts = days[0].dateStr.split('-');
+  const endParts = days[6].dateStr.split('-');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const startDay = parseInt(startParts[2], 10);
+  const endDay = parseInt(endParts[2], 10);
+  const startMonth = months[parseInt(startParts[1], 10) - 1];
+  const endMonth = months[parseInt(endParts[1], 10) - 1];
+  const year = endParts[0];
+
+  if (startMonth === endMonth) {
+    return `${String(startDay).padStart(2, '0')} - ${String(endDay).padStart(2, '0')} ${startMonth} ${year}`;
+  }
+  return `${String(startDay).padStart(2, '0')} ${startMonth} - ${String(endDay).padStart(2, '0')} ${endMonth} ${year}`;
+}
+
 export function parseExcelSerialDate(val: any): string | null {
   if (val === undefined || val === null || val === '') return null;
   if (typeof val === 'number') {
@@ -527,15 +548,24 @@ export function parseScheduleExcelSheet(
       }
 
       // ----------------------------------------------------------------------
-      // RULE 3: STRICT VISIT STORE DETECTION
-      // Visit Store = ONLY if Col F contains "Visit", "Visit Store", or "Refreshment QSC",
+      // RULE 3: STRICT VISIT STORE & NSO KEYWORD DETECTION
+      // Visit Store = ONLY if Col F contains "Visit", "Visit Store", or "Refreshment QSC" / "Refershment QSC",
       // AND Col G does NOT contain "NSO" and does NOT contain "FMCU".
+      // If Col G has store name but Col F does not have visit keyword -> NOT VISIT.
+      // If Col F has store name but Col G has NSO -> NOT VISIT (NSO).
       // ----------------------------------------------------------------------
-      const isVisitDesc = /\b(visit|visit\s+store|refe?r?shment\s+qsc)\b/i.test(descPart);
-      const isNsoLoc = /\b(nso|new\s+store\s+opening|reopening|re-opening)\b/i.test(locPart);
+      const isNsoKeyword =
+        /\b(nso|new\s+store\s+opening|reopening|re-opening)\b/i.test(descPart) ||
+        /\b(nso|new\s+store\s+opening|reopening|re-opening)\b/i.test(locPart);
+
+      const isVisitKeyword = /\b(visit|visit\s+store|refershment\s+qsc|refreshment\s+qsc)\b/i.test(
+        descPart
+      );
       const isFmcuLoc = /\bfmcu\b/i.test(locPart);
 
-      if (isVisitDesc && !isNsoLoc && !isFmcuLoc) {
+      const isVisitStore = isVisitKeyword && !isNsoKeyword && !isFmcuLoc;
+
+      if (isVisitStore) {
         // Split multiple stores in locPart separated by '&'
         const storeSubParts = locPart
           ? locPart
@@ -660,7 +690,7 @@ export function parseScheduleExcelSheet(
         let agendaTitle = descPart;
         let category: ScheduleCategory = classifyNonVisitCategory(descPart, locPart);
 
-        if (isNsoLoc || /\b(nso|new\s+store\s+opening|reopening)\b/i.test(descPart)) {
+        if (isNsoKeyword) {
           category = 'NSO';
           nsoCount++;
           if (!/\bnso\b/i.test(agendaTitle)) {
@@ -776,6 +806,85 @@ export function parseScheduleExcelSheet(
       cutiCount,
       matchedUsersCount: matchedUsersSet.size,
       matchedStoresCount: matchedStoresSet.size,
+    },
+  };
+}
+
+// ============================================================================
+// PARSE COMPLETE EXCEL WORKBOOK FILE (SUPPORTS MULTI-SHEET OR SINGLE SHEET)
+// ============================================================================
+export interface ExcelWorkbookParseResult {
+  workbook: XLSX.WorkBook;
+  availableSheets: string[];
+  summary: ParsedExcelScheduleSummary;
+}
+
+export async function parseScheduleExcelFile(
+  file: File,
+  existingUsers: User[],
+  sheetNameOption: 'ALL' | string = 'ALL'
+): Promise<ExcelWorkbookParseResult> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  const availableSheets = workbook.SheetNames || [];
+
+  const combinedAgendas: ScheduleAgenda[] = [];
+  let workingUsers = [...existingUsers];
+  let totalVisit = 0;
+  let totalNso = 0;
+  let totalNonStore = 0;
+  let totalOff = 0;
+  let totalCuti = 0;
+  let totalNewUsers = 0;
+  const matchedUsersSet = new Set<string>();
+  const matchedStoresSet = new Set<string>();
+
+  const sheetsToParse =
+    sheetNameOption === 'ALL'
+      ? availableSheets
+      : availableSheets.filter(
+          (s) => s.trim().toLowerCase() === sheetNameOption.trim().toLowerCase()
+        );
+
+  sheetsToParse.forEach((sName) => {
+    const ws = workbook.Sheets[sName];
+    if (!ws) return;
+    const res = parseScheduleExcelSheet(ws, sName, workingUsers);
+    combinedAgendas.push(...res.agendas);
+    workingUsers = res.updatedUsers;
+    totalVisit += res.stats.visitCount;
+    totalNso += res.stats.nsoCount;
+    totalNonStore += res.stats.nonStoreAgendaCount;
+    totalOff += res.stats.offCount;
+    totalCuti += res.stats.cutiCount;
+    totalNewUsers += res.newUsersCount;
+    res.agendas.forEach((a) => {
+      if (a.pic) matchedUsersSet.add(a.pic);
+      if (a.storeCode) matchedStoresSet.add(a.storeCode);
+    });
+  });
+
+  return {
+    workbook,
+    availableSheets,
+    summary: {
+      sheetName:
+        sheetNameOption === 'ALL'
+          ? `Semua Sheet (${availableSheets.length} Periode Minggu)`
+          : sheetNameOption,
+      agendas: combinedAgendas,
+      updatedUsers: workingUsers,
+      newUsersCount: totalNewUsers,
+      stats: {
+        totalRows: combinedAgendas.length,
+        visitCount: totalVisit,
+        nsoCount: totalNso,
+        nonStoreAgendaCount: totalNonStore,
+        offCount: totalOff,
+        cutiCount: totalCuti,
+        matchedUsersCount: matchedUsersSet.size,
+        matchedStoresCount: matchedStoresSet.size,
+      },
     },
   };
 }

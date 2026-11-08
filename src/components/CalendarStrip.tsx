@@ -3,17 +3,19 @@ import React from 'react';
 interface CalendarStripProps {
   selectedDate: string; // YYYY-MM-DD
   onSelectDate: (dateStr: string) => void;
+  baseDate?: string; // Optional reference date for week navigation
 }
 
-export const getCurrentWeekDays = () => {
-  const now = new Date();
-  const currentDay = now.getDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
+export const getCurrentWeekDays = (referenceDateStr?: string) => {
+  const base = referenceDateStr ? new Date(referenceDateStr + 'T12:00:00') : new Date();
+  const currentDay = base.getDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
   // Distance to Monday (if Sunday, distance is -6; if Monday, distance is 0)
   const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
   
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + distanceToMonday);
+  const monday = new Date(base);
+  monday.setDate(base.getDate() + distanceToMonday);
 
+  const now = new Date();
   const dayLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
   const fullDayLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
@@ -37,8 +39,12 @@ export const getCurrentWeekDays = () => {
   return days;
 };
 
-export const CalendarStrip: React.FC<CalendarStripProps> = ({ selectedDate, onSelectDate }) => {
-  const weekDays = getCurrentWeekDays();
+export const CalendarStrip: React.FC<CalendarStripProps> = ({
+  selectedDate,
+  onSelectDate,
+  baseDate,
+}) => {
+  const weekDays = getCurrentWeekDays(baseDate || selectedDate);
 
   return (
     <div className="flex items-center justify-between gap-1.5 overflow-x-auto py-2 no-scrollbar">

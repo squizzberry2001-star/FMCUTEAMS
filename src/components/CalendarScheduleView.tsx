@@ -8,7 +8,8 @@ import {
   Plus,
   MapPin,
   Tag,
-  ArrowRight
+  ArrowRight,
+  FileSpreadsheet
 } from 'lucide-react';
 import { ScheduleAgenda } from '../types';
 import { DeveloperFooter } from './DeveloperFooter';
@@ -19,6 +20,7 @@ interface CalendarScheduleViewProps {
   onSelectAgenda?: (agenda: ScheduleAgenda) => void;
   onToggleComplete?: (id: string, e: React.MouseEvent) => void;
   onOpenNewAgenda?: () => void;
+  onOpenExcelUpload?: () => void;
 }
 
 export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
@@ -27,6 +29,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
   onSelectAgenda,
   onToggleComplete,
   onOpenNewAgenda,
+  onOpenExcelUpload,
 }) => {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDateStr, setSelectedDateStr] = useState(() => {
@@ -218,14 +221,27 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                 <p className="text-slate-400 text-xs font-medium">
                   Tidak ada agenda kerja pada tanggal {selectedDateStr}.
                 </p>
-                {onOpenNewAgenda && (
-                  <button
-                    onClick={onOpenNewAgenda}
-                    className="mt-3 px-4 py-2 rounded-full bg-[#2BB3A0] text-white text-xs font-bold shadow-pill-teal"
-                  >
-                    + Buat Agenda Tanggal Ini
-                  </button>
-                )}
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  {onOpenExcelUpload && (
+                    <button
+                      type="button"
+                      onClick={onOpenExcelUpload}
+                      className="px-4 py-2 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <span>Upload Jadwal (Excel)</span>
+                    </button>
+                  )}
+                  {onOpenNewAgenda && (
+                    <button
+                      type="button"
+                      onClick={onOpenNewAgenda}
+                      className="px-4 py-2 rounded-full bg-[#2BB3A0] text-white text-xs font-bold shadow-pill-teal cursor-pointer"
+                    >
+                      + Buat Agenda Tanggal Ini
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               selectedDayAgendas.map((item) => (
