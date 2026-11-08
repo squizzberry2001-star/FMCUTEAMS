@@ -21,7 +21,9 @@ import {
   Camera,
   User as UserIcon,
   Shield,
-  ArrowRight
+  ArrowRight,
+  Share2,
+  MessageSquare
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
 import { CalendarStrip, CalendarFocusTrigger } from './CalendarStrip';
@@ -199,6 +201,30 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   const totalCount = agendas.length;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
+  const handleShareWhatsApp = (agenda: ScheduleAgenda) => {
+    const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://fmcu-teams.web.app';
+    const storeInfo = agenda.storeCode ? `[${agenda.storeCode}] ${agenda.location}` : agenda.location || '-';
+    const msg = [
+      `📢 *JADWAL PENUGASAN FMCU*`,
+      `👤 *Personel:* ${agenda.pic || '-'}`,
+      `📅 *Hari/Tanggal:* ${agenda.date}`,
+      `⏰ *Waktu:* ${agenda.time || '08:30'}${agenda.endTime ? ` – ${agenda.endTime}` : ''} WIB`,
+      `🏷️ *Kategori:* ${agenda.category}`,
+      `🏢 *Toko / Lokasi:* ${storeInfo}`,
+      `📝 *Agenda:* ${agenda.title}`,
+      agenda.description ? `ℹ️ *Catatan:* ${agenda.description}` : '',
+      ``,
+      `🔗 *Buka Aplikasi Web FMCU Teams:*`,
+      `${appUrl}`,
+      ``,
+      `_Pesan otomatis dikirim melalui Sistem Operasional FMCU._`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
   return (
     <div className="flex h-screen w-full bg-[#F8F9FD] overflow-hidden">
       {/* 1. Left Sidebar Navigation */}
@@ -287,11 +313,9 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         {/* User Card & Logout */}
         <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <img
-              src={user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
-              alt={user.name}
-              className="w-10 h-10 rounded-full object-cover ring-2 ring-teal-100"
-            />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] text-white font-black text-xs flex items-center justify-center ring-2 ring-teal-100 uppercase shadow-soft-sm shrink-0">
+              {user.name.substring(0, 2)}
+            </div>
             <div className="min-w-0">
               <h4 className="text-xs font-bold text-slate-800 truncate">{user.name}</h4>
               <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
@@ -308,16 +332,17 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
       </aside>
 
       {/* 2. Main Middle Area: Header, Stats, Calendar, Schedule List OR Coverage Store */}
-      <main className="flex-1 overflow-y-auto px-8 py-7">
-        {activeMenu === 'coverage' || activeMenu === 'history' ? (
-          <HistoryView
-            user={user}
-            agendas={agendas}
-            onSelectAgenda={onSelectAgenda}
-            onBack={() => setActiveMenu('dashboard')}
-          />
-        ) : (
-          <>
+      <main className="flex-1 overflow-y-auto px-6 lg:px-8 py-7">
+        <div className="w-full max-w-[1240px] mx-auto">
+          {activeMenu === 'coverage' || activeMenu === 'history' ? (
+            <HistoryView
+              user={user}
+              agendas={agendas}
+              onSelectAgenda={onSelectAgenda}
+              onBack={() => setActiveMenu('dashboard')}
+            />
+          ) : (
+            <>
         {/* Section 1 Item 1: Top Header Revamp (Your Daily Schedule + Greeting) */}
         <div className="flex items-center justify-between gap-4 mb-7">
           <div>
@@ -529,7 +554,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         </div>
 
         {/* Section 1 Item 3: List Schedule Agenda Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
           {filteredAgendas.length === 0 ? (
             <div className="col-span-full py-10 text-center bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
               <p className="text-slate-400 text-xs font-medium">
@@ -613,10 +638,11 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         </div>
           </>
         )}
+        </div>
       </main>
 
       {/* 3. Right Sidebar Inspector Pane */}
-      <aside className="w-96 bg-white border-l border-slate-100 flex flex-col justify-between p-7 overflow-y-auto z-20 flex-shrink-0">
+      <aside className="w-80 lg:w-[340px] xl:w-[360px] bg-white border-l border-slate-100 flex flex-col justify-between p-6 overflow-y-auto z-20 flex-shrink-0">
         {selectedAgenda ? (
           <div>
             {/* Header */}
@@ -672,6 +698,19 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                   {t}
                 </span>
               ))}
+            </div>
+
+            {/* Broadcast WhatsApp Action */}
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => handleShareWhatsApp(selectedAgenda)}
+                className="w-full py-2.5 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 border border-emerald-200 transition-all active:scale-95 cursor-pointer"
+                title="Kirim rincian agenda ke WhatsApp"
+              >
+                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Broadcast Jadwal ke WhatsApp</span>
+              </button>
             </div>
 
             {/* Tombol Buka Form Visit Report (Hanya untuk Jadwal VISIT) */}

@@ -146,7 +146,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     setTimeout(() => {
       setErrorMessage(
-        'PIN Otorisasi tidak dikenali! Gunakan PIN Admin (01012026) atau PIN Executive Viewer (20260101).'
+        'PIN Otorisasi tidak dikenali! Silakan periksa kembali PIN Anda.'
       );
       setIsSubmitting(false);
     }, 600);
@@ -240,13 +240,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <div className="relative flex items-center">
                 <div className="absolute left-3.5 flex items-center pointer-events-none">
                   {selectedStaff &&
-                  selectedStaff.avatar &&
                   selectedStaff.name.toLowerCase() === staffSearchQuery.trim().toLowerCase() ? (
-                    <img
-                      src={selectedStaff.avatar}
-                      alt={selectedStaff.name}
-                      className="w-5 h-5 rounded-full object-cover ring-1 ring-slate-200"
-                    />
+                    <div className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-black flex items-center justify-center uppercase tracking-tight ring-1 ring-teal-200">
+                      {selectedStaff.name.substring(0, 2)}
+                    </div>
                   ) : (
                     <UserIcon className="w-4 h-4 text-slate-400" />
                   )}
@@ -303,11 +300,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                           }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <img
-                              src={u.avatar}
-                              alt={u.name}
-                              className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-200 flex-shrink-0"
-                            />
+                            <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-200/80 text-slate-700 font-bold text-[10px] flex items-center justify-center shrink-0 uppercase tracking-tight">
+                              {u.name.substring(0, 2)}
+                            </div>
                             <div className="min-w-0">
                               <span className="block text-xs font-bold text-slate-800 truncate">
                                 {u.name}

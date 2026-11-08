@@ -180,9 +180,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
 
       const finalScore = Math.max(25, Math.round(rawScore));
 
-      const avatarUrl =
-        staff.avatar ||
-        `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(staff.name)}`;
+      const avatarUrl = staff.avatar || '';
 
       return {
         rank: 0,
@@ -319,11 +317,17 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               {/* Avatar + Badge 2 */}
               <div className="relative mb-2 flex flex-col items-center">
                 <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full ring-3 ring-slate-300 shadow-xl overflow-hidden bg-slate-800 flex items-center justify-center">
-                  <img
-                    src={rank2.avatar}
-                    alt={rank2.name}
-                    className="w-full h-full object-cover"
-                  />
+                  {rank2.avatar ? (
+                    <img
+                      src={rank2.avatar}
+                      alt={rank2.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-tr from-slate-700 to-slate-900 text-white font-black text-sm flex items-center justify-center uppercase">
+                      {rank2.name.substring(0, 2)}
+                    </div>
+                  )}
                 </div>
                 {/* Badge Medal 2 */}
                 <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-tr from-slate-300 to-white text-slate-900 font-black text-[11px] flex items-center justify-center shadow-md ring-2 ring-[#6d28d9]">
@@ -363,11 +367,17 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               {/* Avatar + Crown / Gold Medal 1 */}
               <div className="relative mb-2 flex flex-col items-center">
                 <div className="w-16 h-16 sm:w-19 sm:h-19 rounded-full ring-4 ring-amber-400 shadow-2xl overflow-hidden bg-slate-900 flex items-center justify-center">
-                  <img
-                    src={rank1.avatar}
-                    alt={rank1.name}
-                    className="w-full h-full object-cover"
-                  />
+                  {rank1.avatar ? (
+                    <img
+                      src={rank1.avatar}
+                      alt={rank1.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-tr from-amber-600 via-amber-700 to-slate-950 text-white font-black text-lg flex items-center justify-center uppercase">
+                      {rank1.name.substring(0, 2)}
+                    </div>
+                  )}
                 </div>
                 {/* Crown / Gold Badge 1 */}
                 <div className="absolute -top-2 -right-1 w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-200 text-slate-950 font-black text-xs flex items-center justify-center shadow-lg ring-2 ring-[#7c3aed]">
@@ -408,11 +418,17 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               {/* Avatar + Badge 3 */}
               <div className="relative mb-2 flex flex-col items-center">
                 <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full ring-3 ring-amber-600 shadow-xl overflow-hidden bg-slate-800 flex items-center justify-center">
-                  <img
-                    src={rank3.avatar}
-                    alt={rank3.name}
-                    className="w-full h-full object-cover"
-                  />
+                  {rank3.avatar ? (
+                    <img
+                      src={rank3.avatar}
+                      alt={rank3.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-tr from-amber-800 to-slate-900 text-white font-black text-sm flex items-center justify-center uppercase">
+                      {rank3.name.substring(0, 2)}
+                    </div>
+                  )}
                 </div>
                 {/* Badge Medal 3 */}
                 <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-tr from-amber-700 to-amber-500 text-white font-black text-[11px] flex items-center justify-center shadow-md ring-2 ring-[#581c87]">
@@ -509,12 +525,18 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                   </span>
 
                   {/* Avatar */}
-                  <div className="w-10 h-10 rounded-full ring-2 ring-white/10 overflow-hidden bg-slate-800 shrink-0">
-                    <img
-                      src={item.avatar}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="w-10 h-10 rounded-full ring-2 ring-white/10 overflow-hidden bg-slate-800 shrink-0 flex items-center justify-center">
+                    {item.avatar ? (
+                      <img
+                        src={item.avatar}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-tr from-indigo-900 to-purple-900 text-white font-bold text-xs flex items-center justify-center uppercase">
+                        {item.name.substring(0, 2)}
+                      </div>
+                    )}
                   </div>
 
                   {/* Nama & Info */}

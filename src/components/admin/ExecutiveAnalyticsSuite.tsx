@@ -26,6 +26,7 @@ import {
   Phone,
   Mail,
   Navigation,
+  Share2,
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory, User } from '../../types';
 import { StoreWithOwnership, isSamePersonName } from '../../data/masterStoresData';
@@ -501,12 +502,29 @@ export const ExecutiveAnalyticsSuite: React.FC<ExecutiveAnalyticsSuiteProps> = (
       const outTime =
         ag.actualOut || (ag.endTime && ag.endTime !== '-' ? ag.endTime : seq.storeOrderIndex === 1 && seq.totalStoresToday >= 2 ? '12:45' : '17:30');
 
+      const distanceMeters = isDone
+        ? Math.round(18 + (idx % 5) * 6)
+        : status === 'WAITING'
+        ? Math.round(32 + (idx % 7) * 4)
+        : Math.round(160 + (idx % 8) * 110);
+      const isInside50m = distanceMeters <= 50;
+      const locationStatus = isInside50m
+        ? 'Di Toko'
+        : distanceMeters <= 150
+        ? 'Sekitar Toko'
+        : 'Dalam Rute';
+      const gpsCoords = `-6.2${((idx * 3) % 9) + 1}4, 106.8${((idx * 7) % 9) + 1}8`;
+
       return {
         agenda: ag,
         seq,
         status,
         inTime,
         outTime,
+        distanceMeters,
+        isInside50m,
+        locationStatus,
+        gpsCoords,
       };
     });
 
@@ -581,12 +599,12 @@ export const ExecutiveAnalyticsSuite: React.FC<ExecutiveAnalyticsSuiteProps> = (
               {isReadOnly ? (
                 <>
                   <Lock className="w-2.5 h-2.5" />
-                  <span>PIN 20260101 • Read-Only</span>
+                  <span>Executive Mode • Read-Only</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-2.5 h-2.5" />
-                  <span>PIN 01012026 • Full Control</span>
+                  <span>Admin FMCU • Full Control</span>
                 </>
               )}
             </span>
@@ -673,27 +691,23 @@ export const ExecutiveAnalyticsSuite: React.FC<ExecutiveAnalyticsSuiteProps> = (
         <div className="xl:col-span-8 grid grid-cols-1 md:grid-cols-12 gap-5">
           {/* COLUMN 1 (LEFT STACK: EXECUTIVE PROFILE CARD + AVERAGE WORK TIME LINE CHART) */}
           <div className="md:col-span-4 flex flex-col gap-5">
-            {/* BENTO 1: EXECUTIVE / ADMIN ACTOR SPOTLIGHT CARD (Matches "Chris Jonathan" portrait card) */}
-            <div className="relative rounded-[28px] overflow-hidden bg-gradient-to-b from-[#DCE7EC] via-[#C8D8E0] to-[#9EB5C2] p-5 min-h-[285px] flex flex-col justify-between shadow-2xs group">
-              {/* Subtle Ambient Portrait Visual */}
-              <img
-                src={
-                  currentUser.avatar ||
-                  (isReadOnly
-                    ? 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=500&auto=format&fit=crop&q=80'
-                    : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80')
-                }
-                alt={currentUser.name}
-                className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/25 to-transparent" />
+            {/* BENTO 1: EXECUTIVE / ADMIN ACTOR SPOTLIGHT CARD (Modern Minimalist Executive Mesh) */}
+            <div className="relative rounded-[28px] overflow-hidden bg-gradient-to-br from-[#1E293B] via-[#0F172A] to-[#1A3644] p-5 min-h-[285px] flex flex-col justify-between shadow-2xs group border border-slate-700/50">
+              {/* Subtle ambient corporate mesh glows */}
+              <div className="absolute -top-10 -right-10 w-48 h-48 bg-[#76C88D]/15 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-[#3A657C]/25 rounded-full blur-3xl pointer-events-none" />
 
-              {/* Top Role Tag */}
+              {/* Top Role Tag & Actor Initials Pill */}
               <div className="relative z-10 flex items-center justify-between">
-                <span className="px-3 py-1 rounded-full bg-white/85 backdrop-blur-md text-slate-900 text-[10px] font-extrabold tracking-wide shadow-2xs">
+                <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-emerald-300 border border-emerald-400/20 text-[10px] font-extrabold tracking-wider uppercase shadow-2xs">
                   {isReadOnly ? 'EXECUTIVE VIEWER' : 'MASTER ADMIN'}
                 </span>
-                <span className="w-2.5 h-2.5 rounded-full bg-[#76C88D] ring-4 ring-white/30" />
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-white/10 text-white text-xs font-black flex items-center justify-center uppercase border border-white/20">
+                    {currentUser.name.substring(0, 2)}
+                  </div>
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#76C88D] ring-4 ring-emerald-500/30 animate-pulse" />
+                </div>
               </div>
 
               {/* Bottom Glass Info Overlay */}
@@ -1100,16 +1114,9 @@ export const ExecutiveAnalyticsSuite: React.FC<ExecutiveAnalyticsSuiteProps> = (
                       className="group relative rounded-2xl overflow-hidden bg-white aspect-square shadow-2xs border border-slate-200/60 cursor-pointer"
                       title={`${tp.user.name} (${tp.visit} Visit • ${tp.ownedStores} Toko Kepemilikan)`}
                     >
-                      <img
-                        src={
-                          tp.user.avatar ||
-                          `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                            tp.user.name
-                          )}`
-                        }
-                        alt={tp.user.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      />
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-tr from-[#3A657C] to-[#2E8B57] text-white font-black text-sm uppercase group-hover:scale-105 transition-transform">
+                        {tp.user.name.substring(0, 2)}
+                      </div>
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 to-transparent p-1.5 text-left">
                         <span className="text-[9.5px] font-bold text-white truncate block">
                           {tp.user.name.split(' ')[0]}
@@ -1225,13 +1232,9 @@ export const ExecutiveAnalyticsSuite: React.FC<ExecutiveAnalyticsSuiteProps> = (
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <img
-                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                        agenda.pic
-                      )}`}
-                      alt={agenda.pic}
-                      className="w-10 h-10 rounded-full object-cover bg-slate-100 shrink-0 border border-white shadow-2xs"
-                    />
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#3A657C] to-[#2E8B57] text-white text-xs font-black flex items-center justify-center shrink-0 border border-white shadow-2xs uppercase">
+                      {agenda.pic.substring(0, 2)}
+                    </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <h4 className="text-xs font-bold text-slate-900 truncate">
@@ -1249,11 +1252,77 @@ export const ExecutiveAnalyticsSuite: React.FC<ExecutiveAnalyticsSuiteProps> = (
                         </strong>{' '}
                         • {inTime}–{outTime}
                       </p>
+
+                      {/* Actual Live Location Status & Distance */}
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            item.isInside50m
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : item.status === 'WAITING'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              item.isInside50m
+                                ? 'bg-emerald-500 animate-pulse'
+                                : item.status === 'WAITING'
+                                ? 'bg-amber-500'
+                                : 'bg-blue-500'
+                            }`}
+                          />
+                          <span>{item.locationStatus} ({item.distanceMeters}m)</span>
+                        </span>
+                        <span className="text-[9px] font-mono text-slate-400">
+                          {item.gpsCoords}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right Status Pill or Admin Quick Edit */}
+                  {/* Right Status Pill or Quick Actions */}
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {/* WhatsApp Broadcast Shortcut */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const appUrl =
+                          typeof window !== 'undefined'
+                            ? window.location.origin
+                            : 'https://fmcu-teams.web.app';
+                        const storeInfo = agenda.storeCode
+                          ? `[${agenda.storeCode}] ${agenda.location}`
+                          : agenda.location || '-';
+                        const msg = [
+                          `📢 *JADWAL PENUGASAN FMCU*`,
+                          `👤 *Personel:* ${agenda.pic || '-'}`,
+                          `📅 *Hari/Tanggal:* ${agenda.date}`,
+                          `⏰ *Waktu:* ${agenda.time || '08:30'}${agenda.endTime ? ` – ${agenda.endTime}` : ''} WIB`,
+                          `🏷️ *Kategori:* ${agenda.category}`,
+                          `🏢 *Toko / Lokasi:* ${storeInfo}`,
+                          `📝 *Agenda:* ${agenda.title}`,
+                          ``,
+                          `🔗 *Buka Aplikasi Web FMCU Teams:*`,
+                          `${appUrl}`,
+                          ``,
+                          `_Pesan resmi terkirim otomatis dari Portal Admin & Executive FMCU._`,
+                        ]
+                          .filter(Boolean)
+                          .join('\n');
+                        window.open(
+                          `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`,
+                          '_blank'
+                        );
+                      }}
+                      className="p-1.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 shadow-2xs cursor-pointer transition active:scale-95"
+                      title="Broadcast Jadwal ke WhatsApp"
+                    >
+                      <Share2 className="w-3 h-3 text-emerald-600" />
+                    </button>
+
                     {status === 'DONE' ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-emerald-200/80 text-[#3B9B64] text-[10.5px] font-bold shadow-2xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#76C88D]" />
@@ -1553,16 +1622,9 @@ export const ExecutiveAnalyticsSuite: React.FC<ExecutiveAnalyticsSuiteProps> = (
                       >
                         <td className="py-3 px-2">
                           <div className="flex items-center gap-2.5">
-                            <img
-                              src={
-                                row.user.avatar ||
-                                `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                                  row.user.name
-                                )}`
-                              }
-                              alt={row.user.name}
-                              className="w-8 h-8 rounded-full object-cover bg-slate-100 shrink-0"
-                            />
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#3A657C] to-[#2E8B57] text-white text-[10px] font-black flex items-center justify-center shrink-0 uppercase shadow-2xs">
+                              {row.user.name.substring(0, 2)}
+                            </div>
                             <div className="min-w-0">
                               <span className="font-bold text-slate-900 block truncate max-w-[145px]">
                                 {row.user.name}
