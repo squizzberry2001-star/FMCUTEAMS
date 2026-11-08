@@ -730,9 +730,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     };
   }, [showPreview]);
 
-  // Scroll Detection & Auto Navbar Scale (Bottom and Top Navbar with Direction Accumulator)
+  // Scroll Detection for Smooth Floating Action Buttons (Damped Thresholds to Prevent Jitter)
   const [isScrolled, setIsScrolled] = useState(false);
-  const [showTopNavbar, setShowTopNavbar] = useState(true);
   const formScrollContainerRef = useRef<HTMLDivElement>(null);
   const lastScrollYRef = useRef(0);
   const scrollDeltaAccRef = useRef(0);
@@ -751,7 +750,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleResetScale = () => {
     setIsScrolled(false);
-    setShowTopNavbar(true);
     manualExpandedRef.current = true;
     manualExpandedScrollTopRef.current = getScrollTop();
   };
@@ -766,9 +764,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           const delta = currentY - lastScrollYRef.current;
           lastScrollYRef.current = currentY;
 
-          // 1. Di paling atas halaman (<= 25px): selalu tampilkan top navbar & normal size bottom navbar
+          // 1. Di paling atas halaman (<= 25px): reset
           if (currentY <= 25) {
-            setShowTopNavbar(true);
             setIsScrolled(false);
             scrollDeltaAccRef.current = 0;
             manualExpandedRef.current = false;
@@ -785,21 +782,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
           // 3. Jika user menekan tombol bottom navbar saat mengecil -> pertahankan
           if (manualExpandedRef.current) {
-            if (currentY > manualExpandedScrollTopRef.current + 10 || delta > 4) {
+            if (currentY > manualExpandedScrollTopRef.current + 16 || delta > 6) {
               manualExpandedRef.current = false;
-              setIsScrolled(true);
-              setShowTopNavbar(false);
+              setIsScrolled((prev) => (prev ? prev : true));
             }
           }
-          // 4. Scroll ke BAWAH: akumulasi > 12px dan posisi > 45px -> Sembunyikan (Auto-Hide)
-          else if (scrollDeltaAccRef.current > 12 && currentY > 45) {
-            setShowTopNavbar(false);
-            setIsScrolled(true);
+          // 4. Scroll ke BAWAH: dengan niat jelas (akumulasi > 35px dan posisi > 60px)
+          else if (scrollDeltaAccRef.current > 35 && currentY > 60) {
+            setIsScrolled((prev) => (prev ? prev : true));
           }
-          // 5. Scroll ke ATAS: akumulasi < -6px -> Langsung Munculkan Kembali (Auto-Appear)
-          else if (scrollDeltaAccRef.current < -6) {
-            setShowTopNavbar(true);
-            setIsScrolled(false);
+          // 5. Scroll ke ATAS: akumulasi < -16px -> Langsung munculkan action buttons
+          else if (scrollDeltaAccRef.current < -16) {
+            setIsScrolled((prev) => (!prev ? prev : false));
           }
 
           ticking = false;
@@ -2129,21 +2123,15 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* Top Navbar: Transparent Header (Background Removed) with Floating Apple Liquid Glass Buttons */}
-      <header
-        className={`fixed top-0 left-0 right-0 z-40 bg-transparent pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-          showTopNavbar
-            ? 'translate-y-0 opacity-100'
-            : '-translate-y-full opacity-0'
-        }`}
-      >
+      {/* Top Navbar: Persistent Floating Apple Liquid Glass Header (Fluid 60fps GPU Composited) */}
+      <header className="fixed top-0 left-0 right-0 z-40 bg-transparent pointer-events-none select-none">
         <div className="px-4 sm:px-6 pt-[max(0.6rem,env(safe-area-inset-top,12px))] pb-2 max-w-6xl mx-auto w-full flex items-center justify-between select-none">
           {/* Tombol Back: Authentic Floating Liquid Glass Round Button */}
           <button
             type="button"
             onClick={onBack}
             title="Kembali ke Beranda"
-            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-90 transition-all shadow-lg cursor-pointer shrink-0 pointer-events-auto border border-white/60"
+            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-95 transition-transform duration-150 shadow-lg cursor-pointer shrink-0 pointer-events-auto border border-white/60"
           >
             <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
           </button>
@@ -2166,7 +2154,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               type="button"
               onClick={() => setShowR23Modal(true)}
               title="Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-emerald-500/15 text-emerald-950 flex flex-col items-center justify-center active:scale-90 transition-all cursor-pointer group"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-emerald-500/15 text-emerald-950 flex flex-col items-center justify-center active:scale-95 transition-transform duration-150 cursor-pointer group"
             >
               <span className="text-[11px] sm:text-xs font-black tracking-tight leading-none text-emerald-950 group-hover:text-emerald-800">
                 HT
@@ -2184,7 +2172,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               type="button"
               onClick={() => setShowPreview(true)}
               title="Pratinjau & Cetak Laporan PDF"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-black/5 flex flex-col items-center justify-center text-slate-800 active:scale-90 transition-all cursor-pointer group"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-black/5 flex flex-col items-center justify-center text-slate-800 active:scale-95 transition-transform duration-150 cursor-pointer group"
             >
               <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.3] text-slate-800 group-hover:text-black" />
               <span className="text-[7px] sm:text-[7.5px] font-black tracking-wider leading-none text-slate-700 group-hover:text-black mt-[1.5px]">
@@ -3710,9 +3698,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           ===================================================================== */}
       {activeSection === 2 && isCurrentObsSubTabEnabled && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none origin-bottom-right transition-all duration-300 ease-out transform ${
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none origin-bottom-right transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
             isScrolled
-              ? 'scale-0 opacity-0 pointer-events-none translate-y-6'
+              ? 'scale-90 opacity-0 pointer-events-none translate-y-8'
               : 'scale-100 opacity-100 pointer-events-auto translate-y-0'
           }`}
         >
@@ -3723,7 +3711,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 type="button"
                 onClick={() => handleJumpToObsCard(activeObsIdx - 1, currentObsList)}
                 disabled={activeObsIdx <= 0}
-                className="w-7 h-7 rounded-full hover:bg-black/10 disabled:opacity-30 flex items-center justify-center transition cursor-pointer"
+                className="w-7 h-7 rounded-full hover:bg-black/10 disabled:opacity-30 flex items-center justify-center active:scale-95 transition-transform duration-150 cursor-pointer"
                 title="Temuan Sebelumnya"
               >
                 <ChevronUp className="w-4 h-4 stroke-[2.4]" />
@@ -3735,7 +3723,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 type="button"
                 onClick={() => handleJumpToObsCard(activeObsIdx + 1, currentObsList)}
                 disabled={activeObsIdx >= currentObsList.length - 1}
-                className="w-7 h-7 rounded-full hover:bg-black/10 disabled:opacity-30 flex items-center justify-center transition cursor-pointer"
+                className="w-7 h-7 rounded-full hover:bg-black/10 disabled:opacity-30 flex items-center justify-center active:scale-95 transition-transform duration-150 cursor-pointer"
                 title="Temuan Berikutnya"
               >
                 <ChevronDown className="w-4 h-4 stroke-[2.4]" />
@@ -3748,7 +3736,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={() => handleAddObservation(obsSubTab.toUpperCase() as 'QSC' | 'OPI')}
             title={`Tambah Temuan ${obsSubTab.toUpperCase()} Baru`}
-            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-800 hover:text-teal-950 active:scale-90 transition-transform shadow-lg cursor-pointer"
+            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-800 hover:text-teal-950 active:scale-95 transition-transform duration-150 shadow-lg cursor-pointer"
           >
             <Plus className="w-5 h-5 stroke-[2.8]" />
           </button>
@@ -3757,9 +3745,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {activeSection === 3 && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none origin-bottom-right transition-all duration-300 ease-out transform ${
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none origin-bottom-right transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
             isScrolled
-              ? 'scale-0 opacity-0 pointer-events-none translate-y-6'
+              ? 'scale-90 opacity-0 pointer-events-none translate-y-8'
               : 'scale-100 opacity-100 pointer-events-auto translate-y-0'
           }`}
         >
@@ -3768,7 +3756,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={() => evidenceGalleryInputRef.current?.click()}
             title="Pilih Foto dari Galeri"
-            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-90 transition-transform shadow-lg cursor-pointer"
+            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-95 transition-transform duration-150 shadow-lg cursor-pointer"
           >
             <ImageIcon className="w-5 h-5 stroke-[2.2]" />
           </button>
@@ -3778,7 +3766,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={() => evidenceCameraInputRef.current?.click()}
             title="Ambil Foto dengan Kamera"
-            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-700 hover:text-teal-900 active:scale-90 transition-transform shadow-lg cursor-pointer"
+            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-700 hover:text-teal-900 active:scale-95 transition-transform duration-150 shadow-lg cursor-pointer"
           >
             <Camera className="w-5 h-5 stroke-[2.4]" />
           </button>
