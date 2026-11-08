@@ -3298,33 +3298,37 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   >
                     {/* Viewfinder Thumbnail */}
                     <div className="h-44 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
-                      {/* Tombol Icon Pencil di Kiri Atas Foto untuk Edit Foto & Keterangan */}
+                      {/* Tombol Icon Pencil di Kiri Atas Foto untuk Edit Foto & Keterangan (1x Klik Responsif) */}
                       <button
                         type="button"
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          e.preventDefault();
                           handleOpenEditPhotoModal(ev, idx, evidenceSubTab === 'ca');
                         }}
-                        className="absolute top-2 left-2 z-20 w-8 h-8 rounded-full bg-slate-900/80 hover:bg-black text-white flex items-center justify-center shadow-md backdrop-blur-xs transition active:scale-90 cursor-pointer border border-white/30"
-                        title="Edit Foto (Ganti, Putar 90°, Edit Keterangan)"
+                        className="absolute top-2 left-2 z-30 w-9 h-9 rounded-full bg-slate-900/85 hover:bg-black text-white flex items-center justify-center shadow-lg backdrop-blur-md transition active:scale-90 cursor-pointer border border-white/40 touch-manipulation"
+                        title="Edit Foto (Potong, Beri Tanda, Putar 90°, Keterangan)"
                       >
-                        <Pencil className="w-4 h-4 text-teal-300" />
+                        <Pencil className="w-4 h-4 text-teal-300 pointer-events-none" />
                       </button>
 
                       {/* Badge Index Foto di Kanan Atas */}
-                      <span className="absolute top-2 right-2 z-20 text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-xs text-white border border-white/20">
+                      <span className="absolute top-2 right-2 z-20 text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-xs text-white border border-white/20 pointer-events-none select-none">
                         #{idx + 1}
                       </span>
 
                       <img
                         src={ev.photoUrl}
                         alt={`Evidence ${idx + 1}`}
-                        className="w-full h-full object-cover cursor-zoom-in"
+                        className="w-full h-full object-cover cursor-zoom-in select-none"
                         onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
                       />
+                      {/* Desktop Hover Overlay (pointer-events-none so it NEVER blocks mobile taps) */}
                       <div
-                        onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
-                        className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-zoom-in"
+                        className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
                       >
                         <span className="bg-slate-900/85 text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
                           <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
