@@ -147,6 +147,7 @@ const savePhotosToIdb = async (
   key: string,
   payload: {
     storeFrontPhoto?: string;
+    qscSheetPhoto?: string;
     qscSheetTop?: string;
     qscSheetBottom?: string;
     evidencePhotos?: EvidencePhoto[];
@@ -368,6 +369,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       areaManager: resolvedAreaManager,
       regionalManager: resolvedRegionalManager,
       storeEmail: resolvedStoreEmail,
+      qscSheetPhoto: '',
       qscSheetTop: '',
       qscSheetBottom: '',
       gasSyncStatus: 'idle',
@@ -561,7 +563,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         setFormData((prev) => ({
           ...prev,
           storeFrontPhoto: cached.storeFrontPhoto || prev.storeFrontPhoto,
-          qscSheetTop: cached.qscSheetTop || prev.qscSheetTop,
+          qscSheetPhoto: cached.qscSheetPhoto || cached.qscSheetTop || prev.qscSheetPhoto,
+          qscSheetTop: cached.qscSheetTop || cached.qscSheetPhoto || prev.qscSheetTop,
           qscSheetBottom: cached.qscSheetBottom || prev.qscSheetBottom,
           evidencePhotos:
             Array.isArray(cached.evidencePhotos) && cached.evidencePhotos.length > 0
@@ -714,6 +717,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     // 1. Save full photos to IndexedDB (unlimited capacity)
     savePhotosToIdb(draftKey, {
       storeFrontPhoto: formData.storeFrontPhoto,
+      qscSheetPhoto: formData.qscSheetPhoto,
       qscSheetTop: formData.qscSheetTop,
       qscSheetBottom: formData.qscSheetBottom,
       evidencePhotos: formData.evidencePhotos,
@@ -728,6 +732,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         const lightCopy: VisitReportData = {
           ...formData,
           storeFrontPhoto: formData.storeFrontPhoto ? '__IDB__' : '',
+          qscSheetPhoto: formData.qscSheetPhoto ? '__IDB__' : '',
           qscSheetTop: formData.qscSheetTop ? '__IDB__' : '',
           qscSheetBottom: formData.qscSheetBottom ? '__IDB__' : '',
           evidencePhotos: formData.evidencePhotos.map((p) => ({ ...p, photoUrl: '' })),
@@ -746,7 +751,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     const total = 6;
     if (formData.storeName && formData.storeCode) score++;
     if (formData.crews.length >= 2) score++;
-    if (formData.qscSheetTop || formData.qscSheetBottom) score++;
+    if (formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) score++;
     if (formData.observations.length > 0 && formData.observations[0].auditFinding) score++;
     if (formData.evidencePhotos.length > 0) score++;
     if (formData.spreadsheetUrl) score++;
@@ -901,99 +906,49 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     });
   };
 
-  // Helper: Auto-Split Full QSC Sheet into Top & Bottom parts
-  const splitImageTopBottom = async (fullDataUrl: string): Promise<{ top: string; bottom: string }> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const w = img.naturalWidth || img.width || 800;
-          const h = img.naturalHeight || img.height || 1000;
-          const halfH = Math.floor(h / 2);
-          const overlap = Math.floor(h * 0.025);
 
-          // Top Canvas
-          const cTop = document.createElement('canvas');
-          cTop.width = w;
-          cTop.height = halfH + overlap;
-          const ctxTop = cTop.getContext('2d');
-          ctxTop?.drawImage(img, 0, 0, w, halfH + overlap, 0, 0, w, halfH + overlap);
-          const topDataUrl = cTop.toDataURL('image/jpeg', 0.8);
-
-          // Bottom Canvas
-          const srcY = Math.max(0, halfH - overlap);
-          const srcH = h - srcY;
-          const cBottom = document.createElement('canvas');
-          cBottom.width = w;
-          cBottom.height = srcH;
-          const ctxBottom = cBottom.getContext('2d');
-          ctxBottom?.drawImage(img, 0, srcY, w, srcH, 0, 0, w, srcH);
-          const bottomDataUrl = cBottom.toDataURL('image/jpeg', 0.8);
-
-          resolve({ top: topDataUrl, bottom: bottomDataUrl });
-        } catch {
-          resolve({ top: fullDataUrl, bottom: fullDataUrl });
-        }
-      };
-      img.onerror = () => {
-        resolve({ top: fullDataUrl, bottom: fullDataUrl });
-      };
-      img.src = fullDataUrl;
-    });
-  };
-
-  // 1x QSC Sheet Upload Handler (Auto Split into Top & Bottom + Auto GDrive Sync via GAS)
+  // 1x QSC Sheet Upload Handler (Foto Utuh Tidak Displit + Auto GDrive Sync via GAS)
   const handleQscFullUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
 
     setIsUploadingPhoto(true);
-    setUploadStatusMsg('Memproses Auto-Split 2 Bagian (Atas & Bawah) & Menyimpan ke GDrive...');
+    setUploadStatusMsg('Menyimpan Foto Lembar QSC Utuh & Mengunggah ke GDrive...');
 
     try {
       const stampedFull = await processAndStampImage(file);
-      const { top, bottom } = await splitImageTopBottom(stampedFull);
 
-      // Update local state immediately so preview slots show Top & Bottom right away
+      // Simpan foto UTUH (TIDAK DISPLIT) ke state lokal
       setFormData((prev) => ({
         ...prev,
-        qscSheetTop: top,
-        qscSheetBottom: bottom,
+        qscSheetPhoto: stampedFull,
+        qscSheetTop: stampedFull,
+        qscSheetBottom: '',
         gasSyncStatus: 'syncing',
       }));
 
-      // Automatically upload both Top & Bottom sheets to GDrive via GAS
-      const [topRes, bottomRes] = await Promise.all([
-        uploadPhotoToGasGDrive({
-          base64Data: top,
-          filename: `QSC_TOP_${formData.storeCode}_${formData.visitDate}.jpg`,
-          storeCode: formData.storeCode,
-          storeName: formData.storeName,
-          visitorName: formData.visitorName,
-          visitDate: formData.visitDate,
-          section: 'QSC_SHEET_TOP',
-        }),
-        uploadPhotoToGasGDrive({
-          base64Data: bottom,
-          filename: `QSC_BOTTOM_${formData.storeCode}_${formData.visitDate}.jpg`,
-          storeCode: formData.storeCode,
-          storeName: formData.storeName,
-          visitorName: formData.visitorName,
-          visitDate: formData.visitDate,
-          section: 'QSC_SHEET_BOTTOM',
-        }),
-      ]);
+      // Unggah foto UTUH langsung ke GDrive via GAS
+      const uploadRes = await uploadPhotoToGasGDrive({
+        base64Data: stampedFull,
+        filename: `LEMBAR_QSC_${formData.storeCode}_${formData.visitDate}.jpg`,
+        storeCode: formData.storeCode,
+        storeName: formData.storeName,
+        visitorName: formData.visitorName,
+        visitDate: formData.visitDate,
+        section: 'QSC_SHEET',
+      });
 
       setFormData((prev) => ({
         ...prev,
-        qscTopDriveUrl: topRes.driveUrl,
-        qscBottomDriveUrl: bottomRes.driveUrl,
-        gasSyncStatus: topRes.synced ? 'synced' : 'offline-queued',
+        qscDriveUrl: uploadRes.driveUrl,
+        qscTopDriveUrl: uploadRes.driveUrl,
+        qscBottomDriveUrl: '',
+        gasSyncStatus: uploadRes.synced ? 'synced' : 'offline-queued',
         lastSyncedAt: getCurrentWibTime(),
       }));
 
-      setUploadStatusMsg('Lembar QSC berhasil di-split (Atas & Bawah) & tersimpan otomatis di GDrive!');
+      setUploadStatusMsg('Foto Lembar QSC Utuh berhasil disimpan & disinkronkan ke GDrive Toko!');
       setTimeout(() => setUploadStatusMsg(null), 4000);
       confetti({ particleCount: 30, spread: 45, origin: { y: 0.5 } });
     } catch (err) {
@@ -2542,20 +2497,24 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     <span>Upload / Ambil Foto QSC</span>
                   </button>
 
-                  {(formData.qscSheetTop || formData.qscSheetBottom) && (
+                  {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) && (
                     <button
                       type="button"
                       onClick={() => {
-                        if (confirm('Hapus kedua foto lembar QSC (Atas & Bawah)?')) {
+                        if (confirm('Hapus foto lembar QSC?')) {
                           setFormData((prev) => ({
                             ...prev,
+                            qscSheetPhoto: '',
                             qscSheetTop: '',
                             qscSheetBottom: '',
+                            qscDriveUrl: '',
+                            qscTopDriveUrl: '',
+                            qscBottomDriveUrl: '',
                           }));
                         }
                       }}
                       className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs border border-rose-200 shadow-2xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
-                      title="Hapus Kedua Foto Lembar QSC"
+                      title="Hapus Foto Lembar QSC"
                     >
                       <Trash2 className="w-4 h-4 text-rose-600" />
                       <span>Hapus Foto</span>
@@ -2564,71 +2523,62 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 </div>
               </div>
 
-              {/* 2 Photo Preview Slots (Top & Bottom) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                {/* Slot 1: Preview Lembar QSC Bagian Atas */}
-                <div className="border border-slate-200 rounded-2xl p-3 bg-white space-y-2">
-                  <div className="flex items-center justify-between text-xs font-black text-slate-700">
-                    <span>Preview QSC #1 (Bagian Atas)</span>
-                    {formData.qscSheetTop ? (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        Tersedia
+              {/* Single Full Intact Photo Preview Slot */}
+              <div className="pt-2">
+                <div className="border border-slate-200 rounded-2xl p-3.5 sm:p-4 bg-white space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs font-black text-slate-800">
+                    <div className="flex items-center gap-2">
+                      <span>Preview Lembar Form QSC / FamiTrack (Utuh)</span>
+                      <span className="text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                        Foto Utuh Full Page
+                      </span>
+                    </div>
+                    {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) ? (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Tersedia (Siap Upload GDrive & PDF)
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                        Kosong
+                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded-md">
+                        Belum Diunggah
                       </span>
                     )}
                   </div>
-                  <div className="h-44 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
-                    {formData.qscSheetTop ? (
-                      <img
-                        src={formData.qscSheetTop}
-                        alt="Preview QSC Bagian Atas"
-                        className="w-full h-full object-cover cursor-zoom-in"
-                        onClick={() => handleOpenSinglePhotoZoom(formData.qscSheetTop, 'Lembar QSC Bagian Atas')}
-                      />
-                    ) : (
-                      <div className="text-center p-4">
-                        <Eye className="w-6 h-6 text-slate-300 mx-auto mb-1" />
-                        <span className="text-[11px] text-slate-400 font-bold block">
-                          Preview Bagian Atas
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Slot 2: Preview Lembar QSC Bagian Bawah */}
-                <div className="border border-slate-200 rounded-2xl p-3 bg-white space-y-2">
-                  <div className="flex items-center justify-between text-xs font-black text-slate-700">
-                    <span>Preview QSC #2 (Bagian Bawah)</span>
-                    {formData.qscSheetBottom ? (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        Tersedia
-                      </span>
+                  <div className="h-64 sm:h-80 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
+                    {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) ? (
+                      <>
+                        <img
+                          src={formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom}
+                          alt="Preview Lembar QSC Utuh"
+                          className="w-full h-full object-contain cursor-zoom-in"
+                          onClick={() =>
+                            handleOpenSinglePhotoZoom(
+                              formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom,
+                              'Lembar QSC / FamiTrack (Utuh)'
+                            )
+                          }
+                        />
+                        <div
+                          className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
+                        >
+                          <span className="bg-slate-900/85 text-white text-xs font-bold px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                            <Maximize2 className="w-4 h-4 text-teal-300" />
+                            <span>Perbesar Lembar QSC (Tap / Klik)</span>
+                          </span>
+                        </div>
+                      </>
                     ) : (
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                        Kosong
-                      </span>
-                    )}
-                  </div>
-                  <div className="h-44 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
-                    {formData.qscSheetBottom ? (
-                      <img
-                        src={formData.qscSheetBottom}
-                        alt="Preview QSC Bagian Bawah"
-                        className="w-full h-full object-cover cursor-zoom-in"
-                        onClick={() => handleOpenSinglePhotoZoom(formData.qscSheetBottom, 'Lembar QSC Bagian Bawah')}
-                      />
-                    ) : (
-                      <div className="text-center p-4">
-                        <Eye className="w-6 h-6 text-slate-300 mx-auto mb-1" />
-                        <span className="text-[11px] text-slate-400 font-bold block">
-                          Preview Bagian Bawah
+                      <div className="text-center p-6 space-y-2">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-200/80 text-slate-400 flex items-center justify-center mx-auto">
+                          <Eye className="w-6 h-6" />
+                        </div>
+                        <span className="text-xs text-slate-600 font-bold block">
+                          Belum ada foto lembar QSC yang diunggah
                         </span>
+                        <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                          Foto lembar QSC kini disimpan secara utuh (tidak dipotong) dan diperbesar otomatis agar pas dengan ukuran halaman dokumen resmi.
+                        </p>
                       </div>
                     )}
                   </div>

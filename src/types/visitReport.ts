@@ -57,7 +57,9 @@ export interface VisitReportData {
   regionalManager: string;
   storeEmail?: string;
   
-  // QSC Sheets (Slide 2)
+  // QSC Sheets (Slide 2 - Foto Utuh Tidak Displit)
+  qscSheetPhoto?: string;
+  qscDriveUrl?: string;
   qscSheetTop: string;
   qscSheetBottom: string;
   qscTopDriveUrl?: string;

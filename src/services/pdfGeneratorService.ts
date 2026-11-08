@@ -339,63 +339,97 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
   drawPageFooter(doc, watermarkB64);
 
   // ========================================================================
-  // PAGE 2: QSC / FAMITRACK RESULT (Side-by-side, NO footer per rule)
+  // PAGE 2: QSC / FAMITRACK RESULT (FOTO UTUH BESAR FIT DENGAN HALAMAN)
   // ========================================================================
   doc.addPage([320, 180], 'landscape');
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, 320, 180, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
+  doc.setFontSize(16);
   doc.setTextColor(15, 23, 42);
-  doc.text('QSC / FamiTrack Result', 12, 18);
+  doc.text('QSC / FamiTrack Result (Lembar Penilaian)', 12, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139);
-  doc.text('Form penilaian standar kualitas, kebersihan & layanan operasional toko', 12, 24);
+  doc.text('Dokumen fisik lembar form penilaian standar mutu, kebersihan & layanan operasional toko', 12, 21.5);
 
   doc.setDrawColor(0, 153, 166);
   doc.setLineWidth(0.35);
-  doc.line(12, 28, 308, 28);
+  doc.line(12, 24.5, 308, 24.5);
 
-  const cardW = 144;
-  const cardH = 142;
-  const cardY = 32;
+  const fullQscRaw = report.qscSheetPhoto || report.qscSheetTop || report.qscSheetBottom;
+  const isLegacySplit = Boolean(
+    report.qscSheetBottom &&
+    report.qscSheetTop &&
+    report.qscSheetBottom !== report.qscSheetTop &&
+    !report.qscSheetPhoto
+  );
 
-  const [topQscB64, bottomQscB64] = await Promise.all([
-    loadImageAsBase64(report.qscSheetTop),
-    loadImageAsBase64(report.qscSheetBottom)
-  ]);
+  if (!isLegacySplit) {
+    // FOTO UTUH BESAR MAKSIMAL FIT DENGAN HALAMAN (296mm x 147mm)
+    const boxX = 12;
+    const boxY = 27;
+    const boxW = 296;
+    const boxH = 147;
 
-  [
-    { b64: topQscB64, caption: 'Lembar Form QSC / FamiTrack #1 (Bagian Atas)', x: 12 },
-    { b64: bottomQscB64, caption: 'Lembar Form QSC / FamiTrack #2 (Bagian Bawah)', x: 164 }
-  ].forEach((item) => {
     doc.setFillColor(255, 255, 255);
     doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(item.x, cardY, cardW, cardH, 3, 3, 'FD');
+    doc.setLineWidth(0.3);
+    doc.roundedRect(boxX, boxY, boxW, boxH, 3, 3, 'FD');
 
-    if (item.b64 && item.b64.startsWith('data:image')) {
-      drawImageProportional(doc, item.b64, item.x + 3, cardY + 3, cardW - 6, cardH - 12, 'JPEG');
+    const qscB64 = await loadImageAsBase64(fullQscRaw);
+    if (qscB64 && qscB64.startsWith('data:image')) {
+      drawImageProportional(doc, qscB64, boxX + 2, boxY + 2, boxW - 4, boxH - 4, 'JPEG');
     } else {
       doc.setFillColor(248, 250, 252);
-      doc.roundedRect(item.x + 3, cardY + 3, cardW - 6, cardH - 12, 2, 2, 'F');
+      doc.roundedRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4, 2, 2, 'F');
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
+      doc.setFontSize(11);
       doc.setTextColor(148, 163, 184);
-      doc.text('Foto Lembar QSC (Kosong)', item.x + cardW / 2, cardY + cardH / 2, { align: 'center' });
+      doc.text('Foto Lembar QSC / FamiTrack (Kosong / Belum Diunggah)', boxX + boxW / 2, boxY + boxH / 2, { align: 'center' });
     }
+  } else {
+    // Dukungan legacy jika laporan lama memiliki 2 foto split
+    const cardW = 144;
+    const cardH = 147;
+    const cardY = 27;
 
-    // Caption Bar
-    doc.setFillColor(248, 250, 252);
-    doc.roundedRect(item.x + 3, cardY + cardH - 8, cardW - 6, 6.5, 1, 1, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(15, 23, 42);
-    doc.text(item.caption, item.x + 6, cardY + cardH - 3.5);
-  });
+    const [topQscB64, bottomQscB64] = await Promise.all([
+      loadImageAsBase64(report.qscSheetTop),
+      loadImageAsBase64(report.qscSheetBottom)
+    ]);
+
+    [
+      { b64: topQscB64, caption: 'Lembar Form QSC / FamiTrack #1 (Bagian Atas)', x: 12 },
+      { b64: bottomQscB64, caption: 'Lembar Form QSC / FamiTrack #2 (Bagian Bawah)', x: 164 }
+    ].forEach((item) => {
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(item.x, cardY, cardW, cardH, 3, 3, 'FD');
+
+      if (item.b64 && item.b64.startsWith('data:image')) {
+        drawImageProportional(doc, item.b64, item.x + 2, cardY + 2, cardW - 4, cardH - 10, 'JPEG');
+      } else {
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(item.x + 2, cardY + 2, cardW - 4, cardH - 10, 2, 2, 'F');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text('Foto Lembar QSC (Kosong)', item.x + cardW / 2, cardY + cardH / 2, { align: 'center' });
+      }
+
+      // Caption Bar
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(item.x + 2, cardY + cardH - 7, cardW - 4, 5.5, 1, 1, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(item.caption, item.x + 5, cardY + cardH - 3.2);
+    });
+  }
 
   // ========================================================================
   // PAGE 3: GENERAL INFORMATION (Store Crew Table)
@@ -1023,39 +1057,22 @@ export function buildHtmlSlides(report: VisitReportData): HtmlSlide[] {
     html: `
       <div class="w-full h-full bg-white px-[3.2%] py-[2.8%] flex flex-col justify-between">
         <div>
-          <h2 class="text-[#0099A6] font-extrabold text-[clamp(10px,2.2cqw,26px)]">QSC / FamiTrack Result</h2>
-          <p class="text-slate-500 font-medium text-[clamp(6.5px,0.85cqw,11px)]">Lembar penilaian standar mutu & operasional toko</p>
+          <h2 class="text-[#0099A6] font-extrabold text-[clamp(10px,2.2cqw,26px)]">QSC / FamiTrack Result (Lembar Penilaian)</h2>
+          <p class="text-slate-500 font-medium text-[clamp(6.5px,0.85cqw,11px)]">Dokumen fisik lembar form penilaian standar mutu & operasional toko</p>
           <div class="w-full h-[2px] bg-[#0099A6] mt-[0.8cqw]"></div>
         </div>
-        <div class="grid grid-cols-2 gap-[1.5cqw] flex-1 my-2">
-          <!-- Card Kiri: Bagian Atas -->
-          <div class="border border-slate-200 rounded-xl p-[0.8cqw] bg-slate-50 flex flex-col justify-between overflow-hidden">
-            <div class="flex-1 w-full flex items-center justify-center overflow-hidden">
-              ${report.qscSheetTop
-                ? `<img src="${report.qscSheetTop}" class="w-full h-full object-contain" alt="Lembar QSC Bagian Atas" />`
-                : `<div class="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
-                     <span class="text-[clamp(8px,1cqw,13px)] font-bold text-slate-600">Lembar QSC #1 (Bagian Atas)</span>
-                     <span class="text-[clamp(6px,0.75cqw,10px)] text-slate-400 mt-0.5">Belum ada foto</span>
-                   </div>`}
-            </div>
-            <div class="text-[clamp(6.5px,0.8cqw,11px)] text-slate-700 font-semibold truncate pt-1 border-t border-slate-200 mt-1">
-              Lembar Form QSC / FamiTrack #1 (Bagian Atas)
-            </div>
+        <div class="flex-1 my-2 border border-slate-200 rounded-xl p-[0.8cqw] bg-slate-50 flex flex-col justify-between overflow-hidden">
+          <div class="flex-1 w-full flex items-center justify-center overflow-hidden">
+            ${(report.qscSheetPhoto || report.qscSheetTop)
+              ? `<img src="${report.qscSheetPhoto || report.qscSheetTop}" class="w-full h-full object-contain" alt="Lembar QSC Utuh" />`
+              : `<div class="flex flex-col items-center justify-center text-slate-400 p-3 text-center">
+                   <span class="text-[clamp(8px,1cqw,14px)] font-bold text-slate-600">Lembar Form QSC / FamiTrack (Utuh)</span>
+                   <span class="text-[clamp(6px,0.75cqw,10px)] text-slate-400 mt-0.5">Belum ada foto</span>
+                 </div>`}
           </div>
-
-          <!-- Card Kanan: Bagian Bawah -->
-          <div class="border border-slate-200 rounded-xl p-[0.8cqw] bg-slate-50 flex flex-col justify-between overflow-hidden">
-            <div class="flex-1 w-full flex items-center justify-center overflow-hidden">
-              ${report.qscSheetBottom
-                ? `<img src="${report.qscSheetBottom}" class="w-full h-full object-contain" alt="Lembar QSC Bagian Bawah" />`
-                : `<div class="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
-                     <span class="text-[clamp(8px,1cqw,13px)] font-bold text-slate-600">Lembar QSC #2 (Bagian Bawah)</span>
-                     <span class="text-[clamp(6px,0.75cqw,10px)] text-slate-400 mt-0.5">Belum ada foto</span>
-                   </div>`}
-            </div>
-            <div class="text-[clamp(6.5px,0.8cqw,11px)] text-slate-700 font-semibold truncate pt-1 border-t border-slate-200 mt-1">
-              Lembar Form QSC / FamiTrack #2 (Bagian Bawah)
-            </div>
+          <div class="text-[clamp(6.5px,0.8cqw,11px)] text-slate-700 font-semibold truncate pt-1 border-t border-slate-200 mt-1 flex items-center justify-between">
+            <span>Lembar Form QSC / FamiTrack (Utuh)</span>
+            <span class="text-slate-400 font-medium">Fit Halaman Dokumen</span>
           </div>
         </div>
       </div>
@@ -1414,13 +1431,29 @@ export function getVerticalQscFileName(report: VisitReportData): string {
  * Generate Vertical QSC Collage PDF (A4 Portrait, Full Pages) matching FMCU Standard
  */
 export async function generateVerticalQscCollagePdf(report: VisitReportData): Promise<jsPDF | null> {
-  const topB64 = report.qscSheetTop ? await loadImageAsBase64(report.qscSheetTop) : null;
-  const bottomB64 = report.qscSheetBottom ? await loadImageAsBase64(report.qscSheetBottom) : null;
+  const fullQsc = report.qscSheetPhoto || report.qscSheetTop;
+  const bottomQsc = report.qscSheetBottom;
 
-  const validPhotos = [
-    { b64: topB64, title: 'Lembar Form QSC / FamiTrack #1 (Bagian Atas)' },
-    { b64: bottomB64, title: 'Lembar Form QSC / FamiTrack #2 (Bagian Bawah)' },
-  ].filter((p) => p.b64 && p.b64.startsWith('data:image'));
+  const validPhotos: { b64: string; title: string }[] = [];
+
+  if (fullQsc) {
+    const b64 = await loadImageAsBase64(fullQsc);
+    if (b64 && b64.startsWith('data:image')) {
+      validPhotos.push({
+        b64,
+        title: bottomQsc && bottomQsc !== fullQsc
+          ? 'Lembar Form QSC / FamiTrack #1 (Bagian Atas)'
+          : 'Lembar Form QSC / FamiTrack (Utuh)'
+      });
+    }
+  }
+
+  if (bottomQsc && bottomQsc !== fullQsc) {
+    const b64 = await loadImageAsBase64(bottomQsc);
+    if (b64 && b64.startsWith('data:image')) {
+      validPhotos.push({ b64, title: 'Lembar Form QSC / FamiTrack #2 (Bagian Bawah)' });
+    }
+  }
 
   if (validPhotos.length === 0) return null;
 
