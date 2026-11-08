@@ -54,6 +54,8 @@ import {
 import { VisitPdfPreview } from './VisitPdfPreview';
 import { PageTransitionLoader } from '../PageTransitionLoader';
 import { DeveloperFooter } from '../DeveloperFooter';
+import { HoldingTimeR23Modal } from './HoldingTimeR23Modal';
+import { generateTaroObservationAnalysis } from '../../services/taroAiService';
 
 interface VisitReportFormProps {
   agenda: ScheduleAgenda;
@@ -398,8 +400,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeSection, obsSubTab, evidenceSubTab, showPreview]);
 
-  // Modal zoom photo
+  // Modal zoom photo & R23 Holding Time Standards
   const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
+  const [showR23Modal, setShowR23Modal] = useState(false);
 
   // AI Loading state per observation card
   const [aiLoadingIdx, setAiLoadingIdx] = useState<number | null>(null);
@@ -485,8 +488,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     };
   }, []);
 
-  // Scroll Detection & Auto Navbar Scale
+  // Scroll Detection & Auto Navbar Scale (Bottom and Top Navbar)
   const [isScrolled, setIsScrolled] = useState(false);
+  const [showTopNavbar, setShowTopNavbar] = useState(true);
   const manualExpandedRef = useRef(false);
   const manualExpandedScrollTopRef = useRef(0);
   const lastScrollTopRef = useRef(0);
@@ -503,6 +507,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleResetScale = () => {
     setIsScrolled(false);
+    setShowTopNavbar(true);
     manualExpandedRef.current = true;
     manualExpandedScrollTopRef.current = getScrollTop();
   };
@@ -519,14 +524,22 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
           if (top <= 10) {
             setIsScrolled(false);
+            setShowTopNavbar(true);
             manualExpandedRef.current = false;
           } else if (manualExpandedRef.current) {
-            if (top > manualExpandedScrollTopRef.current + 8 || delta > 3) {
+            if (top > manualExpandedScrollTopRef.current + 8 || delta > 4) {
               manualExpandedRef.current = false;
               setIsScrolled(true);
+              setShowTopNavbar(false);
             }
-          } else {
-            setIsScrolled(top > 15);
+          } else if (delta < -4) {
+            // Scroll ke ATAS: Bottom navbar membesar, Top navbar auto muncul
+            setIsScrolled(false);
+            setShowTopNavbar(true);
+          } else if (delta > 4 && top > 20) {
+            // Scroll ke BAWAH: Bottom navbar mengecil, Top navbar auto hide
+            setIsScrolled(true);
+            setShowTopNavbar(false);
           }
 
           ticking = false;
@@ -962,47 +975,79 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }));
   };
 
-  // AI Auto-Isi Simulation (T.A.R.O AI)
-  const handleAiAutoFill = (obsIdx: number, obs: ObservationFinding) => {
+  // AI Auto-Isi (T.A.R.O AI) dengan Real Gemini API Key & Standar Holding Time R23
+  const handleAiAutoFill = async (obsIdx: number, obs: ObservationFinding) => {
     if (!obs.auditFinding.trim()) {
       alert('Tuliskan sedikit inti temuan terlebih dahulu sebelum menekan Auto-Isi AI.');
       return;
     }
 
     setAiLoadingIdx(obsIdx);
-    setTimeout(() => {
-      const findingLower = obs.auditFinding.toLowerCase();
-      let matched = FINDING_PRESETS[0];
-      if (findingLower.includes('takar') || findingLower.includes('resep') || findingLower.includes('sop') || findingLower.includes('sirup')) {
-        matched = FINDING_PRESETS[1];
-      } else if (findingLower.includes('kotor') || findingLower.includes('bersih') || findingLower.includes('lantai') || findingLower.includes('debu') || findingLower.includes('lap')) {
-        matched = FINDING_PRESETS[2];
-      } else if (findingLower.includes('logbook') || findingLower.includes('suhu') || findingLower.includes('catat') || findingLower.includes('administrasi')) {
-        matched = FINDING_PRESETS[3];
-      } else if (findingLower.includes('harga') || findingLower.includes('price') || findingLower.includes('rak') || findingLower.includes('tag')) {
-        matched = FINDING_PRESETS[4];
+
+    try {
+      const aiResult = await generateTaroObservationAnalysis(
+        obs.auditFinding,
+        (obs.type?.toUpperCase() === 'OPI' ? 'OPI' : 'QSC') as 'QSC' | 'OPI'
+      );
+
+      if (aiResult) {
+        setFormData((prev) => ({
+          ...prev,
+          observations: prev.observations.map((o) =>
+            o.id === obs.id
+              ? {
+                  ...o,
+                  category: aiResult.category || o.category,
+                  idealCondition: aiResult.idealCondition,
+                  operationalImpact: aiResult.operationalImpact,
+                  rootCause: aiResult.rootCause,
+                  actionPlan: aiResult.actionPlan,
+                  expectedResult: aiResult.expectedResult,
+                }
+              : o
+          ),
+        }));
+
+        setAiLoadingIdx(null);
+        confetti({ particleCount: 30, spread: 50, origin: { y: 0.6 } });
+        return;
       }
+    } catch (err) {
+      console.warn('TARO AI online analysis failed, using fallback preset:', err);
+    }
 
-      setFormData((prev) => ({
-        ...prev,
-        observations: prev.observations.map((o) =>
-          o.id === obs.id
-            ? {
-                ...o,
-                category: matched.category,
-                idealCondition: matched.kondisiIdeal,
-                operationalImpact: matched.dampak,
-                rootCause: matched.penyebab,
-                actionPlan: matched.tindakanPerbaikan,
-                expectedResult: matched.hasil,
-              }
-            : o
-        ),
-      }));
+    // Fallback Preset
+    const findingLower = obs.auditFinding.toLowerCase();
+    let matched = FINDING_PRESETS[0];
+    if (findingLower.includes('takar') || findingLower.includes('resep') || findingLower.includes('sop') || findingLower.includes('sirup')) {
+      matched = FINDING_PRESETS[1];
+    } else if (findingLower.includes('kotor') || findingLower.includes('bersih') || findingLower.includes('lantai') || findingLower.includes('debu') || findingLower.includes('lap')) {
+      matched = FINDING_PRESETS[2];
+    } else if (findingLower.includes('logbook') || findingLower.includes('suhu') || findingLower.includes('catat') || findingLower.includes('administrasi')) {
+      matched = FINDING_PRESETS[3];
+    } else if (findingLower.includes('harga') || findingLower.includes('price') || findingLower.includes('rak') || findingLower.includes('tag')) {
+      matched = FINDING_PRESETS[4];
+    }
 
-      setAiLoadingIdx(null);
-      confetti({ particleCount: 30, spread: 50, origin: { y: 0.6 } });
-    }, 700);
+    setFormData((prev) => ({
+      ...prev,
+      observations: prev.observations.map((o) =>
+        o.id === obs.id
+          ? {
+              ...o,
+              category: matched.category,
+              idealCondition: matched.kondisiIdeal,
+              operationalImpact: matched.dampak,
+              rootCause: matched.penyebab,
+              actionPlan: matched.tindakanPerbaikan,
+              expectedResult: matched.hasil,
+            }
+          : o
+      ),
+    }));
+
+    setAiLoadingIdx(null);
+    confetti({ particleCount: 30, spread: 50, origin: { y: 0.6 } });
   };
 
   // Global T.A.R.O AI Auto-Compile
@@ -1439,8 +1484,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* Header Section: Seamless matching Calendar Schedule View */}
-      <div className="flex items-center justify-between mb-5">
+      {/* Header Section: Sticky with Auto-Hide on Scroll Down & Auto-Show on Scroll Up */}
+      <div
+        className={`sticky top-0 z-30 pt-1 pb-2.5 -mx-5 px-5 bg-[#F8F9FD]/95 backdrop-blur-md flex items-center justify-between mb-4 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
+          showTopNavbar ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+        }`}
+      >
         <button
           type="button"
           onClick={onBack}
@@ -1453,19 +1502,28 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
             FMCU Visit Report
           </span>
-          <h2 className="text-lg font-black text-slate-800">Audit Toko FMCU</h2>
+          <h2 className="text-base sm:text-lg font-black text-slate-800">Audit Toko FMCU</h2>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowPreview(true)}
-          title="Pratinjau & Cetak Laporan PDF"
-          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform relative"
-        >
-          <FileText className="w-5 h-5 stroke-[2.4]" />
-          <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-black text-white px-1 py-0.2 rounded-full leading-tight shadow-xs">
-            PDF
-          </span>
-        </button>
+        {/* Right Dock: Satu Dock Kombinasi Tombol PDF (Icon Only) dan Tombol R23 Standar Holding Time */}
+        <div className="iphone-glass-mini-dock flex items-center gap-1 p-1 rounded-full shadow-xs">
+          <button
+            type="button"
+            onClick={() => setShowPreview(true)}
+            title="Pratinjau & Cetak Laporan PDF"
+            className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer"
+          >
+            <FileText className="w-4 h-4 stroke-[2.2]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowR23Modal(true)}
+            title="Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)"
+            className="px-2.5 py-1 rounded-full bg-emerald-600/15 text-emerald-800 hover:bg-emerald-600/25 font-black text-[11px] flex items-center gap-1 transition active:scale-95 cursor-pointer"
+          >
+            <Clock className="w-3 h-3 stroke-[2.5]" />
+            <span>R23</span>
+          </button>
+        </div>
       </div>
 
       <div className="space-y-5">
@@ -2126,34 +2184,31 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </div>
             </div>
 
-            {/* 3. Modernized Button: T.A.R.O AI Bantu Observasi */}
+            {/* 3. Compact T.A.R.O AI Assistant Button */}
             <button
               type="button"
               onClick={handleTaroAiAutoCompile}
-              className="w-full p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 hover:from-slate-800 hover:via-teal-900 hover:to-slate-800 border border-teal-400/40 text-white shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-3 group cursor-pointer"
+              className="w-full py-2 px-3 sm:px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-teal-500/30 text-white shadow-xs transition active:scale-[0.99] flex items-center justify-between gap-2.5 cursor-pointer group"
             >
-              <div className="flex items-center gap-3 min-w-0 text-left">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 flex items-center justify-center shadow-md shrink-0 group-hover:scale-105 transition-transform relative">
-                  <Bot className="w-6 h-6 stroke-[2.2]" />
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-300 animate-ping" />
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-teal-500/20 border border-teal-400/30 text-teal-300 flex items-center justify-center shrink-0 relative">
+                  <Bot className="w-4 h-4 stroke-[2.2]" />
+                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-black text-xs sm:text-sm text-white tracking-tight">
-                      T.A.R.O AI Assistant — Bantu Observasi
+                <div className="min-w-0 text-left">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold text-xs text-white tracking-tight truncate">
+                      T.A.R.O AI Assistant
                     </span>
-                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/30">
-                      Smart 6-Box
+                    <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-400/20">
+                      R23 Rules
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-300 font-medium truncate mt-0.5">
-                    Auto-kompilasi cerdas temuan, dampak, kondisi ideal & tindakan perbaikan
-                  </p>
                 </div>
               </div>
-              <div className="shrink-0 px-3 py-1.5 rounded-xl bg-teal-500/20 border border-teal-400/40 text-teal-200 font-extrabold text-[11px] flex items-center gap-1 group-hover:bg-teal-500 group-hover:text-slate-950 transition">
-                <Wand2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Auto-Kompilasi</span>
+              <div className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-teal-300 group-hover:text-teal-200">
+                <Wand2 className="w-3.5 h-3.5 text-teal-400" />
+                <span className="hidden xs:inline">Auto-Kompilasi</span>
               </div>
             </button>
 
@@ -2264,13 +2319,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </div>
             </div>
 
-            {/* 7A. Small Numbered Quick-Jump Bar Right Below Sub-Section Element */}
+            {/* 7A. Horizontal Elongated Quick-Jump Bar (Tanpa Text Total) */}
             {isCurrentObsSubTabEnabled && (
-              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
-                    Lompat ke Temuan:
-                  </span>
+              <div className="w-full overflow-x-auto no-scrollbar py-1.5 px-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 pl-1">
+                  Temuan:
+                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
                   {currentObsList.map((obs, idx) => {
                     const isActiveCard = activeObsIdx === idx;
                     return (
@@ -2278,29 +2333,27 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                         key={obs.id || idx}
                         type="button"
                         onClick={() => handleJumpToObsCard(idx, currentObsList)}
-                        className={`w-6 h-6 rounded-full text-[11px] font-black transition flex items-center justify-center cursor-pointer ${
+                        className={`px-3 py-1 h-7 rounded-lg text-xs font-black transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer shrink-0 ${
                           isActiveCard
-                            ? 'bg-teal-600 text-white shadow-xs scale-105'
-                            : 'bg-white border border-slate-200 text-slate-600 hover:border-teal-400 hover:text-teal-700'
+                            ? 'bg-teal-600 text-white shadow-xs scale-[1.02]'
+                            : 'bg-white border border-slate-200 text-slate-700 hover:border-teal-400 hover:text-teal-700'
                         }`}
                         title={`Lompat ke Temuan #${idx + 1}`}
                       >
-                        {idx + 1}
+                        <span>Temuan #{idx + 1}</span>
                       </button>
                     );
                   })}
                   <button
                     type="button"
                     onClick={() => handleAddObservation(obsSubTab.toUpperCase() as 'QSC' | 'OPI')}
-                    className="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white text-xs font-black flex items-center justify-center transition cursor-pointer"
+                    className="px-2.5 py-1 h-7 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white text-xs font-black flex items-center gap-1 transition cursor-pointer shrink-0"
                     title="Tambah Kartu Temuan Baru"
                   >
-                    +
+                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>Baru</span>
                   </button>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 shrink-0">
-                  Total: {currentObsList.length}
-                </span>
               </div>
             )}
 
@@ -2898,44 +2951,44 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {/* =====================================================================
           FLOATING QUICK ACTIONS (POJOK KANAN BAWAH TEPAT DI ATAS NAVBAR)
-          - Section 2 (Observasi): Tombol + & Navigasi Cepat Antar Card Temuan
-          - Section 3 (Bukti): Tombol Icon Camera & Gallery
+          - Section 2 (Observasi): Tombol + & Navigasi Cepat Antar Card Temuan (Liquid Glass)
+          - Section 3 (Bukti): Tombol Icon Camera & Gallery (Liquid Glass)
           ===================================================================== */}
       {activeSection === 2 && isCurrentObsSubTabEnabled && (
         <div className="fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none">
-          {/* Quick Prev / Next Card Navigation Pill (Tanpa Scroll Manual) */}
+          {/* Quick Prev / Next Card Navigation Pill with Liquid Glass */}
           {currentObsList.length > 0 && (
-            <div className="h-11 px-2 rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-xl border border-white/15 flex items-center gap-1">
+            <div className="h-11 px-2.5 rounded-full iphone-glass-mini-dock text-slate-800 shadow-lg flex items-center gap-1 border border-white/40">
               <button
                 type="button"
                 onClick={() => handleJumpToObsCard(activeObsIdx - 1, currentObsList)}
                 disabled={activeObsIdx <= 0}
-                className="w-7 h-7 rounded-full hover:bg-white/15 disabled:opacity-35 flex items-center justify-center transition cursor-pointer"
+                className="w-7 h-7 rounded-full hover:bg-black/10 disabled:opacity-30 flex items-center justify-center transition cursor-pointer"
                 title="Temuan Sebelumnya"
               >
-                <ChevronUp className="w-4 h-4" />
+                <ChevronUp className="w-4 h-4 stroke-[2.4]" />
               </button>
-              <span className="text-[11px] font-black px-1.5 tracking-tight text-teal-300">
+              <span className="text-[11px] font-black px-1.5 tracking-tight text-teal-800">
                 #{Math.min(activeObsIdx + 1, currentObsList.length)}/{currentObsList.length}
               </span>
               <button
                 type="button"
                 onClick={() => handleJumpToObsCard(activeObsIdx + 1, currentObsList)}
                 disabled={activeObsIdx >= currentObsList.length - 1}
-                className="w-7 h-7 rounded-full hover:bg-white/15 disabled:opacity-35 flex items-center justify-center transition cursor-pointer"
+                className="w-7 h-7 rounded-full hover:bg-black/10 disabled:opacity-30 flex items-center justify-center transition cursor-pointer"
                 title="Temuan Berikutnya"
               >
-                <ChevronDown className="w-4 h-4" />
+                <ChevronDown className="w-4 h-4 stroke-[2.4]" />
               </button>
             </div>
           )}
 
-          {/* Tombol + Tambah Card Temuan Cepat */}
+          {/* Tombol + Tambah Card Temuan Cepat with Liquid Glass */}
           <button
             type="button"
             onClick={() => handleAddObservation(obsSubTab.toUpperCase() as 'QSC' | 'OPI')}
             title={`Tambah Temuan ${obsSubTab.toUpperCase()} Baru`}
-            className="w-11 h-11 rounded-full bg-gradient-to-tr from-teal-600 to-emerald-500 hover:from-teal-700 hover:to-emerald-600 text-white shadow-xl border border-white/30 flex items-center justify-center transition active:scale-90 cursor-pointer"
+            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-800 hover:text-teal-950 active:scale-90 transition-transform shadow-lg cursor-pointer"
           >
             <Plus className="w-5 h-5 stroke-[2.8]" />
           </button>
@@ -2944,22 +2997,22 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {activeSection === 3 && (
         <div className="fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none">
-          {/* Button Icon Gallery (Pojok Kanan Bawah di Atas Navbar) */}
+          {/* Button Icon Gallery with Liquid Glass */}
           <button
             type="button"
             onClick={() => evidenceGalleryInputRef.current?.click()}
             title="Pilih Foto dari Galeri"
-            className="w-12 h-12 rounded-full bg-slate-900/95 hover:bg-black text-white shadow-xl border border-white/20 flex items-center justify-center transition active:scale-90 cursor-pointer"
+            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-90 transition-transform shadow-lg cursor-pointer"
           >
             <ImageIcon className="w-5 h-5 stroke-[2.2]" />
           </button>
 
-          {/* Button Icon Camera (Pojok Kanan Bawah di Atas Navbar) */}
+          {/* Button Icon Camera with Liquid Glass */}
           <button
             type="button"
             onClick={() => evidenceCameraInputRef.current?.click()}
             title="Ambil Foto dengan Kamera"
-            className="w-12 h-12 rounded-full bg-gradient-to-tr from-teal-600 to-emerald-500 hover:from-teal-700 hover:to-emerald-600 text-white shadow-xl border border-white/30 flex items-center justify-center transition active:scale-90 cursor-pointer"
+            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-700 hover:text-teal-900 active:scale-90 transition-transform shadow-lg cursor-pointer"
           >
             <Camera className="w-5 h-5 stroke-[2.4]" />
           </button>
@@ -3102,6 +3155,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Modal Standar Holding Time R23 */}
+      <HoldingTimeR23Modal
+        isOpen={showR23Modal}
+        onClose={() => setShowR23Modal(false)}
+      />
     </div>
   );
 };

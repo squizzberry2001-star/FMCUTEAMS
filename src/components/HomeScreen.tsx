@@ -121,7 +121,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const checkScroll = () => {
     const top = getScrollTop();
-    setIsScrolled(top > 15);
+    const delta = top - lastScrollTopRef.current;
+    lastScrollTopRef.current = top;
+    if (top <= 10 || delta < -4) {
+      setIsScrolled(false);
+      manualExpandedRef.current = false;
+    } else if (delta > 4 && top > 20) {
+      setIsScrolled(true);
+    }
   };
 
   useEffect(() => {
@@ -139,13 +146,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             manualExpandedRef.current = false;
           } else if (manualExpandedRef.current) {
             // If user clicked icon while shrunken, stay expanded until scrolling DOWN again
-            if (top > manualExpandedScrollTopRef.current + 8 || delta > 3) {
+            if (top > manualExpandedScrollTopRef.current + 8 || delta > 4) {
               manualExpandedRef.current = false;
               setIsScrolled(true);
             }
-          } else {
-            // Normal scroll down -> shrink
-            setIsScrolled(top > 15);
+          } else if (delta < -4) {
+            // Scroll ke ATAS: navbar membesar kembali (scale 1)
+            setIsScrolled(false);
+          } else if (delta > 4 && top > 20) {
+            // Scroll ke BAWAH: navbar mengecil
+            setIsScrolled(true);
           }
 
           ticking = false;

@@ -34,6 +34,13 @@ import confetti from 'canvas-confetti';
 import { ScheduleAgenda, ScheduleCategory, User } from '../../types';
 import excelSeed from '../../data/excelScheduleSeed.json';
 import { DeveloperFooter } from '../DeveloperFooter';
+import { HoldingTimeR23Modal } from '../visit/HoldingTimeR23Modal';
+import {
+  HoldingTimeStandards,
+  getActiveHoldingTimeStandards,
+  saveHoldingTimeStandards,
+  INITIAL_HOLDING_TIME_R23
+} from '../../data/holdingTimeR23';
 
 interface AdminPortalProps {
   adminUser: User;
@@ -64,8 +71,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onResetUserPassword,
   onReplaySplash,
 }) => {
-  // Navigation Tabs: 'dashboard' | 'schedules' | 'import-excel' | 'users' | 'categories'
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedules' | 'import-excel' | 'users' | 'categories'>('dashboard');
+  // Navigation Tabs: 'dashboard' | 'schedules' | 'import-excel' | 'users' | 'categories' | 'holding-time'
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'schedules' | 'import-excel' | 'users' | 'categories' | 'holding-time'>('dashboard');
+
+  // Holding Time Standards (R23) State
+  const [holdingStandards, setHoldingStandards] = useState<HoldingTimeStandards>(() => getActiveHoldingTimeStandards());
+  const [showR23PreviewModal, setShowR23PreviewModal] = useState(false);
+  const [holdingUploadStatus, setHoldingUploadStatus] = useState<string | null>(null);
+  const holdingFileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -310,6 +323,51 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     });
   };
 
+  // Holding Time (R23) Upload & Reset Handlers
+  const handleHoldingFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        if (file.name.endsWith('.json')) {
+          const parsed = JSON.parse(text);
+          if (parsed && Array.isArray(parsed.categories)) {
+            saveHoldingTimeStandards(parsed);
+            setHoldingStandards(parsed);
+            setHoldingUploadStatus(`File Standar Holding Time "${file.name}" berhasil diunggah dan disimpan ke sistem!`);
+            confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+            return;
+          }
+        }
+        localStorage.setItem('fmcu_r23_uploaded_filename', file.name);
+        localStorage.setItem('fmcu_r23_uploaded_date', new Date().toLocaleDateString('id-ID'));
+        setHoldingUploadStatus(`File dokumen Standar Holding Time "${file.name}" berhasil diunggah (${(file.size / 1024).toFixed(1)} KB) dan aktif sebagai acuan audit FMCU!`);
+        confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+      } catch (err) {
+        console.error('Upload holding file error:', err);
+        alert('Gagal memproses file. Pastikan file valid (.pdf atau .json).');
+      }
+    };
+
+    if (file.name.endsWith('.json')) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleResetHoldingStandards = () => {
+    if (confirm('Kembalikan Standar Holding Time ke versi bawaan resmi R23 (23 September 2026)?')) {
+      saveHoldingTimeStandards(INITIAL_HOLDING_TIME_R23);
+      setHoldingStandards(INITIAL_HOLDING_TIME_R23);
+      setHoldingUploadStatus('Standar Holding Time berhasil direset ke versi default STD/FMI/PD-QC/001/R23.');
+      confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+    }
+  };
+
   // Filtered Agendas
   const filteredAgendas = agendas.filter((item) => {
     const matchSearch =
@@ -407,6 +465,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               { id: 'dashboard', label: 'Ringkasan & Analitik', icon: LayoutDashboard },
               { id: 'schedules', label: `Kelola Jadwal (${agendas.length})`, icon: CalendarIcon },
               { id: 'import-excel', label: 'Impor Excel Templet', icon: FileSpreadsheet, badge: 'Excel Sync' },
+              { id: 'holding-time', label: 'Standar Holding Time (R23)', icon: Clock, badge: 'R23 QC' },
               { id: 'users', label: `Akun Karyawan (${users.filter((u) => !u.isAdmin).length})`, icon: Users },
               { id: 'categories', label: 'Kategori Agenda', icon: Tag },
             ].map((tab) => {
@@ -878,6 +937,172 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <span>Sinkronisasi Ulang Template Excel</span>
                 </button>
               </div>
+
+              {/* Standar Holding Time Quick Card */}
+              <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 font-black text-[10px] uppercase">
+                      R23
+                    </span>
+                    <h4 className="text-sm font-extrabold text-slate-900">
+                      Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)
+                    </h4>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Acuan waktu display, thawing suhu ruang, shelf life, dan food safety untuk Form Visit & AI Assistant.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowR23PreviewModal(true)}
+                    className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-black text-white text-xs font-black shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Lihat R23</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => holdingFileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-pill-teal transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Unggah File R23</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: STANDAR HOLDING TIME R23 MANAGEMENT */}
+        {activeTab === 'holding-time' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl p-8 shadow-soft-card border border-slate-200/80">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
+                    <Clock className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 font-black text-[10px] uppercase border border-emerald-500/20">
+                        {holdingStandards.revision}
+                      </span>
+                      <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                        {holdingStandards.title}
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      No. Dokumen: <span className="font-bold text-slate-700">{holdingStandards.version}</span> • Berlaku: <span className="font-bold text-slate-700">{holdingStandards.effectiveDateFormatted}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowR23PreviewModal(true)}
+                    className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-black text-white text-xs font-black shadow-sm transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 text-emerald-400" />
+                    <span>Pratinjau Standar R23</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => holdingFileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-pill-teal transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Unggah File Baru (.pdf / .json)</span>
+                  </button>
+                  <input
+                    ref={holdingFileInputRef}
+                    type="file"
+                    accept=".pdf,.json,.xlsx"
+                    className="hidden"
+                    onChange={handleHoldingFileUpload}
+                  />
+                </div>
+              </div>
+
+              {/* Status Message */}
+              {holdingUploadStatus && (
+                <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span>{holdingUploadStatus}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHoldingUploadStatus(null)}
+                    className="text-emerald-700 hover:text-emerald-900 text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Metadata Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Total Kategori
+                  </span>
+                  <span className="text-xl font-black text-slate-900 mt-1 block">
+                    {holdingStandards.categories.length} Kategori
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">Fryer, Steamer, Oden, dll</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Total Produk Terdaftar
+                  </span>
+                  <span className="text-xl font-black text-slate-900 mt-1 block">
+                    {holdingStandards.categories.reduce((a, c) => a + c.items.length, 0)} Produk
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">Lengkap spesifikasi holding</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Divisi Pengesah
+                  </span>
+                  <span className="text-sm font-black text-slate-900 mt-1 block truncate">
+                    {holdingStandards.department}
+                  </span>
+                  <span className="text-[10px] text-slate-500 truncate block">Disetujui: {holdingStandards.approvedBy}</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Aturan Food Safety
+                  </span>
+                  <span className="text-xl font-black text-slate-900 mt-1 block">
+                    {holdingStandards.generalRules.length} Ketentuan
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">Wajib timer digital & exp date</span>
+                </div>
+              </div>
+
+              {/* Reset to Factory Defaults */}
+              <div className="pt-5 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-black text-slate-800">Reset Standar Holding Time</h4>
+                  <p className="text-[11px] text-slate-400">Kembalikan dataset ke versi original STD/FMI/PD-QC/001/R23</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResetHoldingStandards}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reset Default R23</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1125,6 +1350,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal Preview Standar Holding Time R23 */}
+      <HoldingTimeR23Modal
+        isOpen={showR23PreviewModal}
+        onClose={() => setShowR23PreviewModal(false)}
+      />
     </div>
   );
 };
