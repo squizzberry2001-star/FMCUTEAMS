@@ -67,7 +67,11 @@ interface AdminPortalProps {
   onAddAgenda: (newAgenda: ScheduleAgenda) => void;
   onUpdateAgenda: (updated: ScheduleAgenda) => void;
   onDeleteAgenda: (id: string) => void;
-  onImportExcel: (importedUsers: User[], importedAgendas: ScheduleAgenda[]) => void;
+  onImportExcel: (
+    importedUsers: User[],
+    importedAgendas: ScheduleAgenda[],
+    mode?: 'merge' | 'replace'
+  ) => void;
   onSwitchToUserView: () => void;
   onLogout: () => void;
   onAddUser?: (newUser: User) => void;
@@ -683,9 +687,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       },
     });
 
-    onImportExcel(workingUsers, combinedAgendas);
+    onImportExcel(workingUsers, combinedAgendas, 'replace');
     setImportStatus(
-      `Berhasil mengimpor seluruh ${wb.SheetNames.length} sheet (${combinedAgendas.length} total jadwal, ${totalVisit} Visit Store cocok dengan Master Toko) untuk ${workingUsers.filter((u) => !u.isAdmin).length} karyawan!`
+      `Berhasil mengimpor & membagikan online seluruh ${wb.SheetNames.length} sheet (${combinedAgendas.length} total jadwal, ${totalVisit} Visit Store cocok dengan Master Toko) untuk ${workingUsers.filter((u) => !u.isAdmin).length} karyawan!`
     );
     confetti({
       particleCount: 85,
@@ -714,7 +718,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       reader.onload = (evt) => {
         const bstr = evt.target?.result;
         try {
-          const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+          const wb = XLSX.read(bstr, { type: 'binary' });
           processExcelWorkbook(wb, file.name);
         } catch (err) {
           console.error(err);
@@ -728,9 +732,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const handleSyncPreBundledExcel = () => {
     const seedUsers = excelSeed.users as User[];
     const seedAgendas = excelSeed.agendas as ScheduleAgenda[];
-    onImportExcel(seedUsers, seedAgendas);
+    onImportExcel(seedUsers, seedAgendas, 'replace');
     setImportStatus(
-      `Sinkronisasi Sukses! ${seedAgendas.length} jadwal dan ${seedUsers.length} karyawan dari 'TEMPLET EXCEL JADWAL.xlsx' berhasil dimuat ke database.`
+      `Sinkronisasi Online Sukses! ${seedAgendas.length} jadwal dan ${seedUsers.length} karyawan dari 'TEMPLET EXCEL JADWAL.xlsx' berhasil dimuat & dibagikan ke seluruh perangkat.`
     );
     confetti({
       particleCount: 80,

@@ -31,22 +31,36 @@ export interface ParsedExcelScheduleSummary {
 
 // Store alias map for special shorthand names in Excel
 const EXCEL_STORE_ALIAS_MAP: Record<string, string> = {
-  'BDG RIAU': '3006', // LL RE MARTADINATA
+  'BDG RIAU': '3006', // BDG R.E MARTADINATA
   'BANDUNG RIAU': '3006',
   'LL RE MARTADINATA': '3006',
   'RE MARTADINATA': '3006',
-  'DIPATIUKUR': 'BDG DIPATIUKUR',
-  'BRAGA': 'BDG BRAGA',
-  ' DAGO': 'BDG DAGO',
-  'CIBOGO': 'BDG CIBOGO',
-  'CIHAMPELAS': 'BDG CIHAMPELAS',
-  'PADJAJARAN': 'BDG PADJAJARAN',
-  'PAJAJARAN': 'BDG PADJAJARAN',
-  'SUKAJADI': 'BDG SUKAJADI',
-  'SARIJADI': 'BDG SARIJADI',
-  'BUAH BATU': 'BDG BUAH BATU',
-  'CIBADUYUT': 'BDG CIBADUYUT',
-  'GATOT SUBROTO BDG': 'BDG GATOT SUBROTO',
+  'RIAU': '3006',
+  'BDG GATSU': '3007', // BDG GATSU
+  'GATOT SUBROTO BDG': '3007',
+  'BDG 23 PASKAL': '3005', // BDG 23 PASKAL
+  'BDG PASKAL': '3010', // BDG PASKAL
+  'PASKAL': '3010',
+  'BDG DAGO': '3008', // BDG DAGO
+  'DAGO': '3008',
+  'BDG TERUSAN JAKARTA': '3017', // BDG TERUSAN JAKARTA
+  'TERUSAN JAKARTA': '3017',
+  'BDG ARCAMANIK': '3013', // BDG SUKAMISKIN ARCAMANIK
+  'ARCAMANIK': '3013',
+  'PASTEUR': '3019', // BDG PASTEUR
+  'BDG PASTEUR': '3019',
+  'SURYA SUMANTRI': '3002', // BDG SURYA SUMANTRI
+  'BDG SURYA SUMANTRI': '3002',
+  'BRAGA': '3004', // BDG BRAGA
+  'BDG BRAGA': '3004',
+  'BDG CIHAMPELAS': '3003', // BDG CIHAMPELAS
+  'CIHAMPELAS': '3003',
+  'SUKAJADI': '3001', // BDG SUKAJADI
+  'BDG SUKAJADI': '3001',
+  'DIPATIUKUR': '3001',
+  'BUAH BATU': '3016', // BDG BUAH BATU
+  'BDG BUAH BATU': '3016',
+  'DUREN TIGA': '0410', // DUREN TIGA RAYA
   'BULUNGAN': 'BULUNGAN 2',
 };
 
@@ -159,9 +173,11 @@ export function parseExcelSerialDate(val: any): string | null {
     return `${yyyy}-${mm}-${dd}`;
   }
   if (val instanceof Date && !isNaN(val.getTime())) {
-    const yyyy = val.getFullYear();
-    const mm = String(val.getMonth() + 1).padStart(2, '0');
-    const dd = String(val.getDate()).padStart(2, '0');
+    // Add 60-second rounding buffer to prevent Jakarta LMT (+07:07:12) 23:59:48 shift back by 1 day
+    const adjusted = new Date(val.getTime() + 60000);
+    const yyyy = adjusted.getFullYear();
+    const mm = String(adjusted.getMonth() + 1).padStart(2, '0');
+    const dd = String(adjusted.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
   const str = String(val).trim();
@@ -218,16 +234,15 @@ export function matchStoreFromLocationPart(
   if (!cleaned || cleaned.length < 2) return { store: null, cleanName: '' };
   const upper = cleaned.toUpperCase();
 
-  // Check alias map first
-  for (const [aliasKey, targetVal] of Object.entries(EXCEL_STORE_ALIAS_MAP)) {
-    if (upper === aliasKey.trim() || upper.includes(aliasKey.trim())) {
-      const aliasStore = allStores.find(
-        (s) =>
-          String(s.code).toUpperCase() === targetVal ||
-          String(s.name).toUpperCase() === targetVal
-      );
-      if (aliasStore) return { store: aliasStore, cleanName: aliasStore.name };
-    }
+  // 0a. Exact alias match first (so BDG PASKAL [3010] and BDG 23 PASKAL [3005] stay distinct)
+  if (EXCEL_STORE_ALIAS_MAP[upper]) {
+    const targetVal = EXCEL_STORE_ALIAS_MAP[upper];
+    const aliasStore = allStores.find(
+      (s) =>
+        String(s.code).toUpperCase() === targetVal ||
+        String(s.name).toUpperCase() === targetVal
+    );
+    if (aliasStore) return { store: aliasStore, cleanName: aliasStore.name };
   }
 
   // 1. Exact Name or Code Match
@@ -241,6 +256,21 @@ export function matchStoreFromLocationPart(
   // 2. Match with 'BDG ' prefix
   exact = allStores.find((s) => String(s.name || '').toUpperCase() === 'BDG ' + upper);
   if (exact) return { store: exact, cleanName: exact.name };
+
+  // 2b. Alias substring check (sorted longest key first)
+  const aliasEntries = Object.entries(EXCEL_STORE_ALIAS_MAP).sort(
+    (a, b) => b[0].length - a[0].length
+  );
+  for (const [aliasKey, targetVal] of aliasEntries) {
+    if (upper.includes(aliasKey.trim())) {
+      const aliasStore = allStores.find(
+        (s) =>
+          String(s.code).toUpperCase() === targetVal ||
+          String(s.name).toUpperCase() === targetVal
+      );
+      if (aliasStore) return { store: aliasStore, cleanName: aliasStore.name };
+    }
+  }
 
   // 3. Substring / Word Match (sort by longest store name first to avoid partial short matches)
   const sortedStores = [...allStores].sort(
@@ -441,6 +471,12 @@ export function parseScheduleExcelSheet(
     const startTime = parseExcelTime24(rawStartTime, '08:30');
     const endTime = parseExcelTime24(rawEndTime, '17:30');
 
+    const descClean = rawDesc.trim();
+    const locClean = rawLoc.trim();
+
+    // Skip empty template rows (e.g., blank template sheet '16 - 22 Nov' where Col F & Col G are empty)
+    if (!descClean && !locClean) continue;
+
     matchedUsersSet.add(matchedUser.name);
     allDatesInSheet.add(dateStr);
 
@@ -449,9 +485,7 @@ export function parseScheduleExcelSheet(
     }
     scheduledDatesByUser.get(matchedUser.name)!.add(dateStr);
 
-    const descClean = rawDesc.trim();
     const descLower = descClean.toLowerCase();
-    const locClean = rawLoc.trim();
 
     // ------------------------------------------------------------------------
     // RULE 1: Check for CUTI or OFF in Col F (Description)
@@ -510,30 +544,25 @@ export function parseScheduleExcelSheet(
 
     // ------------------------------------------------------------------------
     // RULE 2: Parse Multi-Point Descriptions (Col F) & Locations (Col G)
+    // Strip leading "Agenda :" and ONLY split into multiple points when numbered
+    // bullets (1., 2., etc.) exist so metadata lines ("Level Peserta", "Jumlah Peserta")
+    // stay attached to their agenda!
     // ------------------------------------------------------------------------
-    const rawDescLines = descClean
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
+    const bodyWithoutAgendaPrefix = descClean.replace(/^\s*agenda\s*:\s*/i, '').trim();
     const descPoints: string[] = [];
 
-    if (rawDescLines.length > 1) {
-      for (const line of rawDescLines) {
-        const cleanedLine = line.replace(/^\d+[\.\)]\s*/, '').trim();
-        if (cleanedLine) descPoints.push(cleanedLine);
-      }
-    } else if (/\d+[\.\)]\s+/.test(descClean)) {
-      const splitByNum = descClean
-        .split(/(?=\b\d+[\.\)]\s+)/)
-        .map((s) => s.replace(/^\d+[\.\)]\s*/, '').trim())
+    if (/(?:^|\n)\s*\d+[\.\)]\s+/.test(bodyWithoutAgendaPrefix)) {
+      const splitByNum = bodyWithoutAgendaPrefix
+        .split(/(?=(?:^|\n)\s*\d+[\.\)]\s+)/)
+        .map((s) => s.replace(/^\s*\d+[\.\)]\s*/, '').trim())
         .filter(Boolean);
-      if (splitByNum.length > 1) {
+      if (splitByNum.length > 0) {
         descPoints.push(...splitByNum);
       } else {
-        descPoints.push(descClean.replace(/^\d+[\.\)]\s*/, '').trim());
+        descPoints.push(bodyWithoutAgendaPrefix);
       }
-    } else if (descClean) {
-      descPoints.push(descClean);
+    } else if (bodyWithoutAgendaPrefix) {
+      descPoints.push(bodyWithoutAgendaPrefix);
     }
 
     const rawLocLines = locClean
@@ -549,7 +578,7 @@ export function parseScheduleExcelSheet(
         .split(/\s*&\s*/)
         .map((s) => s.trim())
         .filter(Boolean);
-      if (ampParts.length === descPoints.length) {
+      if (ampParts.length >= 2) {
         locSegments = ampParts;
       } else {
         locSegments = [locClean];
@@ -562,6 +591,12 @@ export function parseScheduleExcelSheet(
 
     for (let idx = 0; idx < numItems; idx++) {
       const descPart = descPoints[idx] || descPoints[0] || 'Agenda Operasional';
+      const cleanPointTitle = descPart
+        .split(/\r?\n/)[0]
+        .replace(/^\s*agenda\s*:\s*/i, '')
+        .replace(/^\s*\d+[\.\)]\s*/, '')
+        .trim();
+
       let locPart = '';
       if (locSegments.length >= numItems) {
         locPart = locSegments[idx] || '';
@@ -579,11 +614,11 @@ export function parseScheduleExcelSheet(
       // If Col F has store name but Col G has NSO -> NOT VISIT (NSO).
       // ----------------------------------------------------------------------
       const isNsoKeyword =
-        /\b(nso|new\s+store\s+opening|reopening|re-opening)\b/i.test(descPart) ||
+        /\b(nso|new\s+store\s+opening|reopening|re-opening)\b/i.test(cleanPointTitle) ||
         /\b(nso|new\s+store\s+opening|reopening|re-opening)\b/i.test(locPart);
 
       const isVisitKeyword = /\b(visit|visit\s+store|refershment\s+qsc|refreshment\s+qsc)\b/i.test(
-        descPart
+        cleanPointTitle
       );
       const isFmcuLoc = /\bfmcu\b/i.test(locPart);
 
@@ -598,14 +633,17 @@ export function parseScheduleExcelSheet(
               .filter(Boolean)
           : [];
 
+        const isRefreshmentQsc = /refershment\s+qsc|refreshment\s+qsc/i.test(cleanPointTitle);
+        const visitPrefix = isRefreshmentQsc ? 'Refreshment QSC' : 'Visit Store';
+
         if (storeSubParts.length > 0) {
           storeSubParts.forEach((subLoc, subIdx) => {
             if (/^(fmcu|online|zoom|teams|ho|head\s*office)$/i.test(subLoc)) {
               nonStoreAgendaCount++;
-              const cat = classifyNonVisitCategory(descPart, subLoc);
+              const cat = classifyNonVisitCategory(cleanPointTitle, subLoc);
               agendas.push({
                 id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-${idx}-${subIdx}`,
-                title: descPart,
+                title: cleanPointTitle,
                 date: dateStr,
                 endDate: endDateStr,
                 time: startTime,
@@ -639,7 +677,7 @@ export function parseScheduleExcelSheet(
 
             agendas.push({
               id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-${idx}-${subIdx}`,
-              title: `Audit & Store Visit - Cabang ${storeName}`,
+              title: `${visitPrefix} - ${storeName}`,
               date: dateStr,
               endDate: endDateStr,
               time: startTime,
@@ -649,7 +687,7 @@ export function parseScheduleExcelSheet(
                 ? `${matchedStore.name} (${matchedStore.code}) - ${matchedStore.city}`
                 : storeName,
               pic: matchedUser.name,
-              description: `${descPart} — Lokasi: ${storeName}`,
+              description: `${cleanPointTitle} — Lokasi: ${storeName}`,
               rawDescription: rawDesc,
               rawLocation: rawLoc,
               storeCode,
@@ -669,18 +707,18 @@ export function parseScheduleExcelSheet(
         } else {
           // Fallback if Col G is empty but Col F has store name after 'Visit Store'
           const { store: matchedStore, cleanName } = matchStoreFromLocationPart(
-            descPart,
+            cleanPointTitle,
             allStores
           );
           const storeCode = matchedStore ? matchedStore.code : 'STORE';
-          const storeName = matchedStore ? matchedStore.name : cleanName || descPart;
+          const storeName = matchedStore ? matchedStore.name : cleanName || cleanPointTitle;
           const bestieOwner = matchedStore ? getBestieByStoreCode(matchedStore.code) : '';
           if (matchedStore) matchedStoresSet.add(matchedStore.code);
           visitCount++;
 
           agendas.push({
             id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-${idx}`,
-            title: `Audit & Store Visit - Cabang ${storeName}`,
+            title: `${visitPrefix} - ${storeName}`,
             date: dateStr,
             endDate: endDateStr,
             time: startTime,
@@ -711,8 +749,8 @@ export function parseScheduleExcelSheet(
         // --------------------------------------------------------------------
         // RULE 4: NON-VISIT AGENDA (NSO, FMCU, Training, Meeting, Operation)
         // --------------------------------------------------------------------
-        let agendaTitle = descPart;
-        let category: ScheduleCategory = classifyNonVisitCategory(descPart, locPart);
+        let agendaTitle = cleanPointTitle;
+        let category: ScheduleCategory = classifyNonVisitCategory(cleanPointTitle, locPart);
 
         if (isNsoKeyword) {
           category = 'NSO';
@@ -724,7 +762,7 @@ export function parseScheduleExcelSheet(
           nonStoreAgendaCount++;
         }
 
-        const { store: refStore } = matchStoreFromLocationPart(locPart || descPart, allStores);
+        const { store: refStore } = matchStoreFromLocationPart(locPart || cleanPointTitle, allStores);
 
         agendas.push({
           id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-${idx}`,
@@ -736,7 +774,7 @@ export function parseScheduleExcelSheet(
           category,
           location: locPart || 'FMCU / Head Office',
           pic: matchedUser.name,
-          description: locPart ? `${descPart} — Lokasi: ${locPart}` : descPart,
+          description: locPart ? `${descPart.replace(/\r?\n/g, ' | ')} — Lokasi: ${locPart}` : descPart.replace(/\r?\n/g, ' | '),
           rawDescription: rawDesc,
           rawLocation: rawLoc,
           storeCode: refStore?.code,
@@ -849,7 +887,7 @@ export async function parseScheduleExcelFile(
   sheetNameOption: 'ALL' | string = 'ALL'
 ): Promise<ExcelWorkbookParseResult> {
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  const workbook = XLSX.read(buffer, { type: 'array' });
   const availableSheets = workbook.SheetNames || [];
 
   const combinedAgendas: ScheduleAgenda[] = [];

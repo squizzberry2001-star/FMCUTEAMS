@@ -14,6 +14,13 @@ import { LoginPage } from './components/LoginPage';
 import { SplashScreen } from './components/SplashScreen';
 import { PageTransitionLoader } from './components/PageTransitionLoader';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
+import {
+  fetchSchedulesFromCloud,
+  pushAllSchedulesToCloud,
+  pushSingleAgendaToCloud,
+  deleteAgendaFromCloud,
+  subscribeToLocalSync,
+} from './services/cloudScheduleSyncService';
 import { Smartphone, Monitor, Shield, ArrowLeft, MapPin, Navigation, WifiOff, RotateCw } from 'lucide-react';
 
 // Code-split heavy components to make initial splash & login load instantly on mobile
@@ -30,28 +37,31 @@ const VisitReportForm = lazy(() =>
 export const App: React.FC = () => {
   // 1. Master State for Users (Admin + 36 User dari Excel dengan password 0000)
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('fmcu_users_v2');
-    if (saved) {
-      try {
+    try {
+      localStorage.removeItem('fmcu_users_v2');
+      const saved = localStorage.getItem('fmcu_users_v5');
+      if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.error(e);
       }
+    } catch (e) {
+      console.error(e);
     }
     return initialUsers;
   });
 
-  // 2. Master State for Agendas (582 Jadwal dari 3 Sheet Excel)
+  // 2. Master State for Agendas (Jadwal resmi dari TEMPLET EXCEL JADWAL.xlsx + Live Cloud Sync)
   const [agendas, setAgendas] = useState<ScheduleAgenda[]>(() => {
-    const saved = localStorage.getItem('fmcu_agendas_master_v3');
-    if (saved) {
-      try {
+    try {
+      localStorage.removeItem('fmcu_agendas_master_v3');
+      localStorage.removeItem('fmcu_agendas_master_v2');
+      const saved = localStorage.getItem('fmcu_agendas_master_v5');
+      if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.error(e);
       }
+    } catch (e) {
+      console.error(e);
     }
     return initialAgendas;
   });
@@ -227,7 +237,7 @@ export const App: React.FC = () => {
   // Save master users to localStorage safely
   useEffect(() => {
     try {
-      localStorage.setItem('fmcu_users_v2', JSON.stringify(users));
+      localStorage.setItem('fmcu_users_v5', JSON.stringify(users));
     } catch (e) {
       console.warn('localStorage users quota warning:', e);
     }
@@ -236,11 +246,87 @@ export const App: React.FC = () => {
   // Save master agendas to localStorage safely
   useEffect(() => {
     try {
-      localStorage.setItem('fmcu_agendas_master_v3', JSON.stringify(agendas));
+      localStorage.setItem('fmcu_agendas_master_v5', JSON.stringify(agendas));
     } catch (e) {
       console.warn('localStorage agendas quota warning:', e);
     }
   }, [agendas]);
+
+  // ==========================================================================
+  // CROSS-DEVICE REAL-TIME ONLINE SCHEDULE SYNC (Cloudflare D1 + GAS Vault)
+  // ==========================================================================
+  const isSyncingCloudRef = useRef(false);
+
+  const syncSchedulesFromCloud = async () => {
+    if (isSyncingCloudRef.current) return;
+    isSyncingCloudRef.current = true;
+    try {
+      const cloudAgendas = await fetchSchedulesFromCloud();
+      if (cloudAgendas && cloudAgendas.length > 0) {
+        setAgendas((prev) => {
+          const buildSig = (list: ScheduleAgenda[]) =>
+            list
+              .map(
+                (a) =>
+                  `${a.id}:${a.date}:${a.pic}:${a.title}:${a.category}:${a.completed ? 1 : 0}`
+              )
+              .sort()
+              .join('|');
+          if (buildSig(prev) !== buildSig(cloudAgendas)) {
+            return cloudAgendas;
+          }
+          return prev;
+        });
+      }
+    } catch (err) {
+      console.warn('Cloud schedule sync warning:', err);
+    } finally {
+      isSyncingCloudRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    // 1. Initial sync on load
+    syncSchedulesFromCloud();
+
+    // 2. Poll every 6 seconds when tab is active so changes from other devices appear online
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        syncSchedulesFromCloud();
+      }
+    }, 6000);
+
+    // 3. Sync immediately when user focuses or switches back to the app
+    const handleVisibility = () => {
+      if (!document.hidden) syncSchedulesFromCloud();
+    };
+    const handleFocus = () => syncSchedulesFromCloud();
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'fmcu_agendas_master_v5' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setAgendas(parsed);
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStorage);
+    const unsubBroadcast = subscribeToLocalSync(() => {
+      syncSchedulesFromCloud();
+    });
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorage);
+      unsubBroadcast();
+    };
+  }, []);
 
   // Save logged-in session safely
   useEffect(() => {
@@ -294,6 +380,7 @@ export const App: React.FC = () => {
     setAgendas(updated);
     setSelectedAgenda(newAgenda);
     setShowNewAgendaModal(false);
+    pushSingleAgendaToCloud(newAgenda);
 
     confetti({
       particleCount: 50,
@@ -308,6 +395,7 @@ export const App: React.FC = () => {
     if (selectedAgenda && selectedAgenda.id === updated.id) {
       setSelectedAgenda(updated);
     }
+    pushSingleAgendaToCloud(updated);
   };
 
   const handleDeleteAgenda = (id: string) => {
@@ -315,6 +403,7 @@ export const App: React.FC = () => {
     if (selectedAgenda && selectedAgenda.id === id) {
       setSelectedAgenda(null);
     }
+    deleteAgendaFromCloud(id);
   };
 
   // Handlers for Admin & User Excel Import & Sync
@@ -331,26 +420,21 @@ export const App: React.FC = () => {
       }
     });
 
-    setUsers(Array.from(existingMap.values()));
+    const nextUsers = Array.from(existingMap.values());
+    setUsers(nextUsers);
 
+    let nextAgendas: ScheduleAgenda[];
     if (mode === 'replace') {
-      setAgendas(importedAgendas);
+      nextAgendas = importedAgendas;
     } else {
-      // Merge agendas: hindari duplikasi persis (tanggal + waktu + pic + lokasi)
-      const existingKeys = new Set(
-        agendas.map(
-          (a) =>
-            `${a.date}_${a.time}_${(a.pic || '').toLowerCase()}_${(a.location || '').toLowerCase()}`
-        )
-      );
-      const toAdd = importedAgendas.filter(
-        (a) =>
-          !existingKeys.has(
-            `${a.date}_${a.time}_${(a.pic || '').toLowerCase()}_${(a.location || '').toLowerCase()}`
-          )
-      );
-      setAgendas([...toAdd, ...agendas]);
+      // Replace agendas in the imported date range so re-importing a week updates cleanly without duplicates
+      const importedDates = new Set(importedAgendas.map((a) => a.date));
+      const keptOtherDates = agendas.filter((a) => !importedDates.has(a.date));
+      nextAgendas = [...importedAgendas, ...keptOtherDates];
     }
+
+    setAgendas(nextAgendas);
+    pushAllSchedulesToCloud(nextAgendas, nextUsers);
   };
 
   const handleAddUser = (newUser: User) => {
