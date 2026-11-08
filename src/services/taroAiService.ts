@@ -4,10 +4,11 @@
 // Obfuscated keys decoded at runtime to protect against scanner triggers
 const decodeKey = (b64: string): string => {
   try {
-    return typeof atob !== 'undefined' ? atob(b64) : Buffer.from(b64, 'base64').toString('utf-8');
-  } catch (_) {
-    return '';
-  }
+    if (typeof atob === 'function') {
+      return atob(b64);
+    }
+  } catch (_) {}
+  return '';
 };
 
 const GEMINI_API_KEYS = [
