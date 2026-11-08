@@ -31,6 +31,11 @@ import {
   FMCU_REPORT_GDRIVE_FOLDER_URL,
   FMCU_REPORT_GDRIVE_FOLDER_ID
 } from '../../services/pdfGeneratorService';
+import {
+  syncMobileStatusBarTheme,
+  APP_THEME_COLOR_LIGHT,
+  APP_THEME_COLOR_DARK
+} from '../../utils/themeUtils';
 
 interface VisitPdfPreviewProps {
   data: VisitReportData;
@@ -170,6 +175,19 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   onBack,
   onSyncGdrive
 }) => {
+  // Synchronize mobile status bar theme: dark while in PDF preview, light when exiting
+  useEffect(() => {
+    syncMobileStatusBarTheme(APP_THEME_COLOR_DARK, true);
+    return () => {
+      syncMobileStatusBarTheme(APP_THEME_COLOR_LIGHT, false);
+    };
+  }, []);
+
+  const handleBackToForm = () => {
+    syncMobileStatusBarTheme(APP_THEME_COLOR_LIGHT, false);
+    onBack();
+  };
+
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isSyncingGdrive, setIsSyncingGdrive] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
@@ -554,7 +572,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={onBack}
+                onClick={handleBackToForm}
                 className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
                 title="Kembali ke Editor Form"
               >

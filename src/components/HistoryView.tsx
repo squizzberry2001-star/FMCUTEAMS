@@ -29,6 +29,11 @@ import {
   generatePdfDoc,
   toGDriveEmbedPreviewUrl,
 } from '../services/pdfGeneratorService';
+import {
+  syncMobileStatusBarTheme,
+  APP_THEME_COLOR_LIGHT,
+  APP_THEME_COLOR_DARK,
+} from '../utils/themeUtils';
 
 interface HistoryViewProps {
   user?: User | null;
@@ -379,6 +384,40 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     };
   };
 
+  // Synchronize mobile status bar & theme-color across preview modal and main coverage page
+  useEffect(() => {
+    if (activeReportViewer) {
+      syncMobileStatusBarTheme(APP_THEME_COLOR_DARK, true);
+    } else {
+      syncMobileStatusBarTheme(APP_THEME_COLOR_LIGHT, false);
+    }
+    return () => {
+      syncMobileStatusBarTheme(APP_THEME_COLOR_LIGHT, false);
+    };
+  }, [activeReportViewer]);
+
+  // Ensure status bar is restored when unmounting HistoryView
+  useEffect(() => {
+    syncMobileStatusBarTheme(APP_THEME_COLOR_LIGHT, false);
+    return () => {
+      syncMobileStatusBarTheme(APP_THEME_COLOR_LIGHT, false);
+    };
+  }, []);
+
+  const handleCloseReportViewer = () => {
+    if (blobPdfUrl) {
+      URL.revokeObjectURL(blobPdfUrl);
+      setBlobPdfUrl(null);
+    }
+    setActiveReportViewer(null);
+    syncMobileStatusBarTheme(APP_THEME_COLOR_LIGHT, false);
+  };
+
+  const handleBackToParent = () => {
+    syncMobileStatusBarTheme(APP_THEME_COLOR_LIGHT, false);
+    onBack();
+  };
+
   // Effect to generate rendered PDF blob for in-web preview if direct GDrive embed isn't yet available
   useEffect(() => {
     if (!activeReportViewer) {
@@ -441,13 +480,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
-              onClick={() => {
-                if (blobPdfUrl) {
-                  URL.revokeObjectURL(blobPdfUrl);
-                  setBlobPdfUrl(null);
-                }
-                setActiveReportViewer(null);
-              }}
+              onClick={handleCloseReportViewer}
               className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shrink-0"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -523,7 +556,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       <div className="flex items-center justify-between mb-5">
         <button
           type="button"
-          onClick={onBack}
+          onClick={handleBackToParent}
           className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer"
         >
           <ChevronLeft className="w-5 h-5 stroke-[2.4]" />

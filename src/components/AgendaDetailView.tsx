@@ -22,6 +22,7 @@ import {
   Maximize2,
   Minimize2,
   Lock,
+  Navigation,
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory, User } from '../types';
 import {
@@ -166,6 +167,20 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
     () => (matchedGeoPoints.length > 0 ? matchedGeoPoints : [primaryGeoPoint]),
     [matchedGeoPoints, primaryGeoPoint]
   );
+
+  // Otomatis Buka Google Maps Directions / Rute ke Lokasi Toko
+  const handleOpenGoogleMapsRoute = () => {
+    let url = '';
+    if (primaryGeoPoint && primaryGeoPoint.lat && primaryGeoPoint.lng) {
+      url = `https://www.google.com/maps/dir/?api=1&destination=${primaryGeoPoint.lat},${primaryGeoPoint.lng}`;
+    } else {
+      const query = encodeURIComponent(
+        `${agenda.storeName || agenda.location || agenda.title || 'FamilyMart'} ${primaryGeoPoint?.city || ''}`.trim()
+      );
+      url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   useEffect(() => {
     if (!isVisitAgenda) return;
@@ -666,31 +681,49 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             )}
           </div>
 
-          {isAgendaToday ? (
+          {/* Action Row: Tombol Rute (Kiri, Ukuran Tinggi Sama, Panjang Lebih Kecil) & Tombol Buka Form Visit (Kanan) */}
+          <div className="flex items-center gap-2.5 w-full">
+            {/* Tombol Rute Google Maps */}
             <button
               type="button"
-              onClick={handleOpenVisitFormWithAutoIn}
-              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              onClick={handleOpenGoogleMapsRoute}
+              title={`Buka Navigasi Rute Google Maps ke ${primaryGeoPoint?.name || agenda.storeName || agenda.location}`}
+              className="py-3 px-3.5 sm:px-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-800 hover:text-teal-700 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 font-black text-xs shadow-xs cursor-pointer shrink-0"
             >
-              <Camera className="w-4 h-4" />
-              <span>BUKA FORM VISIT REPORT</span>
-              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+              <Navigation className="w-4 h-4 text-teal-600 fill-teal-600/20 stroke-[2.4]" />
+              <span>RUTE</span>
             </button>
-          ) : (
-            <div className="space-y-1.5">
-              <button
-                type="button"
-                disabled
-                className="w-full py-3 px-4 rounded-2xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-2 cursor-not-allowed select-none shadow-none"
-                title={`Form Visit terkunci. Hanya dapat dibuka pada tanggal kunjungan (${agenda.date}).`}
-              >
-                <Lock className="w-4 h-4 text-slate-400" />
-                <span>FORM VISIT TERKUNCI (HANYA HARI H)</span>
-              </button>
-              <p className="text-[10px] text-center font-semibold text-slate-400">
-                Form visit report hanya dapat diakses saat tanggal kunjungan ({agenda.date}).
-              </p>
+
+            {/* Tombol Buka Form Visit Report */}
+            <div className="flex-1 min-w-0">
+              {isAgendaToday ? (
+                <button
+                  type="button"
+                  onClick={handleOpenVisitFormWithAutoIn}
+                  className="w-full py-3 px-3.5 sm:px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer truncate"
+                >
+                  <Camera className="w-4 h-4 shrink-0" />
+                  <span className="truncate">BUKA FORM VISIT REPORT</span>
+                  <ArrowRight className="w-4 h-4 stroke-[2.5] shrink-0" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-3 px-3 rounded-2xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-none truncate"
+                  title={`Form Visit terkunci. Hanya dapat dibuka pada tanggal kunjungan (${agenda.date}).`}
+                >
+                  <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">FORM VISIT TERKUNCI (HARI H)</span>
+                </button>
+              )}
             </div>
+          </div>
+
+          {!isAgendaToday && (
+            <p className="text-[10px] text-center font-semibold text-slate-400">
+              Form visit report hanya dapat diakses saat tanggal kunjungan ({agenda.date}).
+            </p>
           )}
         </div>
       )}
