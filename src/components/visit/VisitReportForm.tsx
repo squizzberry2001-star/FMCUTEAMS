@@ -488,23 +488,23 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     };
   }, []);
 
-  // Scroll Detection & Auto Navbar Scale (Bottom and Top Navbar)
+  // Scroll Detection & Auto Navbar Scale (Bottom and Top Navbar with Direction Accumulator)
   const [isScrolled, setIsScrolled] = useState(false);
   const [showTopNavbar, setShowTopNavbar] = useState(true);
   const formScrollContainerRef = useRef<HTMLDivElement>(null);
+  const lastScrollYRef = useRef(0);
+  const scrollDeltaAccRef = useRef(0);
   const manualExpandedRef = useRef(false);
   const manualExpandedScrollTopRef = useRef(0);
-  const lastScrollTopRef = useRef(0);
 
   const getScrollTop = () => {
-    const targets = [
-      window.scrollY,
-      window.pageYOffset,
-      document.documentElement?.scrollTop,
-      document.body?.scrollTop,
-      formScrollContainerRef.current?.scrollTop,
-    ];
-    return Math.max(...targets.map((v) => (typeof v === 'number' && !isNaN(v) ? v : 0)));
+    return Math.max(
+      window.scrollY || 0,
+      window.pageYOffset || 0,
+      document.documentElement?.scrollTop || 0,
+      document.body?.scrollTop || 0,
+      formScrollContainerRef.current?.scrollTop || 0
+    );
   };
 
   const handleResetScale = () => {
@@ -520,29 +520,44 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     const onScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          const top = getScrollTop();
-          const delta = top - lastScrollTopRef.current;
-          lastScrollTopRef.current = top;
+          const currentY = getScrollTop();
+          const delta = currentY - lastScrollYRef.current;
+          lastScrollYRef.current = currentY;
 
-          if (top <= 15) {
-            // Saat di posisi atas: selalu tampilkan top navbar & besarkan bottom navbar
-            setIsScrolled(false);
+          // 1. Di paling atas halaman (<= 25px): selalu tampilkan top navbar & normal size bottom navbar
+          if (currentY <= 25) {
             setShowTopNavbar(true);
+            setIsScrolled(false);
+            scrollDeltaAccRef.current = 0;
             manualExpandedRef.current = false;
-          } else if (manualExpandedRef.current) {
-            if (top > manualExpandedScrollTopRef.current + 8 || delta > 4) {
+            ticking = false;
+            return;
+          }
+
+          // 2. Akumulasi delta untuk menyaring getaran micro touch / rubber-banding
+          if ((delta > 0 && scrollDeltaAccRef.current < 0) || (delta < 0 && scrollDeltaAccRef.current > 0)) {
+            scrollDeltaAccRef.current = delta;
+          } else {
+            scrollDeltaAccRef.current += delta;
+          }
+
+          // 3. Jika user menekan tombol bottom navbar saat mengecil -> pertahankan
+          if (manualExpandedRef.current) {
+            if (currentY > manualExpandedScrollTopRef.current + 10 || delta > 4) {
               manualExpandedRef.current = false;
               setIsScrolled(true);
               setShowTopNavbar(false);
             }
-          } else if (delta < -3) {
-            // Scroll ke ATAS: Top navbar muncul, Bottom navbar membesar
-            setIsScrolled(false);
-            setShowTopNavbar(true);
-          } else if (delta > 3 && top > 25) {
-            // Scroll ke BAWAH: Top navbar auto hide, Bottom navbar mengecil
-            setIsScrolled(true);
+          }
+          // 4. Scroll ke BAWAH: akumulasi > 12px dan posisi > 45px -> Sembunyikan (Auto-Hide)
+          else if (scrollDeltaAccRef.current > 12 && currentY > 45) {
             setShowTopNavbar(false);
+            setIsScrolled(true);
+          }
+          // 5. Scroll ke ATAS: akumulasi < -6px -> Langsung Munculkan Kembali (Auto-Appear)
+          else if (scrollDeltaAccRef.current < -6) {
+            setShowTopNavbar(true);
+            setIsScrolled(false);
           }
 
           ticking = false;
@@ -1304,7 +1319,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   return (
     <div
       ref={formScrollContainerRef}
-      className="flex flex-col min-h-screen bg-[#F8F9FD] select-none overflow-y-auto no-scrollbar px-4 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-36 max-w-6xl mx-auto w-full relative"
+      className="flex flex-col min-h-screen bg-[#F8F9FD] select-none px-4 sm:px-6 pt-20 pb-36 max-w-6xl mx-auto w-full relative"
     >
       {/* Section / Sub-Tab Blur + Silhouette + Mini "FMCU....." Bouncing Loader */}
       <PageTransitionLoader visible={isSectionTransitioning} />
@@ -1497,49 +1512,57 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* Header Section: Sticky with Auto-Hide on Scroll Down & Auto-Show on Scroll Up */}
-      <div
-        className={`sticky top-0 z-30 pt-1 pb-2.5 -mx-5 px-5 bg-[#F8F9FD]/95 backdrop-blur-md flex items-center justify-between mb-4 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-          showTopNavbar ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+      {/* Top Navbar: Fixed Header with Apple Glass Aesthetic & Seamless Auto-Hide / Auto-Show */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
+          showTopNavbar
+            ? 'translate-y-0 opacity-100 shadow-xs'
+            : '-translate-y-full opacity-0 pointer-events-none'
         }`}
       >
-        <button
-          type="button"
-          onClick={onBack}
-          title="Kembali ke Beranda"
-          className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform"
-        >
-          <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
-        </button>
-        <div className="text-center">
-          <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
-            FMCU Visit Report
-          </span>
-          <h2 className="text-base sm:text-lg font-black text-slate-800">Audit Toko FMCU</h2>
-        </div>
-        {/* Right Dock: R23 (Icon Only) di sebelah kiri, PDF (Icon Only) di sebelah kanan */}
-        <div className="iphone-glass-mini-dock flex items-center gap-1 p-1 rounded-full shadow-xs">
-          {/* Tombol R23 (Icon Only) */}
+        <div className="bg-[#F8F9FD]/95 backdrop-blur-xl border-b border-slate-200/60 px-4 sm:px-6 pt-[max(0.6rem,env(safe-area-inset-top,12px))] pb-2.5 max-w-6xl mx-auto w-full flex items-center justify-between">
           <button
             type="button"
-            onClick={() => setShowR23Modal(true)}
-            title="Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)"
-            className="w-8 h-8 rounded-full hover:bg-emerald-500/15 text-emerald-800 hover:text-emerald-950 flex items-center justify-center active:scale-95 transition-transform cursor-pointer"
+            onClick={onBack}
+            title="Kembali ke Beranda"
+            className="w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer shrink-0"
           >
-            <Clock className="w-4 h-4 stroke-[2.3]" />
+            <ChevronLeft className="w-5 h-5 stroke-[2.4]" />
           </button>
 
-          {/* Tombol PDF (Icon Only) */}
-          <button
-            type="button"
-            onClick={() => setShowPreview(true)}
-            title="Pratinjau & Cetak Laporan PDF"
-            className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer"
-          >
-            <FileText className="w-4 h-4 stroke-[2.2]" />
-          </button>
+          <div className="text-center px-2 min-w-0">
+            <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider block">
+              FMCU Visit Report
+            </span>
+            <h2 className="text-base sm:text-lg font-black text-slate-800 leading-tight truncate">
+              Audit Toko FMCU
+            </h2>
+          </div>
+
+          {/* Right Dock: R23 (Icon Only) di sebelah kiri, PDF (Icon Only) di sebelah kanan */}
+          <div className="iphone-glass-mini-dock flex items-center gap-1 p-1 rounded-full shadow-xs shrink-0">
+            {/* Tombol R23 (Icon Only) */}
+            <button
+              type="button"
+              onClick={() => setShowR23Modal(true)}
+              title="Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)"
+              className="w-8 h-8 rounded-full hover:bg-emerald-500/15 text-emerald-800 hover:text-emerald-950 flex items-center justify-center active:scale-95 transition-transform cursor-pointer"
+            >
+              <Clock className="w-4 h-4 stroke-[2.3]" />
+            </button>
+
+            {/* Tombol PDF (Icon Only) */}
+            <button
+              type="button"
+              onClick={() => setShowPreview(true)}
+              title="Pratinjau & Cetak Laporan PDF"
+              className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center text-black active:scale-95 transition-transform cursor-pointer"
+            >
+              <FileText className="w-4 h-4 stroke-[2.2]" />
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
       <div className="space-y-5">
         {/* ============================================================
