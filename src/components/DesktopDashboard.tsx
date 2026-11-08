@@ -583,22 +583,24 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               ))}
             </div>
 
-            {/* Tombol Buka Form Visit Report */}
-            <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
-              <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
-                Formulir Kunjungan &amp; Laporan
-              </span>
-              <p className="text-xs text-slate-600 mb-3">
-                Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
-              </p>
-              <button
-                onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
-                className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-              >
-                <Camera className="w-4 h-4" />
-                <span>Buka Form Visit Report</span>
-              </button>
-            </div>
+            {/* Tombol Buka Form Visit Report (Hanya untuk Jadwal VISIT) */}
+            {selectedAgenda.category === 'VISIT' && (
+              <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
+                <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
+                  Formulir Kunjungan &amp; Laporan
+                </span>
+                <p className="text-xs text-slate-600 mb-3">
+                  Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
+                </p>
+                <button
+                  onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
+                  className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Buka Form Visit Report</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center py-16">

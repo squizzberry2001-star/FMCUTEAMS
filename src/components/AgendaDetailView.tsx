@@ -412,19 +412,21 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
       )}
 
       {/* 4. Bottom Primary Action Bar:
-          - Tambahkan Tombol Buka Form
+          - Tombol Buka Form Visit Report HANYA untuk Jadwal VISIT
           - Hapus Tombol Navigasi ke Lokasi di Bawah */}
-      <div className="shrink-0">
-        <button
-          type="button"
-          onClick={onOpenVisitForm}
-          className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <Camera className="w-4 h-4" />
-          <span>BUKA FORM VISIT REPORT</span>
-          <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-        </button>
-      </div>
+      {isVisitAgenda && (
+        <div className="shrink-0">
+          <button
+            type="button"
+            onClick={onOpenVisitForm}
+            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Camera className="w-4 h-4" />
+            <span>BUKA FORM VISIT REPORT</span>
+            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
