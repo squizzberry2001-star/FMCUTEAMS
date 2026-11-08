@@ -237,16 +237,54 @@ export const fetchActiveStoriesFromGasGDrive = async (): Promise<StorySlide[] | 
 };
 
 /**
- * Sync 1x emoji reaction change to Google Drive stories DB via GAS.
+ * Sync 1x emoji reaction change to Google Drive stories DB via GAS & Edge Cloud Vault.
  */
 export const syncStoryReactionToGasGDrive = async (params: {
   storyId: string;
   emoji: string;
   userName: string;
+  updatedReactions?: Record<string, string[]>;
 }): Promise<void> => {
   const gasUrl = DEFAULT_GAS_GDRIVE_URL;
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
+  // 1. Immediately update Edge Cloud Vault so other devices pick up the reaction in real time
+  (async () => {
+    try {
+      const existing = (await fetchActiveStoriesFromGasGDrive()) || [];
+      const updated = existing.map((s) => {
+        if (s.id !== params.storyId) return s;
+        let reactions = params.updatedReactions;
+        if (!reactions) {
+          const current = s.reactions || {};
+          const filtered: Record<string, string[]> = {};
+          Object.entries(current).forEach(([em, list]) => {
+            const f = (list || []).filter(
+              (u) => u.toLowerCase() !== params.userName.toLowerCase()
+            );
+            if (f.length > 0) filtered[em] = f;
+          });
+          filtered[params.emoji] = [...(filtered[params.emoji] || []), params.userName];
+          reactions = filtered;
+        }
+        return { ...s, reactions };
+      });
+
+      await fetch(GAS_VAULT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'db_save_collection',
+          collection: 'stories',
+          data: updated,
+        }),
+      });
+    } catch {
+      // ignore
+    }
+  })();
+
+  // 2. Concurrently notify GAS WebApp
   try {
     await fetch(gasUrl, {
       method: 'POST',

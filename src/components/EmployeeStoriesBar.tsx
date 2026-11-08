@@ -134,6 +134,32 @@ const getTopReactedEmoji = (slides: StorySlide[]): string | null => {
   return topEmoji;
 };
 
+/**
+ * Merge two sets of reactions without discarding local or remote reactions
+ */
+const mergeStoryReactions = (
+  r1?: Record<string, string[]>,
+  r2?: Record<string, string[]>
+): Record<string, string[]> => {
+  const merged: Record<string, Set<string>> = {};
+  [r1, r2].forEach((r) => {
+    if (!r) return;
+    Object.entries(r).forEach(([emoji, names]) => {
+      if (!merged[emoji]) merged[emoji] = new Set();
+      if (Array.isArray(names)) {
+        names.forEach((n) => {
+          if (n && typeof n === 'string') merged[emoji].add(n);
+        });
+      }
+    });
+  });
+  const res: Record<string, string[]> = {};
+  Object.entries(merged).forEach(([emoji, set]) => {
+    if (set.size > 0) res[emoji] = Array.from(set);
+  });
+  return res;
+};
+
 // Compress uploaded/captured image for smooth GDrive upload & local cache
 const compressStoryImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -245,8 +271,19 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         const validIdb = idbStories.filter((s) => isStoryActive24h(s, nowMs));
         setStories((prev) => {
           const map = new Map<string, StorySlide>();
-          [...validIdb, ...prev.filter((s) => isStoryActive24h(s, nowMs))].forEach((item) => {
-            if (!map.has(item.id)) map.set(item.id, item);
+          prev.filter((s) => isStoryActive24h(s, nowMs)).forEach((s) => map.set(s.id, s));
+          validIdb.forEach((item) => {
+            const existing = map.get(item.id);
+            if (existing) {
+              map.set(item.id, {
+                ...item,
+                ...existing,
+                reactions: mergeStoryReactions(existing.reactions, item.reactions),
+                views: Array.from(new Set([...(existing.views || []), ...(item.views || [])])),
+              });
+            } else {
+              map.set(item.id, item);
+            }
           });
           return Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs);
         });
@@ -257,8 +294,19 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         const validRemote = remoteStories.filter((s) => isStoryActive24h(s, nowMs));
         setStories((prev) => {
           const map = new Map<string, StorySlide>();
-          [...validRemote, ...prev.filter((s) => isStoryActive24h(s, nowMs))].forEach((item) => {
-            if (!map.has(item.id)) map.set(item.id, item);
+          prev.filter((s) => isStoryActive24h(s, nowMs)).forEach((s) => map.set(s.id, s));
+          validRemote.forEach((item) => {
+            const existing = map.get(item.id);
+            if (existing) {
+              map.set(item.id, {
+                ...item,
+                ...existing,
+                reactions: mergeStoryReactions(existing.reactions, item.reactions),
+                views: Array.from(new Set([...(existing.views || []), ...(item.views || [])])),
+              });
+            } else {
+              map.set(item.id, item);
+            }
           });
           return Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs);
         });
@@ -296,6 +344,31 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       window.removeEventListener('focus', handleImmediateSync);
       window.removeEventListener('online', handleImmediateSync);
       document.removeEventListener('visibilitychange', handleImmediateSync);
+    };
+  }, []);
+
+  // Real-time local BroadcastChannel for instant story reaction sync across tabs (0ms)
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('fmcu_story_reaction_channel');
+      channel.onmessage = (event) => {
+        if (event.data?.type === 'STORY_REACTION' && event.data.storyId && event.data.reactions) {
+          setStories((prev) =>
+            prev.map((s) =>
+              s.id === event.data.storyId
+                ? { ...s, reactions: event.data.reactions }
+                : s
+            )
+          );
+        }
+      };
+    } catch {
+      // ignore
+    }
+    return () => {
+      channel?.close();
     };
   }, []);
 
@@ -604,7 +677,14 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     return otherUserGroups[activeViewerGroupIdx]?.slides || [];
   }, [activeViewerGroupIdx, myActiveStories, otherUserGroups]);
 
-  const currentSlide = currentViewerSlides[activeSlideIdx] || null;
+  const rawCurrentSlide = currentViewerSlides[activeSlideIdx] || null;
+  const currentSlide = rawCurrentSlide
+    ? {
+        ...rawCurrentSlide,
+        reactions: rawCurrentSlide.reactions || {},
+        views: Array.isArray(rawCurrentSlide.views) ? rawCurrentSlide.views : [],
+      }
+    : null;
 
   // Mark current slide as viewed & record viewer name if viewing another user's story (+ sync to GDrive GAS)
   useEffect(() => {
@@ -891,40 +971,68 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       setFloatingBursts((prev) => prev.filter((b) => !batchIds.has(b.id)));
     }, 2350);
 
-    setStories((prev) =>
-      prev.map((slide) => {
-        if (slide.id !== currentSlide.id) return slide;
+    const slideReactions =
+      currentSlide.reactions && typeof currentSlide.reactions === 'object'
+        ? currentSlide.reactions
+        : {};
+    const existingForTarget = Array.isArray(slideReactions[emoji]) ? slideReactions[emoji] : [];
+    const alreadyPickedThisEmoji = existingForTarget.some(
+      (name) => name && name.toLowerCase() === currentUserName.toLowerCase()
+    );
 
-        const existingForTarget = slide.reactions[emoji] || [];
-        const alreadyPickedThisEmoji = existingForTarget.some(
-          (name) => name.toLowerCase() === currentUserName.toLowerCase()
+    const cleanedReactions: Record<string, string[]> = {};
+    Object.entries(slideReactions).forEach(([em, usersList]) => {
+      if (Array.isArray(usersList)) {
+        const filtered = usersList.filter(
+          (name) => name && name.toLowerCase() !== currentUserName.toLowerCase()
         );
-
-        const cleanedReactions: Record<string, string[]> = {};
-        Object.entries(slide.reactions || {}).forEach(([em, usersList]) => {
-          const filtered = usersList.filter(
-            (name) => name.toLowerCase() !== currentUserName.toLowerCase()
-          );
-          if (filtered.length > 0) {
-            cleanedReactions[em] = filtered;
-          }
-        });
-
-        if (!alreadyPickedThisEmoji) {
-          cleanedReactions[emoji] = [...(cleanedReactions[emoji] || []), currentUserName];
+        if (filtered.length > 0) {
+          cleanedReactions[em] = filtered;
         }
+      }
+    });
 
+    if (!alreadyPickedThisEmoji) {
+      cleanedReactions[emoji] = [...(cleanedReactions[emoji] || []), currentUserName];
+    }
+
+    setStories((prev) => {
+      const next = prev.map((slide) => {
+        if (slide.id !== currentSlide.id) return slide;
         return {
           ...slide,
           reactions: cleanedReactions,
         };
-      })
-    );
+      });
+      saveStoriesToIdb(next);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.warn(e);
+      }
+      return next;
+    });
+
+    // Instant local broadcast to all open tabs in 0ms
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const ch = new BroadcastChannel('fmcu_story_reaction_channel');
+        ch.postMessage({
+          type: 'STORY_REACTION',
+          storyId: currentSlide.id,
+          reactions: cleanedReactions,
+        });
+        ch.close();
+      }
+    } catch {
+      // ignore
+    }
 
     syncStoryReactionToGasGDrive({
       storyId: currentSlide.id,
       emoji,
       userName: currentUserName,
+      updatedReactions: cleanedReactions,
     });
   };
 
@@ -1466,8 +1574,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                       <Heart className="w-3.5 h-3.5 text-pink-400 fill-pink-400" />
                       <span>
                         Daftar Pemberi Reaksi (
-                        {Object.values(currentSlide.reactions).reduce(
-                          (acc, arr) => acc + arr.length,
+                        {Object.values(currentSlide.reactions || {}).reduce(
+                          (acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0),
                           0
                         )}
                         )
@@ -1482,16 +1590,16 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     </button>
                   </div>
 
-                  {Object.entries(currentSlide.reactions).filter(
-                    ([, usersList]) => usersList.length > 0
+                  {Object.entries(currentSlide.reactions || {}).filter(
+                    ([, usersList]) => Array.isArray(usersList) && usersList.length > 0
                   ).length === 0 ? (
                     <p className="text-[11px] text-white/60 font-light py-1">
                       Belum ada rekan kerja yang memberikan reaksi pada story ini.
                     </p>
                   ) : (
                     <ul className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                      {Object.entries(currentSlide.reactions)
-                        .filter(([, usersList]) => usersList.length > 0)
+                      {Object.entries(currentSlide.reactions || {})
+                        .filter(([, usersList]) => Array.isArray(usersList) && usersList.length > 0)
                         .flatMap(([emoji, usersList]) =>
                           usersList.map((reactorName) => ({ emoji, reactorName }))
                         )
@@ -1577,31 +1685,26 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               <div className="bg-white/10 backdrop-blur-md px-3 py-2 rounded-2xl border border-white/15 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap min-h-[24px]">
-                    {Object.entries(currentSlide.reactions).filter(
-                      ([, usersList]) => usersList.length > 0
+                    {Object.entries(currentSlide.reactions || {}).filter(
+                      ([, usersList]) => Array.isArray(usersList) && usersList.length > 0
                     ).length === 0 ? (
                       <span className="text-[11px] text-white/60 font-light flex items-center gap-1">
                         <Heart className="w-3.5 h-3.5 text-pink-400" />
                         <span>Belum ada reaksi emot</span>
                       </span>
                     ) : (
-                      Object.entries(currentSlide.reactions)
-                        .filter(([, usersList]) => usersList.length > 0)
+                      Object.entries(currentSlide.reactions || {})
+                        .filter(([, usersList]) => Array.isArray(usersList) && usersList.length > 0)
                         .map(([emoji, usersList]) => {
                           const iReacted = usersList.some(
-                            (u) => u.toLowerCase() === currentUserName.toLowerCase()
+                            (u) => u && u.toLowerCase() === currentUserName.toLowerCase()
                           );
                           return (
                             <button
                               key={emoji}
                               type="button"
                               onClick={() => {
-                                if (activeViewerGroupIdx !== -1) {
-                                  handleSelectReaction(emoji);
-                                } else {
-                                  setShowViewersList(false);
-                                  setShowReactorsList((prev) => !prev);
-                                }
+                                handleSelectReaction(emoji);
                               }}
                               className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all active:scale-90 cursor-pointer ${
                                 iReacted
@@ -1628,17 +1731,17 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                     className="text-[10px] font-bold text-teal-300 hover:text-teal-200 bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-full shrink-0 transition-colors cursor-pointer"
                     title="Klik untuk melihat daftar siapa saja yang memberikan react"
                   >
-                    {Object.values(currentSlide.reactions).reduce(
-                      (acc, arr) => acc + arr.length,
+                    {Object.values(currentSlide.reactions || {}).reduce(
+                      (acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0),
                       0
                     )}{' '}
                     Reaksi • Detail
                   </button>
                 </div>
 
-                {/* Inline Summary of Who Reacted ("berikan informasi siapa saja yang memberikan react") */}
-                {Object.entries(currentSlide.reactions).some(
-                  ([, usersList]) => usersList.length > 0
+                {/* Inline Summary of Who Reacted */}
+                {Object.entries(currentSlide.reactions || {}).some(
+                  ([, usersList]) => Array.isArray(usersList) && usersList.length > 0
                 ) && (
                   <button
                     type="button"
@@ -1650,8 +1753,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                   >
                     <span className="truncate font-normal">
                       <strong className="font-semibold text-teal-300">Direaksi oleh: </strong>
-                      {Object.entries(currentSlide.reactions)
-                        .filter(([, usersList]) => usersList.length > 0)
+                      {Object.entries(currentSlide.reactions || {})
+                        .filter(([, usersList]) => Array.isArray(usersList) && usersList.length > 0)
                         .flatMap(([emoji, usersList]) =>
                           usersList.map((name) => `${emoji} ${name}`)
                         )
@@ -1664,34 +1767,35 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 )}
               </div>
 
-              {/* Requirement 1: When viewing ANOTHER user's story, allow reacting (1x per user, changeable) */}
-              {activeViewerGroupIdx !== -1 && (
-                <div className="flex items-center justify-between bg-white/10 backdrop-blur-xl px-3 py-1.5 rounded-full border border-white/15">
-                  <div className="flex items-center justify-around flex-1 gap-1">
-                    {QUICK_EMOJIS.map((emoji) => {
-                      const reactors = currentSlide.reactions[emoji] || [];
-                      const isMine = reactors.some(
-                        (u) => u.toLowerCase() === currentUserName.toLowerCase()
-                      );
-                      return (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => handleSelectReaction(emoji)}
-                          className={`w-9 h-9 rounded-full flex items-center justify-center text-lg transition-transform hover:scale-125 active:scale-90 cursor-pointer ${
-                            isMine
-                              ? 'bg-white/25 ring-2 ring-pink-400 scale-110'
-                              : 'hover:bg-white/15'
-                          }`}
-                          title={`Pilih Reaksi ${emoji} (Bisa ganti emot)`}
-                        >
-                          {emoji}
-                        </button>
-                      );
-                    })}
-                  </div>
+              {/* Quick Emoji Reaction Bar (Available on ALL active stories, 1x per user, changeable) */}
+              <div className="flex items-center justify-between bg-white/10 backdrop-blur-xl px-3 py-1.5 rounded-full border border-white/15">
+                <div className="flex items-center justify-around flex-1 gap-1">
+                  {QUICK_EMOJIS.map((emoji) => {
+                    const reactors =
+                      currentSlide.reactions && Array.isArray(currentSlide.reactions[emoji])
+                        ? currentSlide.reactions[emoji]
+                        : [];
+                    const isMine = reactors.some(
+                      (u) => u && u.toLowerCase() === currentUserName.toLowerCase()
+                    );
+                    return (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => handleSelectReaction(emoji)}
+                        className={`w-9 h-9 rounded-full flex items-center justify-center text-lg transition-transform hover:scale-125 active:scale-90 cursor-pointer ${
+                          isMine
+                            ? 'bg-white/25 ring-2 ring-pink-400 scale-110'
+                            : 'hover:bg-white/15'
+                        }`}
+                        title={`Pilih Reaksi ${emoji} (Bisa ganti emot)`}
+                      >
+                        {emoji}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
