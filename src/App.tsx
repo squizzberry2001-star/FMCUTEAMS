@@ -482,10 +482,10 @@ export const App: React.FC = () => {
       )}
       <PwaInstallPrompt readyToShow={!showSplash} />
       <PageTransitionLoader visible={isPageTransitioning} />
-      <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
+      <div className="h-screen w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative select-none">
       {/* Admin / Executive Viewer Preview Floating Header */}
       {user.isAdmin && adminPreviewMode && (
-        <div className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between text-xs sticky top-0 z-50 shadow-md">
+        <div className="bg-slate-900 text-white px-4 py-2 flex items-center justify-between text-xs shrink-0 z-50 shadow-md">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <Shield className="w-4 h-4 text-teal-400" />
@@ -512,7 +512,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Real Web Header / Control Banner for Desktop Viewers (Hidden when printing PDF) */}
-      <div className="hidden lg:flex items-center justify-between px-6 py-2 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40 print:hidden">
+      <div className="hidden lg:flex items-center justify-between px-5 py-1.5 bg-white/80 backdrop-blur-md border-b border-slate-200/60 shrink-0 z-40 print:hidden">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-xs font-bold text-slate-800">FMCU TEAMS Live Web Application</span>
@@ -648,27 +648,29 @@ export const App: React.FC = () => {
         </div>
       ) : (
         /* Full Desktop Web Dashboard */
-        <Suspense fallback={<PageTransitionLoader visible={true} />}>
-          <DesktopDashboard
-            user={user}
-            agendas={agendas}
-            selectedAgenda={selectedAgenda}
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            onSelectAgenda={handleSelectAgenda}
-            onOpenNewAgenda={() => setShowNewAgendaModal(true)}
-            onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
-            onOpenLiveMaps={() => setShowLiveMapsModal(true)}
-            onOpenVisitForm={(agenda) => {
-              setSelectedAgenda(agenda);
-              setMobileScreen('visit-form');
-            }}
-            onLogout={handleLogout}
-            onOpenAdminPortal={user.isAdmin ? () => setAdminPreviewMode(false) : undefined}
-            onUpdateUser={handleUpdateUser}
-            users={users}
-          />
-        </Suspense>
+        <div className="flex-1 min-h-0 w-full h-full overflow-hidden">
+          <Suspense fallback={<PageTransitionLoader visible={true} />}>
+            <DesktopDashboard
+              user={user}
+              agendas={agendas}
+              selectedAgenda={selectedAgenda}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              onSelectAgenda={handleSelectAgenda}
+              onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+              onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
+              onOpenLiveMaps={() => setShowLiveMapsModal(true)}
+              onOpenVisitForm={(agenda) => {
+                setSelectedAgenda(agenda);
+                setMobileScreen('visit-form');
+              }}
+              onLogout={handleLogout}
+              onOpenAdminPortal={user.isAdmin ? () => setAdminPreviewMode(false) : undefined}
+              onUpdateUser={handleUpdateUser}
+              users={users}
+            />
+          </Suspense>
+        </div>
       )}
 
       {/* New Agenda Creation Modal (Desktop & Mobile) */}

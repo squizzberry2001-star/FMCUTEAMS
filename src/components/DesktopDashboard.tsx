@@ -277,28 +277,28 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#F8F9FD] overflow-hidden select-none">
+    <div className="flex h-full w-full bg-[#F8F9FD] overflow-hidden select-none">
       {/* =========================================================================
           1. LEFT SIDEBAR NAVIGATION: FIT SCREEN HEIGHT (USER & LOGOUT NEVER CUT OFF)
           ========================================================================= */}
-      <aside className="w-60 lg:w-64 bg-white border-r border-slate-100 flex flex-col h-full p-4 lg:p-5 z-20 flex-shrink-0">
+      <aside className="w-56 lg:w-60 xl:w-64 bg-white border-r border-slate-100 flex flex-col h-full p-3.5 lg:p-4 z-20 shrink-0 select-none">
         {/* Brand & Logo */}
-        <div className="flex items-center gap-3 mb-6 shrink-0">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] flex items-center justify-center text-white shadow-pill-teal font-extrabold text-sm shrink-0">
+        <div className="flex items-center gap-2.5 mb-4 shrink-0">
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] flex items-center justify-center text-white shadow-pill-teal font-extrabold text-sm shrink-0">
             F
           </div>
           <div className="min-w-0">
-            <span className="text-[10px] font-bold text-teal-600 tracking-wider uppercase block">
+            <span className="text-[9.5px] font-bold text-teal-600 tracking-wider uppercase block">
               FMCU TEAMS
             </span>
-            <h2 className="text-sm lg:text-base font-extrabold text-slate-800 leading-tight truncate">
+            <h2 className="text-xs lg:text-sm font-extrabold text-slate-800 leading-tight truncate">
               Operations Portal
             </h2>
           </div>
         </div>
 
         {/* Scrollable Navigation Area (Mencegah elemen bawah terdorong keluar layar) */}
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-1.5 pr-0.5">
+        <div className="flex-1 overflow-y-auto no-scrollbar space-y-1 pr-0.5 my-1">
           {[
             { id: 'dashboard' as const, label: 'Daily Schedule', icon: LayoutGrid },
             { id: 'schedule' as const, label: 'Master Kalender', icon: CalendarIcon },
@@ -312,7 +312,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => setActiveMenu(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
                   isActive
                     ? 'bg-[#EAF8F2] text-[#2BB3A0] shadow-2xs font-extrabold'
                     : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -326,31 +326,31 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
 
           {/* Admin Return Shortcut (Hanya jika user admin) */}
           {user.isAdmin && onOpenAdminPortal && (
-            <div className="pt-2">
+            <div className="pt-1.5">
               <button
                 type="button"
                 onClick={onOpenAdminPortal}
-                className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-sm hover:brightness-105 active:scale-95 transition-all text-xs font-bold cursor-pointer"
+                className="w-full flex items-center justify-between p-2 rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-sm hover:brightness-105 active:scale-95 transition-all text-xs font-bold cursor-pointer"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <Shield className="w-4 h-4 shrink-0" />
-                  <span className="text-[11px] truncate">Portal Admin FMCU</span>
+                  <Shield className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[10.5px] truncate">Portal Admin FMCU</span>
                 </div>
-                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                <ArrowRight className="w-3 h-3 shrink-0" />
               </button>
             </div>
           )}
 
           {/* Dynamic Real Coverage Summary Box */}
-          <div className="mt-5 bg-gradient-to-br from-slate-50 via-teal-50/40 to-slate-50 rounded-2xl p-3.5 border border-teal-100/60">
-            <div className="flex items-center justify-between text-teal-700 font-bold text-xs mb-1">
+          <div className="mt-3.5 bg-gradient-to-br from-slate-50 via-teal-50/40 to-slate-50 rounded-2xl p-3 border border-teal-100/60">
+            <div className="flex items-center justify-between text-teal-700 font-bold text-xs mb-0.5">
               <span className="flex items-center gap-1.5">
-                <Store className="w-3.5 h-3.5" />
+                <Store className="w-3 h-3" />
                 <span>Coverage Toko</span>
               </span>
               <span className="text-xs font-black">{userCoveragePct}%</span>
             </div>
-            <p className="text-[10.5px] text-slate-500 mb-2 font-medium">
+            <p className="text-[10px] text-slate-500 mb-1.5 font-medium leading-tight">
               {visitedOwnedStoresCount} dari {totalOwnedStoresCount || 30} toko Anda telah dikunjungi.
             </p>
             <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
@@ -362,24 +362,24 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
           </div>
         </div>
 
-        {/* User Card & Logout Button: FIT SCREEN, ALWAYS VISIBLE */}
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0 mt-auto">
-          <div className="flex items-center gap-2.5 min-w-0 pr-1">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] text-white font-black text-xs flex items-center justify-center ring-2 ring-teal-100 uppercase shadow-soft-sm shrink-0">
+        {/* User Card & Logout Button: FIT SCREEN, ALWAYS VISIBLE WITHOUT SCROLL */}
+        <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between shrink-0 mt-auto">
+          <div className="flex items-center gap-2 min-w-0 pr-1">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] text-white font-black text-xs flex items-center justify-center uppercase shadow-soft-sm shrink-0">
               {user.name.substring(0, 2)}
             </div>
             <div className="min-w-0">
-              <h4 className="text-xs font-bold text-slate-800 truncate">{user.name}</h4>
-              <p className="text-[9.5px] text-slate-400 truncate">{user.role || 'Bestie FMCU'}</p>
+              <h4 className="text-[11.5px] font-bold text-slate-800 truncate leading-tight">{user.name}</h4>
+              <p className="text-[9px] text-slate-400 truncate leading-tight">{user.role || 'Bestie FMCU'}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onLogout}
             title="Keluar dari Akun (Logout)"
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200/70 hover:border-red-200 transition-all cursor-pointer shrink-0 shadow-2xs"
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200/70 hover:border-red-200 transition-all cursor-pointer shrink-0 shadow-2xs"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
       </aside>
@@ -409,16 +409,14 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               onBack={() => setActiveMenu('dashboard')}
             />
           ) : activeMenu === 'profile' ? (
-            /* Halaman Akun & Pengaturan Profil */
-            <div className="bg-white rounded-3xl p-5 shadow-soft-card border border-slate-100 max-w-2xl mx-auto">
-              <ProfileView
-                user={user}
-                medicinesCount={agendas.filter((a) => isSamePersonName(a.pic, fullName)).length}
-                onBack={() => setActiveMenu('dashboard')}
-                onLogout={onLogout}
-                onUpdateUser={onUpdateUser}
-              />
-            </div>
+            /* Halaman Akun & Pengaturan Profil Desktop (Lebar penuh, 2 kolom seimbang) */
+            <ProfileView
+              user={user}
+              medicinesCount={agendas.filter((a) => isSamePersonName(a.pic, fullName)).length}
+              onBack={() => setActiveMenu('dashboard')}
+              onLogout={onLogout}
+              onUpdateUser={onUpdateUser}
+            />
           ) : (
             /* Halaman Utama: Daily & Weekly Schedule */
             <>
@@ -712,127 +710,129 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
       </main>
 
       {/* =========================================================================
-          3. RIGHT SIDEBAR: AGENDA DETAIL INSPECTOR & ACTIONS
+          3. RIGHT SIDEBAR: AGENDA DETAIL INSPECTOR & ACTIONS (HANYA MUNCUL DI MENU DASHBOARD)
           ========================================================================= */}
-      <aside className="w-80 lg:w-[340px] xl:w-[360px] bg-white border-l border-slate-100 flex flex-col h-full p-5 overflow-y-auto z-20 flex-shrink-0">
-        {selectedAgenda ? (
-          <div className="flex-1 flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-3 shrink-0">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Detail Agenda
-              </span>
-              <span className="text-xs font-bold text-teal-600 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
-                {selectedAgenda.category}
-              </span>
-            </div>
-
-            {/* Title & Description */}
-            <h2 className="text-lg lg:text-xl font-black text-slate-900 tracking-tight leading-snug">
-              {selectedAgenda.title}
-            </h2>
-
-            <p className="text-xs text-slate-400 font-normal leading-relaxed mt-1.5">
-              {selectedAgenda.description || 'Tidak ada catatan tambahan untuk agenda ini.'}
-            </p>
-
-            {/* Info Badges */}
-            <div className="space-y-2 mt-4">
-              <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-                <Clock className="w-4 h-4 text-teal-600 shrink-0" />
-                <div className="text-xs font-bold text-slate-700">
-                  {selectedAgenda.date} • {selectedAgenda.time} WIB
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-                <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
-                <div className="text-xs font-bold text-slate-700 truncate">
-                  {selectedAgenda.location}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-                <UserIcon className="w-4 h-4 text-blue-600 shrink-0" />
-                <div className="text-xs font-bold text-slate-700">
-                  PIC: {selectedAgenda.pic || 'Belum Ditentukan'}
-                </div>
-              </div>
-            </div>
-
-            {/* Action 1: Tombol Rute Google Maps */}
-            <button
-              type="button"
-              onClick={() => {
-                const dest = selectedAgenda.location || selectedAgenda.title;
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`, '_blank');
-              }}
-              className="w-full py-2.5 px-3 rounded-2xl bg-teal-50 hover:bg-teal-100/90 text-teal-800 font-bold text-xs flex items-center justify-center gap-2 border border-teal-200 transition-all active:scale-95 cursor-pointer mt-3"
-            >
-              <Navigation className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-              <span>Rute ke Lokasi (Google Maps)</span>
-            </button>
-
-            {/* Action 2: Broadcast WhatsApp Action */}
-            <button
-              type="button"
-              onClick={() => handleShareWhatsApp(selectedAgenda)}
-              className="w-full py-2.5 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 border border-emerald-200 transition-all active:scale-95 cursor-pointer mt-2"
-              title="Kirim rincian agenda ke WhatsApp"
-            >
-              <Share2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Broadcast ke WhatsApp</span>
-            </button>
-
-            {/* Action 3: Tombol Buka Form Visit Report (Khusus Jadwal VISIT) */}
-            {selectedAgenda.category === 'VISIT' && (
-              <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
-                <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
-                  Formulir Kunjungan &amp; Laporan
+      {activeMenu === 'dashboard' && (
+        <aside className="w-80 lg:w-[320px] xl:w-[350px] bg-white border-l border-slate-100 flex flex-col h-full p-4 lg:p-5 overflow-y-auto z-20 shrink-0">
+          {selectedAgenda ? (
+            <div className="flex-1 flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Detail Agenda
                 </span>
-                <p className="text-[11px] text-slate-600 mb-2.5">
-                  Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
-                  className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>Buka Form Visit Report</span>
-                </button>
+                <span className="text-xs font-bold text-teal-600 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
+                  {selectedAgenda.category}
+                </span>
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
-            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
-              <CalendarIcon className="w-6 h-6" />
-            </div>
-            <h4 className="text-sm font-bold text-slate-800">Detail Agenda</h4>
-            <p className="text-xs text-slate-400 mt-1 max-w-[220px]">
-              Pilih salah satu agenda di daftar untuk melihat detail informasi operasional.
-            </p>
-          </div>
-        )}
 
-        {/* Footer info & Developer Credits: FIT & NEVER CLIPPED */}
-        <div className="mt-auto pt-4 border-t border-slate-100 shrink-0">
-          {/* Tombol Buat Agenda Baru (HANYA MUNCUL UNTUK ADMIN) */}
-          {user.isAdmin && (
-            <button
-              type="button"
-              onClick={onOpenNewAgenda}
-              className="w-full py-3 mb-2 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white font-bold text-xs shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>+ Buat Agenda Baru</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
+              {/* Title & Description */}
+              <h2 className="text-lg lg:text-xl font-black text-slate-900 tracking-tight leading-snug">
+                {selectedAgenda.title}
+              </h2>
+
+              <p className="text-xs text-slate-400 font-normal leading-relaxed mt-1.5">
+                {selectedAgenda.description || 'Tidak ada catatan tambahan untuk agenda ini.'}
+              </p>
+
+              {/* Info Badges */}
+              <div className="space-y-2 mt-4">
+                <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                  <Clock className="w-4 h-4 text-teal-600 shrink-0" />
+                  <div className="text-xs font-bold text-slate-700">
+                    {selectedAgenda.date} • {selectedAgenda.time} WIB
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                  <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
+                  <div className="text-xs font-bold text-slate-700 truncate">
+                    {selectedAgenda.location}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                  <UserIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                  <div className="text-xs font-bold text-slate-700">
+                    PIC: {selectedAgenda.pic || 'Belum Ditentukan'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action 1: Tombol Rute Google Maps */}
+              <button
+                type="button"
+                onClick={() => {
+                  const dest = selectedAgenda.location || selectedAgenda.title;
+                  window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`, '_blank');
+                }}
+                className="w-full py-2.5 px-3 rounded-2xl bg-teal-50 hover:bg-teal-100/90 text-teal-800 font-bold text-xs flex items-center justify-center gap-2 border border-teal-200 transition-all active:scale-95 cursor-pointer mt-3"
+              >
+                <Navigation className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                <span>Rute ke Lokasi (Google Maps)</span>
+              </button>
+
+              {/* Action 2: Broadcast WhatsApp Action */}
+              <button
+                type="button"
+                onClick={() => handleShareWhatsApp(selectedAgenda)}
+                className="w-full py-2.5 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 border border-emerald-200 transition-all active:scale-95 cursor-pointer mt-2"
+                title="Kirim rincian agenda ke WhatsApp"
+              >
+                <Share2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Broadcast ke WhatsApp</span>
+              </button>
+
+              {/* Action 3: Tombol Buka Form Visit Report (Khusus Jadwal VISIT) */}
+              {selectedAgenda.category === 'VISIT' && (
+                <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
+                  <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
+                    Formulir Kunjungan &amp; Laporan
+                  </span>
+                  <p className="text-[11px] text-slate-600 mb-2.5">
+                    Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
+                    className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>Buka Form Visit Report</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
+              <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
+                <CalendarIcon className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800">Detail Agenda</h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-[220px]">
+                Pilih salah satu agenda di daftar untuk melihat detail informasi operasional.
+              </p>
+            </div>
           )}
 
-          <DeveloperFooter className="text-center" />
-        </div>
-      </aside>
+          {/* Footer info & Developer Credits: FIT & NEVER CLIPPED */}
+          <div className="mt-auto pt-4 border-t border-slate-100 shrink-0">
+            {/* Tombol Buat Agenda Baru (HANYA MUNCUL UNTUK ADMIN) */}
+            {user.isAdmin && (
+              <button
+                type="button"
+                onClick={onOpenNewAgenda}
+                className="w-full py-3 mb-2 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white font-bold text-xs shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>+ Buat Agenda Baru</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+
+            <DeveloperFooter className="text-center" />
+          </div>
+        </aside>
+      )}
     </div>
   );
 };
