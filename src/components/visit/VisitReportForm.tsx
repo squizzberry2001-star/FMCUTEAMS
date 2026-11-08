@@ -3788,19 +3788,16 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       {/* ============================================================
           BOTTOM NAVBAR FORM VISIT (3 SECTION: INFO, OBSERVASI, BUKTI)
           Ala Glass iPhone dengan Smooth Sliding Lens Pill
-          Auto-Hide saat Scroll Down (Menciut instant lalu menghilang)
-          Auto-Appear saat Scroll Up
           ============================================================ */}
-      <div
-        className={`fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center z-40 select-none px-4 origin-bottom transition-all duration-300 ease-out transform ${
-          isScrolled
-            ? 'scale-0 opacity-0 pointer-events-none translate-y-10'
-            : 'scale-100 opacity-100 pointer-events-auto translate-y-0'
-        }`}
-      >
+      <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
         <div
           onClick={handleResetScale}
-          className="w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] iphone-glass-dock shadow-2xl"
+          style={{
+            transform: isScrolled ? 'scale(0.86)' : 'scale(1)',
+          }}
+          className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] ${
+            isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
+          }`}
         >
           {/* Top Specular Hairline Reflection */}
           <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-50 z-0" />
