@@ -137,7 +137,10 @@ function drawImageProportional(
 /**
  * Convert watermark image into pure white semi-transparent silhouette
  */
+let cachedWhiteWatermark: string | null = null;
+
 async function convertImageToWhiteTransparent(dataUrl: string, opacity: number = 0.38): Promise<string> {
+  if (cachedWhiteWatermark) return cachedWhiteWatermark;
   if (!dataUrl || !dataUrl.startsWith('data:image')) return dataUrl;
   return new Promise((resolve) => {
     try {
@@ -157,7 +160,9 @@ async function convertImageToWhiteTransparent(dataUrl: string, opacity: number =
         ctx.globalCompositeOperation = 'source-in';
         ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/png'));
+        const res = canvas.toDataURL('image/png');
+        cachedWhiteWatermark = res;
+        resolve(res);
       };
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;

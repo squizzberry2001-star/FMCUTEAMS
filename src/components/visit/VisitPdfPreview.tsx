@@ -38,12 +38,132 @@ interface VisitPdfPreviewProps {
   onSyncGdrive?: () => Promise<void> | void;
 }
 
-interface RenderedPdfPage {
+const PdfCanvasPage: React.FC<{
+  pdfDoc: any;
   pageNum: number;
-  dataUrl: string;
-  width: number;
-  height: number;
-}
+  totalPages: number;
+  scale: number;
+}> = ({ pdfDoc, pageNum, totalPages, scale }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isRendered, setIsRendered] = useState(false);
+  // Pages 1 and 2 start rasterizing immediately; subsequent pages load when scrolling near them
+  const [isVisible, setIsVisible] = useState(pageNum <= 2);
+  const renderTaskRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (pageNum <= 2) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsVisible(true);
+            observer.disconnect();
+          }
+        });
+      },
+      { rootMargin: '800px 0px 800px 0px' }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [pageNum]);
+
+  useEffect(() => {
+    if (!isVisible || !pdfDoc) return;
+    let isCancelled = false;
+
+    const renderPage = async () => {
+      try {
+        const page = await pdfDoc.getPage(pageNum);
+        if (isCancelled) return;
+
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) return;
+
+        if (renderTaskRef.current) {
+          try {
+            renderTaskRef.current.cancel();
+          } catch {}
+        }
+
+        const renderTask = page.render({ canvasContext: ctx, viewport });
+        renderTaskRef.current = renderTask;
+
+        await renderTask.promise;
+        if (!isCancelled) {
+          setIsRendered(true);
+        }
+      } catch (err: any) {
+        if (err?.name !== 'RenderingCancelledException') {
+          console.warn(`Render error on page ${pageNum}:`, err);
+        }
+      }
+    };
+
+    renderPage();
+
+    return () => {
+      isCancelled = true;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {}
+      }
+    };
+  }, [pdfDoc, pageNum, scale, isVisible]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden p-2.5 sm:p-4 transition hover:shadow-lg print:shadow-none print:border-none print:rounded-none print:p-0 print:m-0 print:h-screen print:page-break-after-always"
+    >
+      {/* Header card */}
+      <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-2 mb-2 border-b border-slate-100 print:hidden">
+        <span className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-teal-500" />
+          <span>
+            Halaman {pageNum} dari {totalPages}
+          </span>
+        </span>
+        <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+          Dokumen PDF Asli (16:9 Landscape)
+        </span>
+      </div>
+
+      {/* Direct Canvas Hardware-Accelerated Viewport */}
+      <div className="w-full bg-slate-50 rounded-xl overflow-hidden border border-slate-100 shadow-inner flex items-center justify-center relative min-h-[160px] sm:min-h-[240px] aspect-[16/9]">
+        {!isRendered && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-50/90 text-slate-400 z-10">
+            <div className="w-6 h-6 rounded-full border-2 border-teal-600 border-t-transparent animate-spin" />
+            <span className="text-[11px] font-bold text-slate-500">Menampilkan Hal {pageNum}...</span>
+          </div>
+        )}
+        <canvas
+          ref={canvasRef}
+          className={`w-full h-auto object-contain select-none pointer-events-none transition-opacity duration-200 ${
+            isRendered ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      </div>
+    </div>
+  );
+};
 
 export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   data,
@@ -58,10 +178,12 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   const [, setSyncResult] = useState<GDriveSyncResult | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
-  // Real PDF Rendering State
+  // Real PDF Rendering State (Instant Direct Canvas)
   const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(true);
   const [loadingProgressText, setLoadingProgressText] = useState<string>('Menyusun Dokumen PDF Asli...');
-  const [renderedPages, setRenderedPages] = useState<RenderedPdfPage[]>([]);
+  const [pdfDocInstance, setPdfDocInstance] = useState<any>(null);
+  const [totalPagesCount, setTotalPagesCount] = useState<number>(0);
+  const [pdfScale, setPdfScale] = useState<number>(1.25);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [useIframeFallback, setUseIframeFallback] = useState<boolean>(false);
   const [refreshKey, setRefreshKey] = useState<number>(0);
@@ -121,33 +243,48 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
     }, 3500);
   };
 
-  // Helper to load pdfjs from CDN
+  // Helper to load pdfjs from local assets with CDN fallback
   const getOrLoadPdfJs = async (): Promise<any> => {
     if ((window as any).pdfjsLib) {
       const lib = (window as any).pdfjsLib;
       if (!lib.GlobalWorkerOptions?.workerSrc) {
         lib.GlobalWorkerOptions = lib.GlobalWorkerOptions || {};
-        lib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        lib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.js';
       }
       return lib;
     }
 
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.src = '/assets/pdf.min.js';
       script.onload = () => {
         const lib = (window as any).pdfjsLib;
         if (lib) {
           lib.GlobalWorkerOptions = lib.GlobalWorkerOptions || {};
-          lib.GlobalWorkerOptions.workerSrc =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          lib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.js';
           resolve(lib);
         } else {
           reject(new Error('pdfjsLib tidak terdefinisi'));
         }
       };
-      script.onerror = () => reject(new Error('Gagal memuat pustaka PDF.js'));
+      script.onerror = () => {
+        // Fallback to CDN if local asset is not available
+        const cdnScript = document.createElement('script');
+        cdnScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        cdnScript.onload = () => {
+          const lib = (window as any).pdfjsLib;
+          if (lib) {
+            lib.GlobalWorkerOptions = lib.GlobalWorkerOptions || {};
+            lib.GlobalWorkerOptions.workerSrc =
+              'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            resolve(lib);
+          } else {
+            reject(new Error('pdfjsLib CDN fallback gagal'));
+          }
+        };
+        cdnScript.onerror = () => reject(new Error('Gagal memuat pustaka PDF.js'));
+        document.head.appendChild(cdnScript);
+      };
       document.head.appendChild(script);
     });
   };
@@ -166,71 +303,37 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
         const doc = await generatePdfDoc(data);
         if (isCancelled || renderGenerationRef.current !== currentGen) return;
 
-        // 2. Output Blob URL for download & fallback viewer
-        const blob = doc.output('blob');
+        // 2. Output ArrayBuffer once (instant blob creation, avoiding double serialization)
+        const arrayBuffer = doc.output('arraybuffer');
+        const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
         const bUrl = URL.createObjectURL(blob);
         setPdfBlobUrl(bUrl);
 
-        // 3. Try to render each page via PDF.js on high-res Canvas
-        setLoadingProgressText('Merender seluruh halaman PDF asli...');
+        // 3. Load PDF.js engine for instant hardware-accelerated canvas rendering
+        setLoadingProgressText('Merender seluruh halaman PDF...');
         try {
           const pdfjs = await getOrLoadPdfJs();
           if (isCancelled || renderGenerationRef.current !== currentGen) return;
 
-          const arrayBuffer = doc.output('arraybuffer');
           const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
-          const pdfDoc = await loadingTask.promise;
+          const loadedPdf = await loadingTask.promise;
           if (isCancelled || renderGenerationRef.current !== currentGen) return;
 
-          const totalPages = pdfDoc.numPages;
-          const pages: RenderedPdfPage[] = [];
+          const count = loadedPdf.numPages;
+          setPdfDocInstance(loadedPdf);
+          setTotalPagesCount(count);
 
-          // Render with optimized scale for fast mobile performance & sharpness
           const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-          const targetScale = isMobile ? 1.15 : 1.5;
+          setPdfScale(isMobile ? 1.05 : 1.4);
 
-          for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            if (isCancelled || renderGenerationRef.current !== currentGen) return;
-            setLoadingProgressText(`Memuat halaman ${pageNum} dari ${totalPages}...`);
-
-            const page = await pdfDoc.getPage(pageNum);
-            const viewport = page.getViewport({ scale: targetScale });
-
-            const canvas = document.createElement('canvas');
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-
-            const ctx = canvas.getContext('2d', { alpha: false });
-            if (ctx) {
-              await page.render({ canvasContext: ctx, viewport }).promise;
-              const dataUrl = canvas.toDataURL('image/jpeg', isMobile ? 0.88 : 0.92);
-              const newPage: RenderedPdfPage = {
-                pageNum,
-                dataUrl,
-                width: viewport.width,
-                height: viewport.height,
-              };
-              pages.push(newPage);
-
-              // PROGRESSIVE STREAMING: Langsung tampilkan per halaman tanpa menunggu loop selesai
-              if (!isCancelled && renderGenerationRef.current === currentGen) {
-                setRenderedPages([...pages]);
-                if (pageNum === 1) {
-                  setIsLoadingPdf(false); // Langsung tampilkan halaman 1 dalam hitungan milidetik!
-                }
-              }
-            }
-          }
-
-          if (!isCancelled && renderGenerationRef.current === currentGen) {
-            setRenderedPages([...pages]);
-            setIsLoadingPdf(false);
-            setUseIframeFallback(false);
-          }
+          // INSTANT DISPLAY: Langsung matikan loading spinner, semua halaman langsung tampil!
+          setIsLoadingPdf(false);
+          setUseIframeFallback(false);
         } catch (pdfJsErr) {
           console.warn('PDF.js rendering fallback to native iframe viewer:', pdfJsErr);
           if (!isCancelled && renderGenerationRef.current === currentGen) {
             setUseIframeFallback(true);
+            setIsLoadingPdf(false);
           }
         }
       } catch (err) {
@@ -483,7 +586,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="px-3 py-1 rounded-lg bg-teal-800/80 text-teal-200 text-xs font-black border border-teal-600/60 shadow-xs">
-              {renderedPages.length > 0 ? `${renderedPages.length} Halaman (16:9 Landscape)` : '16:9 Landscape'}
+              {totalPagesCount > 0 ? `${totalPagesCount} Halaman (16:9 Landscape)` : '16:9 Landscape'}
             </span>
           </div>
         </div>
@@ -506,7 +609,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
         {/* ================================================================== */}
         {/* CONTINUOUS REAL PDF PAGES STREAM (SEMUA HALAMAN DENGAN PINCH ZOOM) */}
         {/* ================================================================== */}
-        {!isLoadingPdf && !useIframeFallback && renderedPages.length > 0 && (
+        {!isLoadingPdf && !useIframeFallback && pdfDocInstance && totalPagesCount > 0 && (
           <div
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -517,46 +620,26 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
             <div
               style={{
                 transform: `scale(${zoomScale})`,
-                transformOrigin: 'top center',
+                transformOrigin: zoomScale > 1 ? 'top left' : 'top center',
                 transition: isPinchingRef.current ? 'none' : 'transform 0.15s ease-out',
               }}
               className="space-y-6 max-w-5xl mx-auto w-full transition-transform"
             >
-              {renderedPages.map((page) => (
-                <div
-                  key={page.pageNum}
-                  className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden p-2.5 sm:p-4 transition hover:shadow-lg print:shadow-none print:border-none print:rounded-none print:p-0 print:m-0 print:h-screen print:page-break-after-always"
-                >
-                  {/* Header card */}
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-2 mb-2 border-b border-slate-100 print:hidden">
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-teal-500" />
-                      <span>
-                        Halaman {page.pageNum} dari {renderedPages.length}
-                      </span>
-                    </span>
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                      Dokumen PDF Asli (16:9 Landscape)
-                    </span>
-                  </div>
-
-                  {/* Rendered PDF Page Image */}
-                  <div className="w-full bg-slate-50 rounded-xl overflow-hidden border border-slate-100 shadow-inner flex items-center justify-center">
-                    <img
-                      src={page.dataUrl}
-                      alt={`Halaman PDF ${page.pageNum}`}
-                      className="w-full h-auto object-contain select-none pointer-events-none"
-                      loading="lazy"
-                    />
-                  </div>
-                </div>
+              {Array.from({ length: totalPagesCount }, (_, i) => i + 1).map((pageNum) => (
+                <PdfCanvasPage
+                  key={pageNum}
+                  pdfDoc={pdfDocInstance}
+                  pageNum={pageNum}
+                  totalPages={totalPagesCount}
+                  scale={pdfScale}
+                />
               ))}
             </div>
           </div>
         )}
 
         {/* Floating Zoom Controls Bar (Pinch-to-zoom & Mouse Wheel Indicator) */}
-        {!isLoadingPdf && renderedPages.length > 0 && (
+        {!isLoadingPdf && totalPagesCount > 0 && (
           <div className="fixed bottom-6 right-6 z-40 bg-slate-900/90 backdrop-blur-xl border border-white/20 text-white rounded-full p-1.5 shadow-2xl flex items-center gap-1 select-none print:hidden">
             <button
               type="button"
@@ -586,7 +669,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
         )}
 
         {/* Fallback Native PDF Viewer (Iframe) */}
-        {!isLoadingPdf && (useIframeFallback || renderedPages.length === 0) && pdfBlobUrl && (
+        {!isLoadingPdf && (useIframeFallback || totalPagesCount === 0) && pdfBlobUrl && (
           <div className="bg-white rounded-3xl p-3 shadow-2xl border border-slate-200 overflow-hidden">
             <div className="flex items-center justify-between text-xs font-bold text-slate-600 p-2 border-b border-slate-100 mb-2">
               <span>Viewer PDF Bawaan (Semua Halaman)</span>
