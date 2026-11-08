@@ -10,6 +10,7 @@ import {
 import { ScheduleAgenda, User } from '../types';
 import { DeveloperFooter } from './DeveloperFooter';
 import { isSamePersonName } from '../data/masterStoresData';
+import { getMondayOfWeek } from '../services/scheduleExcelService';
 
 interface CalendarScheduleViewProps {
   user?: User | null;
@@ -37,8 +38,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
     return `${yyyy}-${mm}-${dd}`;
   });
 
-  // Tab: 'selected' (Tanggal Ini) | 'allTeam' (Semua Tim - menggantikan Sebelum & Sesudah)
-  const [timelineTab, setTimelineTab] = useState<'selected' | 'allTeam'>('selected');
+  // Tab: 'selected' (Tanggal Ini) | 'allTeam' (Semua Tim) | 'fullWeek' (1 Minggu Penuh)
+  const [timelineTab, setTimelineTab] = useState<'selected' | 'allTeam' | 'fullWeek'>('selected');
   const [nameFilter, setNameFilter] = useState<string>('');
   const [selectedPersonDropdown, setSelectedPersonDropdown] = useState<string>('ALL');
 
@@ -50,6 +51,20 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
+  const shortMonthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+  ];
+  const shortDayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+  const formatShortDayDate = (dateYmd: string) => {
+    const dt = new Date(dateYmd + 'T00:00:00');
+    if (isNaN(dt.getTime())) return dateYmd;
+    const dayLabel = shortDayNames[dt.getDay()];
+    const dd = String(dt.getDate()).padStart(2, '0');
+    const mon = shortMonthNames[dt.getMonth()];
+    return `${dayLabel}, ${dd} ${mon}`;
+  };
 
   // Hitung hari pertama bulan & total hari (Senin = 0 ... Minggu = 6)
   const firstDayIndex = new Date(year, month, 1).getDay();
@@ -107,9 +122,65 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
     return mine.length > 0 ? mine : allTeamAgendasOnDate;
   }, [allTeamAgendasOnDate, fullName, user?.isAdmin]);
 
-  // List aktif sesuai tab ('selected' vs 'allTeam') + Filter by Nama + Urut A-Z Nama Tim
+  // Rentang 1 Minggu Penuh (Senin s/d Minggu) berdasarkan tanggal yang dipilih
+  // Jika tanggal terpilih berada di hari Minggu & minggu kalender berjalan kosong, otomatis gunakan minggu aktif berikutnya
+  const { weekStartStr, weekEndStr } = useMemo(() => {
+    const toYmd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate()
+      ).padStart(2, '0')}`;
+
+    const selDate = new Date(selectedDateStr + 'T00:00:00');
+    const day = selDate.getDay(); // 0 = Min, 1 = Sen, ...
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const calMon = new Date(selDate);
+    calMon.setDate(selDate.getDate() + diffToMon);
+    const calSun = new Date(calMon);
+    calSun.setDate(calMon.getDate() + 6);
+
+    const calStart = toYmd(calMon);
+    const calEnd = toYmd(calSun);
+
+    const hasInCalWeek = agendas.some((a) => a.date >= calStart && a.date <= calEnd);
+    if (hasInCalWeek) {
+      return { weekStartStr: calStart, weekEndStr: calEnd };
+    }
+
+    // Fallback ke aturan minggu berjalan (getMondayOfWeek)
+    const fallbackMonStr = getMondayOfWeek(selectedDateStr);
+    const fbMon = new Date(fallbackMonStr + 'T00:00:00');
+    const fbSun = new Date(fbMon);
+    fbSun.setDate(fbMon.getDate() + 6);
+    const fbEnd = toYmd(fbSun);
+
+    const hasInFbWeek = agendas.some((a) => a.date >= fallbackMonStr && a.date <= fbEnd);
+    if (hasInFbWeek) {
+      return { weekStartStr: fallbackMonStr, weekEndStr: fbEnd };
+    }
+
+    return { weekStartStr: calStart, weekEndStr: calEnd };
+  }, [selectedDateStr, agendas]);
+
+  // Semua agenda dalam 1 Minggu Penuh (Senin s/d Minggu)
+  const fullWeekAgendas = useMemo(() => {
+    return agendas
+      .filter((a) => a.date >= weekStartStr && a.date <= weekEndStr)
+      .sort(
+        (a, b) =>
+          (a.pic || '').localeCompare(b.pic || '', 'id', { sensitivity: 'base' }) ||
+          (a.date || '').localeCompare(b.date || '') ||
+          (a.time || '').localeCompare(b.time || '')
+      );
+  }, [agendas, weekStartStr, weekEndStr]);
+
+  // List aktif sesuai tab ('selected' | 'allTeam' | 'fullWeek') + Filter by Nama + Urut A-Z Nama Tim
   const displayedAgendas = useMemo(() => {
-    const baseList = timelineTab === 'allTeam' ? allTeamAgendasOnDate : mySelectedDayAgendas;
+    const baseList =
+      timelineTab === 'fullWeek'
+        ? fullWeekAgendas
+        : timelineTab === 'allTeam'
+        ? allTeamAgendasOnDate
+        : mySelectedDayAgendas;
     const q = nameFilter.trim().toLowerCase();
 
     return baseList
@@ -130,9 +201,34 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
       .sort(
         (a, b) =>
           (a.pic || '').localeCompare(b.pic || '', 'id', { sensitivity: 'base' }) ||
+          (a.date || '').localeCompare(b.date || '') ||
           (a.time || '').localeCompare(b.time || '')
       );
-  }, [timelineTab, allTeamAgendasOnDate, mySelectedDayAgendas, nameFilter, selectedPersonDropdown]);
+  }, [timelineTab, fullWeekAgendas, allTeamAgendasOnDate, mySelectedDayAgendas, nameFilter, selectedPersonDropdown]);
+
+  // Pengelompokan per Nama Tim (A-Z) khusus untuk tampilan 1 Minggu Penuh:
+  // Visual Nama di atas, lalu di bawahnya semua agendanya dalam 1 minggu berurutan sampai bawah
+  const groupedFullWeekByPerson = useMemo(() => {
+    const groupsMap = new Map<string, ScheduleAgenda[]>();
+    for (const item of displayedAgendas) {
+      const picName = (item.pic || 'Tanpa Nama').trim();
+      if (!groupsMap.has(picName)) {
+        groupsMap.set(picName, []);
+      }
+      groupsMap.get(picName)!.push(item);
+    }
+
+    return Array.from(groupsMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'id', { sensitivity: 'base' }))
+      .map(([picName, items]) => ({
+        picName,
+        items: items.sort(
+          (x, y) =>
+            (x.date || '').localeCompare(y.date || '') ||
+            (x.time || '').localeCompare(y.time || '')
+        ),
+      }));
+  }, [displayedAgendas]);
 
   return (
     <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full select-none">
@@ -206,6 +302,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
             const dateStr = `${year}-${dayMonthStr}-${dayNumStr}`;
 
             const isSelected = dateStr === selectedDateStr;
+            const isInActiveFullWeek =
+              timelineTab === 'fullWeek' && dateStr >= weekStartStr && dateStr <= weekEndStr;
             const hasAgenda = agendaDateSet.has(dateStr);
             const isToday = dateStr === todayStr;
 
@@ -216,6 +314,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                 className={`relative py-2.5 rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-gradient-to-b from-[#FF7E98] to-[#FF5376] text-white font-bold shadow-pill-coral scale-105 z-10'
+                    : isInActiveFullWeek
+                    ? 'bg-teal-50/90 text-teal-900 font-bold border border-teal-200/80'
                     : isToday
                     ? 'bg-teal-50 text-teal-800 font-bold border border-teal-200'
                     : 'text-slate-700 font-semibold hover:bg-slate-50'
@@ -235,12 +335,12 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         </div>
       </div>
 
-      {/* Tab Filter: Tanggal Ini & Semua Tim (Tombol Sebelum & Sesudah Dihapuskan) */}
-      <div className="flex items-center gap-2 mb-2.5 bg-slate-100/80 p-1 rounded-2xl">
+      {/* Tab Filter: Tanggal Ini, Semua Tim, & 1 Minggu Penuh */}
+      <div className="flex items-center gap-1.5 mb-2.5 bg-slate-100/80 p-1 rounded-2xl">
         <button
           type="button"
           onClick={() => setTimelineTab('selected')}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer truncate ${
             timelineTab === 'selected' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'
           }`}
         >
@@ -249,13 +349,34 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         <button
           type="button"
           onClick={() => setTimelineTab('allTeam')}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer truncate ${
             timelineTab === 'allTeam' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'
           }`}
         >
           Semua Tim ({allTeamAgendasOnDate.length})
         </button>
+        <button
+          type="button"
+          onClick={() => setTimelineTab('fullWeek')}
+          className={`flex-1 py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer truncate ${
+            timelineTab === 'fullWeek' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'
+          }`}
+        >
+          1 Minggu ({fullWeekAgendas.length})
+        </button>
       </div>
+
+      {/* Info rentang tanggal saat tab 1 Minggu Penuh aktif */}
+      {timelineTab === 'fullWeek' && (
+        <div className="flex items-center justify-between px-1.5 mb-2">
+          <span className="text-[10px] font-bold text-teal-700">
+            Jadwal 1 Minggu Penuh: {formatShortDayDate(weekStartStr)} – {formatShortDayDate(weekEndStr)}
+          </span>
+          <span className="text-[10px] font-light text-slate-500">
+            {groupedFullWeekByPerson.length} personel
+          </span>
+        </div>
+      )}
 
       {/* Fitur Filter by Nama (Minimalist Search + Pilihan Nama A-Z) */}
       <div className="flex items-center gap-2 mb-3">
@@ -302,7 +423,9 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         {displayedAgendas.length === 0 ? (
           <div className="py-6 text-center">
             <p className="text-slate-400 text-[11px] font-light">
-              Tidak ada jadwal yang cocok pada tanggal {selectedDateStr}.
+              {timelineTab === 'fullWeek'
+                ? `Tidak ada jadwal yang cocok pada minggu ${formatShortDayDate(weekStartStr)} – ${formatShortDayDate(weekEndStr)}.`
+                : `Tidak ada jadwal yang cocok pada tanggal ${selectedDateStr}.`}
             </p>
             {onOpenNewAgenda && (
               <button
@@ -313,6 +436,48 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                 + Buat Agenda Tanggal Ini
               </button>
             )}
+          </div>
+        ) : timelineTab === 'fullWeek' ? (
+          /* Tampilan 1 Minggu Penuh: Visual Nama Kecil Bold, lalu dilanjut di bawahnya semua agendanya dalam 1 minggu sampai bawah */
+          <div className="divide-y divide-slate-200/70">
+            {groupedFullWeekByPerson.map((group) => (
+              <div key={group.picName} className="py-2.5 px-1">
+                {/* Visual Nama Kecil Bold */}
+                <p className="text-[11px] font-bold text-slate-900 leading-tight mb-1">
+                  {group.picName}
+                </p>
+
+                {/* Di bawahnya semua agendanya dalam satu minggu penuh */}
+                <div className="space-y-0.5 pl-2 border-l border-slate-200/80">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onSelectAgenda && onSelectAgenda(item)}
+                      className="w-full text-left py-1 px-1.5 rounded-lg hover:bg-slate-100/70 active:bg-slate-100 transition-colors flex items-start justify-between gap-2 cursor-pointer"
+                    >
+                      <p className="text-[11px] font-light text-slate-600 leading-snug min-w-0 flex-1">
+                        <span className="font-normal text-slate-500">
+                          {formatShortDayDate(item.date)} •{' '}
+                        </span>
+                        <span>
+                          {item.title}
+                          {item.location &&
+                          item.location !== 'OFF / LIBUR' &&
+                          !item.title.toLowerCase().includes(item.location.toLowerCase())
+                            ? ` — ${item.location}`
+                            : ''}
+                        </span>
+                      </p>
+
+                      <span className="text-[9px] font-light text-slate-400 shrink-0 tabular-nums pt-0.5">
+                        {item.category === 'OFF' ? 'OFF' : item.time}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="divide-y divide-slate-200/60">
