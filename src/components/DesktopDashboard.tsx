@@ -25,7 +25,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
-import { CalendarStrip } from './CalendarStrip';
+import { CalendarStrip, CalendarFocusTrigger } from './CalendarStrip';
 import { DeveloperFooter } from './DeveloperFooter';
 import { ScheduleCard } from './ScheduleCard';
 import { isSamePersonName } from '../data/masterStoresData';
@@ -44,6 +44,7 @@ interface DesktopDashboardProps {
   onSelectAgenda: (agenda: ScheduleAgenda) => void;
   onOpenNewAgenda: () => void;
   onOpenExcelUpload?: () => void;
+  onOpenLiveMaps?: () => void;
   onOpenVisitForm?: (agenda: ScheduleAgenda) => void;
   onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
@@ -59,11 +60,16 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   onSelectAgenda,
   onOpenNewAgenda,
   onOpenExcelUpload,
+  onOpenLiveMaps,
   onOpenVisitForm,
   onLogout,
   onOpenAdminPortal,
 }) => {
-  const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'Month'>('Today');
+  const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'AllTeam'>('Today');
+  const [calendarFocus, setCalendarFocus] = useState<CalendarFocusTrigger>({
+    mode: 'today',
+    ts: Date.now(),
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenu, setActiveMenu] = useState('dashboard');
 
@@ -109,6 +115,24 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   const weekEndStr = activeWeekDays[activeWeekDays.length - 1]?.dateStr || currentWeekMonday;
   const isCurrentRunningWeek = currentWeekMonday === getMondayOfWeek();
 
+  const getTodayYmd = () => {
+    const dt = new Date();
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(
+      dt.getDate()
+    ).padStart(2, '0')}`;
+  };
+
+  const handleSelectPeriodTab = (period: 'Today' | 'Week' | 'AllTeam') => {
+    setSelectedPeriod(period);
+    const todayStr = getTodayYmd();
+    if (period === 'Today') {
+      onSelectDate(todayStr);
+      setCalendarFocus({ mode: 'today', ts: Date.now() });
+    } else if (period === 'Week') {
+      setCalendarFocus({ mode: 'week', ts: Date.now() });
+    }
+  };
+
   const filteredAgendas = agendas.filter((item) => {
     const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -117,14 +141,19 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
 
     if (!matchesSearch) return false;
 
+    const isMyAgenda =
+      !item.pic ||
+      isSamePersonName(item.pic, fullName) ||
+      item.pic.toLowerCase().includes(fullName.toLowerCase());
+
     if (selectedPeriod === 'Today') {
-      return item.date === selectedDate;
+      return isMyAgenda && item.date === selectedDate;
     }
     if (selectedPeriod === 'Week') {
-      // Auto Default hanya fokus pada minggu yang berjalan (atau minggu yang sedang dipilih navigasi)
-      return item.date >= weekStartStr && item.date <= weekEndStr;
+      return isMyAgenda && item.date >= weekStartStr && item.date <= weekEndStr;
     }
-    return true;
+    // 'AllTeam'
+    return item.date === selectedDate;
   });
 
   const completedCount = agendas.filter((a) => a.completed).length;
@@ -265,6 +294,19 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               />
             </div>
 
+            {/* Live Maps Button */}
+            {onOpenLiveMaps && (
+              <button
+                type="button"
+                onClick={onOpenLiveMaps}
+                className="w-10 h-10 rounded-full bg-[#EAF8F2] flex items-center justify-center text-teal-700 shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative cursor-pointer"
+                title="Buka Live Maps Pinpoint & Rute Toko"
+              >
+                <MapPin className="w-5 h-5" />
+                <span className="w-2 h-2 rounded-full bg-emerald-500 absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
+              </button>
+            )}
+
             {/* Notification Bell */}
             <button
               onClick={() => alert(`Notifikasi: Ada ${filteredAgendas.length} agenda terjadwal.`)}
@@ -357,32 +399,33 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
           </div>
         </div>
 
-        {/* Section 1 Item 2: Horizontal Calendar Strip (Senin - Minggu Actual Dates) */}
+        {/* Section 1 Item 2: Horizontal Calendar Strip */}
         <div className="bg-white rounded-[28px] p-5 shadow-soft-card mb-7">
           <div className="flex items-center justify-between mb-3 px-1">
             <h3 className="text-sm font-bold text-slate-800">Kalender Mingguan</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-teal-800 bg-teal-50 px-3 py-1 rounded-full border border-teal-200/80 flex items-center gap-1.5">
-                <CalendarIcon className="w-3.5 h-3.5 text-teal-600" />
-                <span>{currentMonthYear}</span>
-              </span>
-              <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                Terpilih: {selectedDate}
-              </span>
-            </div>
+            <span className="text-xs font-bold text-teal-800 bg-teal-50 px-3 py-1 rounded-full border border-teal-200/80 flex items-center gap-1.5">
+              <CalendarIcon className="w-3.5 h-3.5 text-teal-600" />
+              <span>{currentMonthYear}</span>
+            </span>
           </div>
-          <CalendarStrip selectedDate={selectedDate} onSelectDate={onSelectDate} baseDate={currentWeekMonday} />
+          <CalendarStrip
+            selectedDate={selectedDate}
+            onSelectDate={onSelectDate}
+            baseDate={currentWeekMonday}
+            focusTrigger={calendarFocus}
+          />
         </div>
 
-        {/* Period Filter Tabs & Sub Section "Semua Agenda" Week Navigator */}
+        {/* Period Filter Tabs (Hari Ini, Minggu Ini, Semua Tim) */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-6 px-1">
-            {(['Today', 'Week', 'Month'] as const).map((period) => {
+            {(['Today', 'Week', 'AllTeam'] as const).map((period) => {
               const isActive = selectedPeriod === period;
               return (
                 <button
                   key={period}
-                  onClick={() => setSelectedPeriod(period)}
+                  type="button"
+                  onClick={() => handleSelectPeriodTab(period)}
                   className="relative pb-1.5 transition-colors cursor-pointer"
                 >
                   <span
@@ -390,7 +433,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                       isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
                     }`}
                   >
-                    {period === 'Today' ? 'Hari Ini' : period === 'Week' ? 'Minggu Ini' : 'Bulan Ini'}
+                    {period === 'Today' ? 'Hari Ini' : period === 'Week' ? 'Minggu Ini' : 'Semua Tim'}
                   </span>
                   {isActive && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-[#4E80EE] rounded-full" />

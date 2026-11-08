@@ -8,6 +8,7 @@ import { HistoryView } from './components/HistoryView';
 import { ProfileView } from './components/ProfileView';
 import { NewAgendaModal } from './components/NewAgendaModal';
 import { ExcelScheduleUploadModal } from './components/ExcelScheduleUploadModal';
+import { LiveStoreMapsModal } from './components/LiveStoreMapsModal';
 import { AgendaDetailView } from './components/AgendaDetailView';
 import { LoginPage } from './components/LoginPage';
 import { SplashScreen } from './components/SplashScreen';
@@ -192,9 +193,10 @@ export const App: React.FC = () => {
   // Screen routing: 'main' (normal tabs), 'detail' (agenda detail), 'visit-form' (UI/UX Form Visit)
   const [mobileScreen, setMobileScreen] = useState<'main' | 'detail' | 'visit-form'>('main');
 
-  // Modal State for New Agenda & Excel Schedule Upload
+  // Modal State for New Agenda, Excel Schedule Upload & Live Maps
   const [showNewAgendaModal, setShowNewAgendaModal] = useState(false);
   const [showExcelUploadModal, setShowExcelUploadModal] = useState(false);
+  const [showLiveMapsModal, setShowLiveMapsModal] = useState(false);
 
   // Forced layout override (auto / desktop / mobile) for testing on PC
   const [layoutMode, setLayoutMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
@@ -468,8 +470,18 @@ export const App: React.FC = () => {
             onAddUser={handleAddUser}
             onResetUserPassword={handleResetUserPassword}
             onReplaySplash={() => setShowSplash(true)}
+            onOpenLiveMaps={() => setShowLiveMapsModal(true)}
           />
         </Suspense>
+        <LiveStoreMapsModal
+          isOpen={showLiveMapsModal}
+          onClose={() => setShowLiveMapsModal(false)}
+          currentUser={user}
+          users={users}
+          agendas={agendas}
+          selectedDate={selectedDate}
+          onSelectAgenda={handleSelectAgenda}
+        />
       </>
     );
   }
@@ -599,6 +611,7 @@ export const App: React.FC = () => {
                   onSelectAgenda={handleSelectAgenda}
                   onOpenNewAgenda={() => setShowNewAgendaModal(true)}
                   onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
+                  onOpenLiveMaps={() => setShowLiveMapsModal(true)}
                   onOpenCalendar={() => setMobileTab('calendar')}
                   onOpenHistory={() => setMobileTab('history')}
                   onOpenProfile={() => setMobileTab('profile')}
@@ -621,7 +634,10 @@ export const App: React.FC = () => {
               {/* Section 3: Coverage Store & History Aktivitas (Full halaman tanpa navbar) */}
               {mobileTab === 'history' && (
                 <HistoryView
+                  user={user}
+                  agendas={agendas}
                   onBack={() => setMobileTab('home')}
+                  onSelectAgenda={handleSelectAgenda}
                 />
               )}
 
@@ -651,6 +667,7 @@ export const App: React.FC = () => {
             onSelectAgenda={handleSelectAgenda}
             onOpenNewAgenda={() => setShowNewAgendaModal(true)}
             onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
+            onOpenLiveMaps={() => setShowLiveMapsModal(true)}
             onOpenVisitForm={(agenda) => {
               if (user?.isAdmin || isSamePersonName(agenda.pic, user?.name)) {
                 setSelectedAgenda(agenda);
@@ -686,6 +703,17 @@ export const App: React.FC = () => {
           }}
         />
       )}
+
+      {/* Live Store Maps Modal (User & Admin Mode) */}
+      <LiveStoreMapsModal
+        isOpen={showLiveMapsModal}
+        onClose={() => setShowLiveMapsModal(false)}
+        currentUser={user}
+        users={users}
+        agendas={agendas}
+        selectedDate={selectedDate}
+        onSelectAgenda={handleSelectAgenda}
+      />
     </div>
     </>
   );

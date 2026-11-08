@@ -73,6 +73,7 @@ interface AdminPortalProps {
   onAddUser?: (newUser: User) => void;
   onResetUserPassword?: (userName: string) => void;
   onReplaySplash?: () => void;
+  onOpenLiveMaps?: () => void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
@@ -86,6 +87,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onSwitchToUserView,
   onLogout,
   onReplaySplash,
+  onOpenLiveMaps,
 }) => {
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<
@@ -839,6 +841,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             >
               <Sparkles className="w-4 h-4 text-teal-600" />
               <span>Animasi Splash</span>
+            </button>
+          )}
+
+          {onOpenLiveMaps && (
+            <button
+              onClick={onOpenLiveMaps}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#00A389] to-[#007F6B] hover:from-[#008F78] hover:to-[#006B5A] text-white text-xs font-extrabold transition-all shadow-sm active:scale-95 cursor-pointer"
+              title="Buka Live Maps Admin (Pinpoint User, Pinpoint Toko, Radius & Rute)"
+            >
+              <MapPin className="w-4 h-4" />
+              <span className="hidden sm:inline">Live Maps & Radar</span>
+              <span className="sm:hidden">Maps</span>
             </button>
           )}
 
