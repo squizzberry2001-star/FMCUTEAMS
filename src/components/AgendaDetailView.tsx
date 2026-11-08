@@ -19,6 +19,8 @@ import {
   CheckCircle2,
   LogIn,
   LogOut,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory, User } from '../types';
 import {
@@ -115,6 +117,16 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const [leafletReady, setLeafletReady] = useState(false);
+  const [isMapFullScreen, setIsMapFullScreen] = useState(false);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    mapInstanceRef.current.invalidateSize();
+    const timer = setTimeout(() => {
+      mapInstanceRef.current?.invalidateSize();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isMapFullScreen]);
 
   // Resolve store geo point(s) (Lat, Lng, Altitude) from Master Data Store
   const matchedGeoPoints = useMemo(() => resolveAgendaGeoPoints(agenda), [agenda]);
@@ -406,20 +418,49 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
       </div>
 
       {/* 3. Middle Section:
-          - JIKA VISIT: Tampilkan Peta Interaktif Pinpoint Toko
+          - JIKA VISIT: Tampilkan Peta Interaktif Pinpoint Toko (Dengan Fitur Mode Fullscreen)
           - JIKA BUKAN VISIT: Tidak menampilkan Maps (Tampilkan Detail Catatan & Tag Agenda) */}
       {isVisitAgenda ? (
-        <div className="flex-1 min-h-[155px] bg-white rounded-3xl p-2.5 shadow-soft-card border border-slate-100 flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-1 mb-1.5 shrink-0">
+        <div
+          className={
+            isMapFullScreen
+              ? 'fixed inset-0 z-[9999] bg-white p-3 sm:p-4 flex flex-col overflow-hidden animate-fadeIn'
+              : 'flex-1 min-h-[155px] bg-white rounded-3xl p-2.5 shadow-soft-card border border-slate-100 flex flex-col overflow-hidden'
+          }
+        >
+          <div className="flex items-center justify-between px-1 mb-1.5 shrink-0 gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider truncate">
+              <span className="text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider truncate">
                 Pinpoint Toko: {primaryGeoPoint.name}
               </span>
+              <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100 shrink-0">
+                {primaryGeoPoint.city}
+              </span>
             </div>
-            <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100 shrink-0">
-              {primaryGeoPoint.city}
-            </span>
+
+            <button
+              type="button"
+              onClick={() => setIsMapFullScreen((v) => !v)}
+              className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold flex items-center gap-1 transition active:scale-95 shrink-0 cursor-pointer ${
+                isMapFullScreen
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+              }`}
+              title={isMapFullScreen ? 'Keluar dari Mode Fullscreen' : 'Buka Peta Layar Penuh'}
+            >
+              {isMapFullScreen ? (
+                <>
+                  <Minimize2 className="w-3 h-3 text-teal-400" />
+                  <span>Keluar Fullscreen</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3 h-3 text-teal-600" />
+                  <span>Fullscreen</span>
+                </>
+              )}
+            </button>
           </div>
 
           {/* Interactive Leaflet Container (Zero API Key) */}
