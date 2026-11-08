@@ -8,9 +8,6 @@ import {
   Camera,
   Undo2,
   Trash2,
-  Mic,
-  MapPin,
-  Clock,
   ArrowRight,
   Circle,
   Square,
@@ -59,23 +56,14 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
   onSave,
   onClose,
 }) => {
-  const [currentDataUrl, setCurrentDataUrl] = useState<string>(photo.photoUrl);
-  const [caption, setCaption] = useState<string>(photo.caption || '');
+  // SAAT USER MASUK KE FITUR EDIT: Gunakan foto bersih raw tanpa watermark
+  const initialPhotoUrl = photo.rawPhotoUrl || photo.photoUrl;
+  const [currentDataUrl, setCurrentDataUrl] = useState<string>(initialPhotoUrl);
   const [activeTab, setActiveTab] = useState<EditTabMode>('view');
-
-  // Stage & Natural Dimensions
-  const [naturalDimensions, setNaturalDimensions] = useState<{ width: number; height: number }>({
-    width: 1200,
-    height: 900,
-  });
-  const [stageSize, setStageSize] = useState<{ width: number; height: number }>({
-    width: 400,
-    height: 300,
-  });
 
   // Markup States
   const [markupTool, setMarkupTool] = useState<MarkupTool>('pen');
-  const [markupColor, setMarkupColor] = useState<string>('#EF4444'); // Default finding red
+  const [markupColor, setMarkupColor] = useState<string>('#EF4444');
   const [markupStrokeWidth, setMarkupStrokeWidth] = useState<number>(4);
   const [history, setHistory] = useState<DrawAction[]>([]);
   const isDrawingRef = useRef<boolean>(false);
@@ -99,134 +87,31 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     stageHeight: number;
   } | null>(null);
 
-  // Voice Dictation
-  const [isListeningVoice, setIsListeningVoice] = useState(false);
-  const recognitionRef = useRef<any>(null);
-
   // DOM Refs
-  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const baseImageRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ==========================================================================
-  // 1. CALCULATE STAGE DISPLAY SIZE TO FIT VIEWPORT PERFECTLY
+  // 1. SYNC CANVAS SIZE DENGAN NATURAL SIZE IMAGE SAAT LOAD
   // ==========================================================================
-  const updateStageDisplaySize = useCallback(
-    (imgW: number, imgH: number) => {
-      const viewport = viewportRef.current;
-      if (!viewport || !imgW || !imgH) return;
-
-      const vW = Math.max(260, viewport.clientWidth - 20);
-      const vH = Math.max(200, viewport.clientHeight - 20);
-      const imgAspect = imgW / imgH;
-
-      let fitW = vW;
-      let fitH = vW / imgAspect;
-
-      if (fitH > vH) {
-        fitH = vH;
-        fitW = vH * imgAspect;
-      }
-
-      setStageSize({
-        width: Math.round(fitW),
-        height: Math.round(fitH),
-      });
-    },
-    []
-  );
-
-  // ResizeObserver on Viewport to recalculate stage when window/drawer resizes
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-
-    const observer = new ResizeObserver(() => {
-      if (baseImageRef.current) {
-        updateStageDisplaySize(
-          baseImageRef.current.naturalWidth,
-          baseImageRef.current.naturalHeight
-        );
-      }
-    });
-
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, [updateStageDisplaySize]);
-
-  // ==========================================================================
-  // 2. LOAD IMAGE ONTO BASE CANVAS (Runs only on image change)
-  // ==========================================================================
-  useEffect(() => {
-    let isCancelled = false;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      if (isCancelled) return;
-      baseImageRef.current = img;
-      const w = img.naturalWidth || 1200;
-      const h = img.naturalHeight || 900;
-      setNaturalDimensions({ width: w, height: h });
-      updateStageDisplaySize(w, h);
-
-      // Render onto background canvas
-      const bgCanvas = bgCanvasRef.current;
-      if (bgCanvas) {
-        bgCanvas.width = w;
-        bgCanvas.height = h;
-        const ctx = bgCanvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, w, h);
-          ctx.drawImage(img, 0, 0, w, h);
-        }
-      }
-
-      // Resize drawing canvas to match
-      const drawCanvas = drawCanvasRef.current;
-      if (drawCanvas) {
-        drawCanvas.width = w;
-        drawCanvas.height = h;
-        redrawDrawCanvas();
-      }
-    };
-
-    img.src = currentDataUrl;
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [currentDataUrl, updateStageDisplaySize]);
-
-  // ==========================================================================
-  // 3. FAST DRAWING LAYER (ONLY clears & renders the transparent overlay)
-  // ==========================================================================
-  const redrawDrawCanvas = useCallback(() => {
+  const handleImageLoaded = () => {
+    const img = imgRef.current;
     const canvas = drawCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!img || !canvas) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const naturalW = img.naturalWidth || 1200;
+    const naturalH = img.naturalHeight || 900;
 
-    // Draw all committed actions
-    history.forEach((act) => {
-      drawSingleAction(ctx, act);
-    });
-
-    // Draw live active action
-    if (currentActionRef.current) {
-      drawSingleAction(ctx, currentActionRef.current);
-    }
-  }, [history]);
-
-  useEffect(() => {
+    canvas.width = naturalW;
+    canvas.height = naturalH;
     redrawDrawCanvas();
-  }, [history, redrawDrawCanvas]);
+  };
 
+  // ==========================================================================
+  // 2. REDRAW DRAWING OVERLAY (TRANSPARENT LAYER - ZERO BLANK RISK)
+  // ==========================================================================
   const drawSingleAction = (ctx: CanvasRenderingContext2D, act: DrawAction) => {
     ctx.save();
     ctx.strokeStyle = act.color;
@@ -287,7 +172,43 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     ctx.restore();
   };
 
-  // Canvas coordinates converter from pointer event
+  const redrawDrawCanvas = useCallback(() => {
+    const canvas = drawCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    history.forEach((act) => {
+      drawSingleAction(ctx, act);
+    });
+
+    if (currentActionRef.current) {
+      drawSingleAction(ctx, currentActionRef.current);
+    }
+  }, [history]);
+
+  useEffect(() => {
+    redrawDrawCanvas();
+  }, [history, redrawDrawCanvas]);
+
+  // Sync canvas dimensions instantly on mount, data URL change, or active tab switch
+  useEffect(() => {
+    const img = imgRef.current;
+    const canvas = drawCanvasRef.current;
+    if (!img || !canvas) return;
+
+    if (img.complete && img.naturalWidth && img.naturalHeight) {
+      if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        redrawDrawCanvas();
+      }
+    }
+  }, [currentDataUrl, activeTab, redrawDrawCanvas]);
+
+  // Coordinates converter from pointer position
   const getCanvasCoords = (clientX: number, clientY: number) => {
     const canvas = drawCanvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -301,7 +222,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     };
   };
 
-  // Drawing Pointer Handlers (Native Pointer Events for 100% responsiveness)
+  // Drawing Pointer Handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (activeTab !== 'markup') return;
     e.preventDefault();
@@ -369,21 +290,21 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
   };
 
   // ==========================================================================
-  // 4. BAKE / COMMIT DRAWING ONTO BASE IMAGE
+  // 3. BAKE DRAWING ONTO IMAGE
   // ==========================================================================
   const commitDrawingToBase = (): string => {
-    const bgCanvas = bgCanvasRef.current;
+    const img = imgRef.current;
     const drawCanvas = drawCanvasRef.current;
-    if (!bgCanvas || !drawCanvas || history.length === 0) return currentDataUrl;
+    if (!img || !drawCanvas || history.length === 0) return currentDataUrl;
 
     const mergeCanvas = document.createElement('canvas');
-    mergeCanvas.width = bgCanvas.width;
-    mergeCanvas.height = bgCanvas.height;
+    mergeCanvas.width = img.naturalWidth || 1200;
+    mergeCanvas.height = img.naturalHeight || 900;
     const mCtx = mergeCanvas.getContext('2d');
     if (!mCtx) return currentDataUrl;
 
-    mCtx.drawImage(bgCanvas, 0, 0);
-    mCtx.drawImage(drawCanvas, 0, 0);
+    mCtx.drawImage(img, 0, 0, mergeCanvas.width, mergeCanvas.height);
+    mCtx.drawImage(drawCanvas, 0, 0, mergeCanvas.width, mergeCanvas.height);
 
     const mergedUrl = mergeCanvas.toDataURL('image/jpeg', 0.95);
     setCurrentDataUrl(mergedUrl);
@@ -391,7 +312,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     return mergedUrl;
   };
 
-  // Tab switch handler
   const handleSwitchTab = (tab: EditTabMode) => {
     if (tab === activeTab) return;
     if (activeTab === 'markup' && history.length > 0) {
@@ -401,7 +321,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
   };
 
   // ==========================================================================
-  // 5. CROP INTERACTION ENGINE (DRAGGABLE & RESIZABLE WITH POINTER CAPTURE)
+  // 4. CROP INTERACTION ENGINE
   // ==========================================================================
   const startCropDrag = (e: React.PointerEvent, mode: DragMode) => {
     e.preventDefault();
@@ -411,14 +331,18 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {}
 
+    const stage = stageRef.current;
+    const stageWidth = stage?.clientWidth || 300;
+    const stageHeight = stage?.clientHeight || 200;
+
     cropDragRef.current = {
       mode,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       initialBox: { ...cropBox },
-      stageWidth: stageSize.width,
-      stageHeight: stageSize.height,
+      stageWidth,
+      stageHeight,
     };
   };
 
@@ -432,7 +356,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     const dxPercent = ((e.clientX - startX) / stageWidth) * 100;
     const dyPercent = ((e.clientY - startY) / stageHeight) * 100;
 
-    const MIN_SIZE = 12; // Minimum 12% size
+    const MIN_SIZE = 12;
 
     if (mode === 'move') {
       const newX = Math.min(Math.max(0, initialBox.x + dxPercent), 100 - initialBox.width);
@@ -450,7 +374,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     let newW = initialBox.width;
     let newH = initialBox.height;
 
-    // Horizontal adjustments
     if (mode.includes('w')) {
       newX = Math.min(Math.max(0, initialBox.x + dxPercent), initialBox.x + initialBox.width - MIN_SIZE);
       newW = initialBox.width - (newX - initialBox.x);
@@ -458,7 +381,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
       newW = Math.min(Math.max(MIN_SIZE, initialBox.width + dxPercent), 100 - initialBox.x);
     }
 
-    // Vertical adjustments
     if (mode.includes('n')) {
       newY = Math.min(Math.max(0, initialBox.y + dyPercent), initialBox.y + initialBox.height - MIN_SIZE);
       newH = initialBox.height - (newY - initialBox.y);
@@ -482,11 +404,11 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     cropDragRef.current = null;
   };
 
-  // Apply Aspect Ratio Presets
   const applyAspectPreset = (aspect: CropAspect) => {
     setCropAspect(aspect);
-    const { width: sW, height: sH } = stageSize;
-    if (sW <= 0 || sH <= 0) return;
+    const stage = stageRef.current;
+    const sW = stage?.clientWidth || 300;
+    const sH = stage?.clientHeight || 200;
 
     if (aspect === 'free') {
       setCropBox({ x: 5, y: 5, width: 90, height: 90 });
@@ -499,7 +421,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     else if (aspect === '16:9') ratio = 16 / 9;
     else if (aspect === '3:4') ratio = 3 / 4;
 
-    // Fit maximum rectangle with this ratio inside stageSize
     let boxW = sW * 0.85;
     let boxH = boxW / ratio;
 
@@ -521,16 +442,14 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     });
   };
 
-  // Commit Crop Execution
   const handleApplyCrop = () => {
-    const bgCanvas = bgCanvasRef.current;
-    if (!bgCanvas) return;
+    const img = imgRef.current;
+    if (!img) return;
 
-    // Ensure any drawing is baked first
     commitDrawingToBase();
 
-    const w = bgCanvas.width;
-    const h = bgCanvas.height;
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
 
     const sx = Math.max(0, Math.round((cropBox.x / 100) * w));
     const sy = Math.max(0, Math.round((cropBox.y / 100) * h));
@@ -545,7 +464,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
     const ctx = cropCanvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.drawImage(bgCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
     const croppedUrl = cropCanvas.toDataURL('image/jpeg', 0.95);
 
     setCurrentDataUrl(croppedUrl);
@@ -556,23 +475,22 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
   };
 
   // ==========================================================================
-  // 6. 90-DEGREE ROTATION
+  // 5. ROTATE 90-DEGREES
   // ==========================================================================
   const handleRotate90 = () => {
     commitDrawingToBase();
-
-    const bgCanvas = bgCanvasRef.current;
-    if (!bgCanvas) return;
+    const img = imgRef.current;
+    if (!img) return;
 
     const rotCanvas = document.createElement('canvas');
-    rotCanvas.width = bgCanvas.height;
-    rotCanvas.height = bgCanvas.width;
+    rotCanvas.width = img.naturalHeight;
+    rotCanvas.height = img.naturalWidth;
     const ctx = rotCanvas.getContext('2d');
     if (!ctx) return;
 
     ctx.translate(rotCanvas.width / 2, rotCanvas.height / 2);
     ctx.rotate((90 * Math.PI) / 180);
-    ctx.drawImage(bgCanvas, -bgCanvas.width / 2, -bgCanvas.height / 2);
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
 
     const rotatedUrl = rotCanvas.toDataURL('image/jpeg', 0.95);
     setCurrentDataUrl(rotatedUrl);
@@ -580,7 +498,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
   };
 
   // ==========================================================================
-  // 7. REPLACE PHOTO FILE
+  // 6. REPLACE PHOTO FILE
   // ==========================================================================
   const handleReplaceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -599,83 +517,36 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
   };
 
   // ==========================================================================
-  // 8. VOICE DICTATION
-  // ==========================================================================
-  const handleToggleVoice = () => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert('Fitur Dikte Suara tidak didukung oleh browser ini. Gunakan Google Chrome.');
-      return;
-    }
-
-    if (isListeningVoice) {
-      try {
-        recognitionRef.current?.stop();
-      } catch {}
-      setIsListeningVoice(false);
-      return;
-    }
-
-    try {
-      const rec = new SpeechRecognition();
-      rec.lang = 'id-ID';
-      rec.continuous = true;
-      rec.interimResults = false;
-
-      rec.onstart = () => setIsListeningVoice(true);
-      rec.onresult = (evt: any) => {
-        let transcript = '';
-        for (let i = evt.resultIndex; i < evt.results.length; i++) {
-          if (evt.results[i].isFinal) {
-            transcript += evt.results[i][0].transcript + ' ';
-          }
-        }
-        if (transcript.trim()) {
-          setCaption((prev) => (prev ? `${prev.trim()} ${transcript.trim()}` : transcript.trim()));
-        }
-      };
-      rec.onerror = () => setIsListeningVoice(false);
-      rec.onend = () => setIsListeningVoice(false);
-
-      rec.start();
-      recognitionRef.current = rec;
-    } catch {
-      setIsListeningVoice(false);
-    }
-  };
-
-  // ==========================================================================
-  // 9. FINAL SAVE
+  // 7. FINAL SAVE
   // ==========================================================================
   const handleSave = () => {
-    const bgCanvas = bgCanvasRef.current;
+    const img = imgRef.current;
     const drawCanvas = drawCanvasRef.current;
 
     let finalDataUrl = currentDataUrl;
 
-    if (bgCanvas) {
+    if (img) {
       const saveCanvas = document.createElement('canvas');
-      saveCanvas.width = bgCanvas.width;
-      saveCanvas.height = bgCanvas.height;
+      saveCanvas.width = img.naturalWidth || 1200;
+      saveCanvas.height = img.naturalHeight || 900;
       const ctx = saveCanvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(bgCanvas, 0, 0);
+        ctx.drawImage(img, 0, 0, saveCanvas.width, saveCanvas.height);
         if (drawCanvas && history.length > 0) {
-          ctx.drawImage(drawCanvas, 0, 0);
+          ctx.drawImage(drawCanvas, 0, 0, saveCanvas.width, saveCanvas.height);
         }
         finalDataUrl = saveCanvas.toDataURL('image/jpeg', 0.95);
       }
     }
 
-    onSave({ photoUrl: finalDataUrl, caption });
+    onSave({ photoUrl: finalDataUrl, caption: photo.caption || '' });
     confetti({ particleCount: 35, spread: 55, origin: { y: 0.5 } });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col w-full h-full animate-in fade-in select-none touch-none">
-      {/* 1. TOP APP BAR (HEADER) */}
+    <div className="fixed inset-0 z-[999999] bg-slate-950 text-white flex flex-col w-full h-full animate-in fade-in select-none touch-none">
+      {/* 1. TOP APP BAR (LIQUID GLASS FLOATING HEADER) */}
       <header className="h-14 sm:h-16 px-3 sm:px-6 bg-slate-900/90 backdrop-blur-xl border-b border-white/10 flex items-center justify-between gap-3 shrink-0 z-30">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
@@ -696,12 +567,12 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
               </span>
             </div>
             <p className="text-[10px] text-slate-400 font-medium truncate hidden sm:block">
-              Potong (Crop), Beri Tanda / Coretan, Putar 90°, dan Ubah Keterangan
+              Potong (Crop), Beri Tanda / Coretan, dan Putar 90°
             </p>
           </div>
         </div>
 
-        {/* Right Header: Mode Switcher & Save Button */}
+        {/* Mode Switcher Tabs & Save Button */}
         <div className="flex items-center gap-2">
           {/* Action Tabs Pills */}
           <div className="hidden xs:flex items-center p-1 bg-black/40 rounded-xl border border-white/10">
@@ -781,7 +652,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
 
       {/* 3. TOOLBAR SPESIFIK (MODE MARKUP ATAU CROP) */}
       {activeTab === 'markup' && (
-        <div className="px-3 sm:px-6 py-2.5 bg-slate-900/95 border-b border-white/10 flex flex-wrap items-center justify-between gap-2.5 shrink-0 z-20">
+        <div className="px-3 sm:px-6 py-2 bg-slate-900/95 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0 z-20">
           {/* Tools Picker */}
           <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl">
             <button
@@ -854,7 +725,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
 
           {/* Stroke Width Selector */}
           <div className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded-xl">
-            <span className="text-[10px] font-bold text-slate-400 mr-1 hidden sm:inline">Tebal:</span>
             {[
               { label: 'Tipis', width: 2 },
               { label: 'Sedang', width: 4 },
@@ -893,14 +763,14 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
               title="Hapus semua coretan"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Hapus Semua</span>
+              <span className="hidden sm:inline">Hapus</span>
             </button>
           </div>
         </div>
       )}
 
       {activeTab === 'crop' && (
-        <div className="px-3 sm:px-6 py-2.5 bg-slate-900/95 border-b border-white/10 flex flex-wrap items-center justify-between gap-2.5 shrink-0 z-20">
+        <div className="px-3 sm:px-6 py-2 bg-slate-900/95 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0 z-20">
           <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
             <span className="text-xs font-bold text-slate-400 mr-1">Rasio:</span>
             {(['free', '1:1', '4:3', '16:9', '3:4'] as const).map((asp) => (
@@ -946,37 +816,36 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
         </div>
       )}
 
-      {/* 4. MAIN CANVAS VIEWPORT (FULL RESPONSIVE DUAL-CANVAS ENGINE) */}
-      <div
-        ref={viewportRef}
-        className="flex-1 relative w-full h-full flex items-center justify-center p-2 sm:p-4 overflow-hidden bg-slate-950/80"
-      >
+      {/* 4. FULL-SCREEN PHOTO VIEWPORT (NO BOTTOM DRAWER BANNER - FOTO 100% FULL) */}
+      <div className="flex-1 relative w-full h-full flex items-center justify-center p-2 sm:p-4 overflow-hidden bg-slate-950">
         <div
           ref={stageRef}
-          style={{ width: stageSize.width, height: stageSize.height }}
-          className="relative rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden bg-black"
+          className="relative max-w-full max-h-full flex items-center justify-center overflow-hidden rounded-2xl shadow-2xl"
         >
-          {/* Base Background Image Canvas */}
-          <canvas
-            ref={bgCanvasRef}
-            className="w-full h-full object-contain block pointer-events-none select-none"
+          {/* Base Native Image (Rock-solid, can NEVER be blank white) */}
+          <img
+            ref={imgRef}
+            src={currentDataUrl}
+            onLoad={handleImageLoaded}
+            alt="Edit Canvas Base"
+            className="max-w-full max-h-[82vh] sm:max-h-[85vh] object-contain block select-none pointer-events-none rounded-2xl"
           />
 
-          {/* Transparent Overlay Drawing Canvas (Dual-Canvas Architecture for 60fps/120fps Smoothness) */}
+          {/* Transparent Overlay Drawing Canvas */}
           <canvas
             ref={drawCanvasRef}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
-            className={`absolute inset-0 w-full h-full object-contain block select-none ${
+            className={`absolute inset-0 w-full h-full object-contain block select-none rounded-2xl ${
               activeTab === 'markup'
                 ? 'cursor-crosshair touch-none pointer-events-auto z-10'
                 : 'pointer-events-none z-0'
             }`}
           />
 
-          {/* CROP INTERACTIVE OVERLAY (FULLY DRAGGABLE & RESIZABLE WITH POINTER CAPTURE) */}
+          {/* CROP INTERACTIVE OVERLAY */}
           {activeTab === 'crop' && (
             <div
               className="absolute inset-0 pointer-events-auto select-none touch-none z-20"
@@ -1014,8 +883,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
                   <span>Geser Area</span>
                 </div>
 
-                {/* 4 Corner Resize Grips (Extra Touch Hitbox 40px) */}
-                {/* Top-Left */}
+                {/* 4 Corner Resize Grips */}
                 <div
                   onPointerDown={(e) => startCropDrag(e, 'nw')}
                   className="absolute -top-3 -left-3 w-8 h-8 flex items-center justify-center cursor-nwse-resize pointer-events-auto touch-none"
@@ -1024,7 +892,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
                   <div className="w-3.5 h-3.5 bg-white border-2 border-teal-500 rounded-sm shadow-md" />
                 </div>
 
-                {/* Top-Right */}
                 <div
                   onPointerDown={(e) => startCropDrag(e, 'ne')}
                   className="absolute -top-3 -right-3 w-8 h-8 flex items-center justify-center cursor-nesw-resize pointer-events-auto touch-none"
@@ -1033,7 +900,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
                   <div className="w-3.5 h-3.5 bg-white border-2 border-teal-500 rounded-sm shadow-md" />
                 </div>
 
-                {/* Bottom-Left */}
                 <div
                   onPointerDown={(e) => startCropDrag(e, 'sw')}
                   className="absolute -bottom-3 -left-3 w-8 h-8 flex items-center justify-center cursor-nesw-resize pointer-events-auto touch-none"
@@ -1042,7 +908,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
                   <div className="w-3.5 h-3.5 bg-white border-2 border-teal-500 rounded-sm shadow-md" />
                 </div>
 
-                {/* Bottom-Right */}
                 <div
                   onPointerDown={(e) => startCropDrag(e, 'se')}
                   className="absolute -bottom-3 -right-3 w-8 h-8 flex items-center justify-center cursor-nwse-resize pointer-events-auto touch-none"
@@ -1052,28 +917,24 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
                 </div>
 
                 {/* 4 Edge Handles */}
-                {/* Top Edge */}
                 <div
                   onPointerDown={(e) => startCropDrag(e, 'n')}
                   className="absolute -top-2 left-1/2 -translate-x-1/2 w-12 h-5 flex items-center justify-center cursor-ns-resize pointer-events-auto touch-none"
                 >
                   <div className="w-6 h-1.5 bg-white/90 border border-teal-500 rounded-full shadow-sm" />
                 </div>
-                {/* Bottom Edge */}
                 <div
                   onPointerDown={(e) => startCropDrag(e, 's')}
                   className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-12 h-5 flex items-center justify-center cursor-ns-resize pointer-events-auto touch-none"
                 >
                   <div className="w-6 h-1.5 bg-white/90 border border-teal-500 rounded-full shadow-sm" />
                 </div>
-                {/* Left Edge */}
                 <div
                   onPointerDown={(e) => startCropDrag(e, 'w')}
                   className="absolute top-1/2 -left-2 -translate-y-1/2 w-5 h-12 flex items-center justify-center cursor-ew-resize pointer-events-auto touch-none"
                 >
                   <div className="w-1.5 h-6 bg-white/90 border border-teal-500 rounded-full shadow-sm" />
                 </div>
-                {/* Right Edge */}
                 <div
                   onPointerDown={(e) => startCropDrag(e, 'e')}
                   className="absolute top-1/2 -right-2 -translate-y-1/2 w-5 h-12 flex items-center justify-center cursor-ew-resize pointer-events-auto touch-none"
@@ -1084,12 +945,12 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
             </div>
           )}
 
-          {/* QUICK FLOATING ROTATE & REPLACE BUTTONS ON IMAGE */}
+          {/* FLOATING ACTION PILLS ON BOTTOM OF PHOTO */}
           <div className="absolute bottom-3 inset-x-3 flex items-center justify-between pointer-events-none z-30">
             <button
               type="button"
               onClick={handleRotate90}
-              className="pointer-events-auto px-3 py-1.5 rounded-xl bg-black/75 hover:bg-black text-white text-xs font-bold backdrop-blur-md border border-white/20 shadow-xl flex items-center gap-1.5 transition active:scale-95 cursor-pointer touch-manipulation"
+              className="pointer-events-auto px-3.5 py-2 rounded-xl bg-slate-900/85 hover:bg-black text-white text-xs font-bold backdrop-blur-md border border-white/20 shadow-xl flex items-center gap-1.5 transition active:scale-95 cursor-pointer touch-manipulation"
               title="Putar 90 Derajat Searah Jarum Jam"
             >
               <RotateCw className="w-3.5 h-3.5 text-teal-300" />
@@ -1099,7 +960,7 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="pointer-events-auto px-3 py-1.5 rounded-xl bg-teal-600/90 hover:bg-teal-600 text-white text-xs font-black backdrop-blur-md border border-white/20 shadow-xl flex items-center gap-1.5 transition active:scale-95 cursor-pointer touch-manipulation"
+              className="pointer-events-auto px-3.5 py-2 rounded-xl bg-teal-600/90 hover:bg-teal-600 text-white text-xs font-black backdrop-blur-md border border-white/20 shadow-xl flex items-center gap-1.5 transition active:scale-95 cursor-pointer touch-manipulation"
               title="Ganti Foto Baru dari Kamera atau Galeri"
             >
               <Camera className="w-3.5 h-3.5" />
@@ -1115,53 +976,6 @@ export const PhotoEditModal: React.FC<PhotoEditModalProps> = ({
           </div>
         </div>
       </div>
-
-      {/* 5. BOTTOM DRAWER: EDIT KETERANGAN / DESKRIPSI & METADATA */}
-      <footer className="p-3 sm:p-5 bg-slate-900/95 border-t border-white/10 shrink-0 z-30 space-y-2.5">
-        <div className="max-w-4xl mx-auto space-y-2">
-          {/* Header Row: Label & Speech Dictation */}
-          <div className="flex items-center justify-between text-xs">
-            <label className="font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <span>Keterangan Foto</span>
-              <span className="text-slate-500 font-medium">(Bisa dikosongkan)</span>
-            </label>
-
-            <button
-              type="button"
-              onClick={handleToggleVoice}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer touch-manipulation ${
-                isListeningVoice
-                  ? 'bg-rose-600 text-white animate-pulse'
-                  : 'bg-white/10 hover:bg-white/20 text-teal-300 border border-white/10'
-              }`}
-            >
-              <Mic className="w-3.5 h-3.5 text-rose-400" />
-              <span>{isListeningVoice ? 'Mendengarkan Suara...' : 'Dikte Suara'}</span>
-            </button>
-          </div>
-
-          {/* Caption Input */}
-          <textarea
-            rows={2}
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder="Tuliskan keterangan detail temuan atau hasil perbaikan (opsional)..."
-            className="w-full bg-slate-950/80 border border-white/15 rounded-xl p-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-400 resize-none leading-relaxed"
-          />
-
-          {/* GPS & Timestamp Footer Tag */}
-          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
-            <span className="flex items-center gap-1 truncate">
-              <MapPin className="w-3 h-3 text-teal-400" />
-              <span>{photo.gpsLocation || 'GPS Verified'}</span>
-            </span>
-            <span className="flex items-center gap-1 shrink-0">
-              <Clock className="w-3 h-3 text-slate-400" />
-              <span>{photo.timestamp || 'WIB'}</span>
-            </span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };

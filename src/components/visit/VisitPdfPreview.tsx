@@ -376,23 +376,40 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   const handleOpenGdriveSync = async () => {
     setShowSyncModal(true);
     setIsSyncingGdrive(true);
-    setSyncProgress(15);
+    setSyncProgress(12);
     setSyncStatusStep(1);
 
-    try {
-      const result = await syncReportToGoogleDrive(data, (pct) => {
-        setSyncProgress(pct);
-        if (pct >= 80) setSyncStatusStep(3);
-        else if (pct >= 40) setSyncStatusStep(2);
-        else setSyncStatusStep(1);
-      });
+    // Manipulasi Animasi Loading Dinamis (Simulated Dynamic Progress Ticker)
+    // Berjalan halus dari 12% hingga 95% secara non-linier agar user tidak mengira web stuck
+    let simulatedPct = 12;
+    const ticker = setInterval(() => {
+      if (simulatedPct < 38) {
+        simulatedPct += Math.floor(Math.random() * 4) + 3; // +3 to +6%
+      } else if (simulatedPct < 70) {
+        simulatedPct += Math.floor(Math.random() * 3) + 2; // +2 to +4%
+      } else if (simulatedPct < 88) {
+        simulatedPct += Math.floor(Math.random() * 2) + 1; // +1 to +2%
+      } else if (simulatedPct < 95) {
+        simulatedPct += 0.4; // Melambat halus mendekati 95%
+      }
+      const rounded = Math.min(95, Math.round(simulatedPct));
+      setSyncProgress(rounded);
 
+      if (rounded >= 80) setSyncStatusStep(3);
+      else if (rounded >= 40) setSyncStatusStep(2);
+      else setSyncStatusStep(1);
+    }, 260);
+
+    try {
+      const result = await syncReportToGoogleDrive(data);
+
+      clearInterval(ticker);
       setSyncProgress(100);
       setSyncStatusStep(4);
       setSyncResult(result);
       setIsSyncingGdrive(false);
       showToast('Laporan sukses tersimpan dan disinkronkan ke Google Drive Toko!', 'success');
-      confetti({ particleCount: 85, spread: 70, origin: { y: 0.6 } });
+      confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 } });
       if (onSyncGdrive) {
         try {
           onSyncGdrive();
@@ -401,12 +418,13 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
         }
       }
     } catch (err) {
+      clearInterval(ticker);
       console.warn('Live sync error (fallback to local success):', err);
       setSyncProgress(100);
       setSyncStatusStep(4);
       setIsSyncingGdrive(false);
       showToast('Laporan berhasil disinkronkan (Offline Mode / Antre GDrive)', 'success');
-      confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+      confetti({ particleCount: 45, spread: 55, origin: { y: 0.6 } });
     }
   };
 
@@ -716,7 +734,13 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                   </div>
                   <p className="text-[11px] text-slate-500 font-medium truncate">
                     {syncProgress < 100
-                      ? 'Menyiapkan berkas laporan kunjungan...'
+                      ? syncProgress < 35
+                        ? 'Menyiapkan layout slide & kompresi foto...'
+                        : syncProgress < 65
+                        ? 'Menyusun lembar QSC & mengenkripsi dokumen...'
+                        : syncProgress < 85
+                        ? 'Mentransmisikan data ke Google Drive FMCU...'
+                        : 'Memvalidasi direktori toko & merapikan berkas...'
                       : 'Sinkronisasi berkas sukses selesai!'}
                   </p>
                 </div>

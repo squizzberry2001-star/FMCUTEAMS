@@ -563,9 +563,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         setFormData((prev) => ({
           ...prev,
           storeFrontPhoto: cached.storeFrontPhoto || prev.storeFrontPhoto,
-          qscSheetPhoto: cached.qscSheetPhoto || cached.qscSheetTop || prev.qscSheetPhoto,
-          qscSheetTop: cached.qscSheetTop || cached.qscSheetPhoto || prev.qscSheetTop,
-          qscSheetBottom: cached.qscSheetBottom || prev.qscSheetBottom,
+          qscSheetPhoto: cached.qscSheetPhoto || cached.qscSheetTop || cached.qscSheetBottom || prev.qscSheetPhoto,
+          qscSheetTop: cached.qscSheetPhoto || cached.qscSheetTop || cached.qscSheetBottom || prev.qscSheetTop,
+          qscSheetBottom: '',
           evidencePhotos:
             Array.isArray(cached.evidencePhotos) && cached.evidencePhotos.length > 0
               ? cached.evidencePhotos
@@ -816,8 +816,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     setShowCheckInPopup(false);
   };
 
-  // Helper: Stamp Watermark on Image using HTML Canvas (Memory-Safe & Error-Proof)
-  const processAndStampImage = async (file: File): Promise<string> => {
+  // Helper: Resize & Compress Image Clean (Tanpa Watermark untuk rawPhotoUrl)
+  const compressImageClean = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const objectUrl = URL.createObjectURL(file);
       const img = new Image();
@@ -825,16 +825,14 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       const cleanup = () => {
         try {
           URL.revokeObjectURL(objectUrl);
-        } catch {
-          // ignore
-        }
+        } catch {}
       };
 
       img.onload = () => {
         try {
-          let w = img.naturalWidth || img.width || 1000;
-          let h = img.naturalHeight || img.height || 1000;
-          const maxDim = 1100;
+          let w = img.naturalWidth || img.width || 1200;
+          let h = img.naturalHeight || img.height || 900;
+          const maxDim = 1200;
           if (w > maxDim || h > maxDim) {
             if (w > h) {
               h = Math.round((h * maxDim) / w);
@@ -855,32 +853,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           }
 
           ctx.drawImage(img, 0, 0, w, h);
-
-          // Timestamp & Verified Store Bar Watermark
-          const now = new Date();
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-          const timeStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
-          const statusStr = isOfflineOrWeakSignal ? 'Manual Check-In Verified' : 'GPS Verified';
-
-          const barH = Math.max(26, Math.round(h * 0.045));
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.84)';
-          ctx.fillRect(0, h - barH, w, barH);
-
-          // Green accent strip
-          ctx.fillStyle = '#009944';
-          ctx.fillRect(0, h - barH, Math.max(5, Math.round(w * 0.01)), barH);
-
-          const padLeft = Math.max(12, Math.round(w * 0.018));
-          const fontSize = Math.max(10, Math.round(barH * 0.42));
-
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = `bold ${fontSize}px sans-serif`;
-          const textStr = `${formData.storeName.toUpperCase()} (${formData.storeCode})  •  ${timeStr}  •  ${statusStr}`;
-          ctx.fillText(textStr, padLeft, h - Math.round(barH * 0.3));
-
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          const cleanUrl = canvas.toDataURL('image/jpeg', 0.88);
           cleanup();
-          resolve(dataUrl);
+          resolve(cleanUrl);
         } catch (err) {
           cleanup();
           reject(err);
@@ -889,7 +864,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       img.onerror = () => {
         cleanup();
-        // Fallback to FileReader if ObjectURL fails
         const reader = new FileReader();
         reader.onload = (ev) => {
           if (typeof ev.target?.result === 'string') {
@@ -906,6 +880,60 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     });
   };
 
+  // Helper: Stamp Floating Minimalist Timestamp Watermark TANPA Background Bar (NO fillRect)
+  const stampMinimalistTimestamp = async (cleanBase64Url: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const w = img.naturalWidth || img.width || 1200;
+          const h = img.naturalHeight || img.height || 900;
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(cleanBase64Url);
+
+          ctx.drawImage(img, 0, 0, w, h);
+
+          // Timestamp & Verified Store Info Minimalist Floating Text (No Black Box)
+          const now = new Date();
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+          const timeStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
+          const statusStr = isOfflineOrWeakSignal ? 'Manual Check-In Verified' : 'GPS Verified';
+          const textStr = `${(formData.storeName || 'STORE').toUpperCase()} (${formData.storeCode || '-'})  •  ${timeStr}  •  ${statusStr}`;
+
+          const fontSize = Math.max(11, Math.round(h * 0.024));
+          const padX = Math.max(14, Math.round(w * 0.022));
+          const padY = Math.max(16, Math.round(h * 0.028));
+
+          ctx.save();
+          ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+          ctx.shadowBlur = Math.max(4, Math.round(fontSize * 0.45));
+          ctx.shadowOffsetX = 1.5;
+          ctx.shadowOffsetY = 1.5;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillText(textStr, padX, h - padY);
+          ctx.restore();
+
+          resolve(canvas.toDataURL('image/jpeg', 0.88));
+        } catch (err) {
+          console.warn('stampMinimalistTimestamp error:', err);
+          resolve(cleanBase64Url);
+        }
+      };
+      img.onerror = () => resolve(cleanBase64Url);
+      img.src = cleanBase64Url;
+    });
+  };
+
+  // Helper: Process and return both Clean (Raw) and Minimalist Stamped versions
+  const processAndStampImage = async (file: File): Promise<{ stamped: string; raw: string }> => {
+    const raw = await compressImageClean(file);
+    const stamped = await stampMinimalistTimestamp(raw);
+    return { stamped, raw };
+  };
 
   // 1x QSC Sheet Upload Handler (Foto Utuh Tidak Displit + Auto GDrive Sync via GAS)
   const handleQscFullUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -917,7 +945,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     setUploadStatusMsg('Menyimpan Foto Lembar QSC Utuh & Mengunggah ke GDrive...');
 
     try {
-      const stampedFull = await processAndStampImage(file);
+      const { stamped: stampedFull } = await processAndStampImage(file);
 
       // Simpan foto UTUH (TIDAK DISPLIT) ke state lokal
       setFormData((prev) => ({
@@ -1196,12 +1224,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const stamped = await processAndStampImage(file);
+        const { stamped, raw } = await processAndStampImage(file);
         const photoId = `ev-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`;
 
         createdPhotos.push({
           id: photoId,
           photoUrl: stamped,
+          rawPhotoUrl: raw,
           caption: '', // DEFAULT KOSONG SESUAI PERMINTAAN USER!
           timestamp: getCurrentWibTime(),
           gpsLocation: formData.liveGps || 'Verified',
@@ -1336,7 +1365,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       photoId: photo.id,
       index,
       isCa,
-      photoUrl: photo.photoUrl,
+      photoUrl: photo.rawPhotoUrl || photo.photoUrl,
       caption: photo.caption || '',
       rotation: 0,
       originalPhoto: photo,
@@ -1355,22 +1384,39 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     if (!file || !editingPhotoState) return;
     e.target.value = '';
     try {
-      const stamped = await processAndStampImage(file);
-      setEditingPhotoState((prev) => (prev ? { ...prev, photoUrl: stamped, rotation: 0 } : null));
+      const { stamped, raw } = await processAndStampImage(file);
+      setEditingPhotoState((prev) =>
+        prev
+          ? {
+              ...prev,
+              photoUrl: stamped,
+              originalPhoto: {
+                ...prev.originalPhoto,
+                rawPhotoUrl: raw,
+                photoUrl: stamped,
+              },
+              rotation: 0,
+            }
+          : null
+      );
     } catch (err) {
       console.warn('Gagal memproses foto baru:', err);
     }
   };
 
-  const handleSavePhotoFromModal = (updated: { photoUrl: string; caption: string }) => {
+  const handleSavePhotoFromModal = async (updated: { photoUrl: string; caption: string }) => {
     if (!editingPhotoState) return;
+
+    // updated.photoUrl adalah foto bersih hasil editan (crop/markup/rotate) tanpa watermark
+    const rawClean = updated.photoUrl;
+    const stamped = await stampMinimalistTimestamp(rawClean);
 
     if (editingPhotoState.isCa) {
       setFormData((prev) => ({
         ...prev,
         caPhotos: (prev.caPhotos || []).map((p) =>
           p.id === editingPhotoState.photoId
-            ? { ...p, photoUrl: updated.photoUrl, caption: updated.caption }
+            ? { ...p, photoUrl: stamped, rawPhotoUrl: rawClean, caption: updated.caption }
             : p
         ),
       }));
@@ -1379,7 +1425,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         ...prev,
         evidencePhotos: prev.evidencePhotos.map((p) =>
           p.id === editingPhotoState.photoId
-            ? { ...p, photoUrl: updated.photoUrl, caption: updated.caption }
+            ? { ...p, photoUrl: stamped, rawPhotoUrl: rawClean, caption: updated.caption }
             : p
         ),
       }));
@@ -1392,7 +1438,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         ...prev,
         photos: prev.photos.map((p) =>
           p.id === editingPhotoState.photoId
-            ? { ...p, photoUrl: updated.photoUrl, caption: updated.caption }
+            ? { ...p, photoUrl: stamped, rawPhotoUrl: rawClean, caption: updated.caption }
             : p
         ),
       };

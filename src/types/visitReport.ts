@@ -26,6 +26,7 @@ export interface ObservationFinding {
 export interface EvidencePhoto {
   id: string;
   photoUrl: string;
+  rawPhotoUrl?: string; // Foto bersih asli tanpa watermark untuk edit
   caption: string;
   timestamp: string;
   gpsLocation: string;
