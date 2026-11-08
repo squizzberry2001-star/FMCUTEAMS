@@ -83,7 +83,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const activeWeekDays = getFullWeekDays(currentWeekMonday);
   const weekStartStr = activeWeekDays[0]?.dateStr || currentWeekMonday;
-  const weekEndStr = activeWeekDays[6]?.dateStr || currentWeekMonday;
+  const weekEndStr = activeWeekDays[activeWeekDays.length - 1]?.dateStr || currentWeekMonday;
   const isCurrentRunningWeek = currentWeekMonday === getMondayOfWeek();
 
   // Salam waktu berdasarkan actual jam (Pagi, Siang, Sore, Malam)

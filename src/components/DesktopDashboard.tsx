@@ -113,7 +113,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
 
   const activeWeekDays = getFullWeekDays(currentWeekMonday);
   const weekStartStr = activeWeekDays[0]?.dateStr || currentWeekMonday;
-  const weekEndStr = activeWeekDays[6]?.dateStr || currentWeekMonday;
+  const weekEndStr = activeWeekDays[activeWeekDays.length - 1]?.dateStr || currentWeekMonday;
   const isCurrentRunningWeek = currentWeekMonday === getMondayOfWeek();
 
   const filteredAgendas = agendas.filter((item) => {

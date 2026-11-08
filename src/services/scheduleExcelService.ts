@@ -77,14 +77,38 @@ export function getMondayOfWeek(dateInput?: string): string {
 }
 
 /**
- * Generate 7 work days (Senin s/d Minggu) for a given week Monday
+ * Generate week days for a given week Monday.
+ * If actual day is Sunday and viewing the running period, returns 8 days (Today's Sunday + 7 days next week).
+ * When actual day is Monday - Saturday, returns standard 7 days (Senin s/d Minggu).
  */
 export function getFullWeekDays(
   mondayStr: string
 ): { dayIndex: number; dayName: string; dateStr: string; isWeekend: boolean }[] {
+  const now = new Date();
+  const actualDayOfWeek = now.getDay();
+  const isActualSunday = actualDayOfWeek === 0;
+
+  const yyyyNow = now.getFullYear();
+  const mmNow = String(now.getMonth() + 1).padStart(2, '0');
+  const ddNow = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${yyyyNow}-${mmNow}-${ddNow}`;
+
+  const runningMonday = getMondayOfWeek();
+  const isRunningWeek = mondayStr === runningMonday || (isActualSunday && mondayStr === todayStr);
+
   const baseMon = getMondayOfWeek(mondayStr);
   const dayNames = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
   const result: { dayIndex: number; dayName: string; dateStr: string; isWeekend: boolean }[] = [];
+
+  // RULE 1: JIKA MASIH HARI MINGGU MAKA PILL AUTO JADI 8 (1 PILL TGL MINGGU BERJALAN DAN 7 PILL MINGGU DEPAN)
+  if (isActualSunday && isRunningWeek) {
+    result.push({
+      dayIndex: 0,
+      dayName: 'MINGGU',
+      dateStr: todayStr,
+      isWeekend: true,
+    });
+  }
 
   for (let i = 0; i < 7; i++) {
     const dt = new Date(baseMon + 'T00:00:00');
@@ -93,7 +117,7 @@ export function getFullWeekDays(
     const mm = String(dt.getMonth() + 1).padStart(2, '0');
     const dd = String(dt.getDate()).padStart(2, '0');
     result.push({
-      dayIndex: i,
+      dayIndex: result.length,
       dayName: dayNames[i],
       dateStr: `${yyyy}-${mm}-${dd}`,
       isWeekend: i === 5 || i === 6,
@@ -103,13 +127,13 @@ export function getFullWeekDays(
 }
 
 /**
- * Format 1 week range display (e.g. "09 - 15 Nov 2026" or "28 Okt - 03 Nov 2026")
+ * Format 1 week range display (e.g. "08 - 15 Nov 2026" or "09 - 15 Nov 2026")
  */
 export function formatWeekRangeDisplay(mondayStr: string): string {
   const days = getFullWeekDays(mondayStr);
-  if (days.length < 7) return mondayStr;
+  if (days.length === 0) return mondayStr;
   const startParts = days[0].dateStr.split('-');
-  const endParts = days[6].dateStr.split('-');
+  const endParts = days[days.length - 1].dateStr.split('-');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   const startDay = parseInt(startParts[2], 10);
   const endDay = parseInt(endParts[2], 10);

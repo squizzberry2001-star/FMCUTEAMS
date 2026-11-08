@@ -693,17 +693,23 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             <span className="text-[11px] font-extrabold">Kalender Mingguan</span>
             <span className="text-[11px] font-bold px-2.5 py-0.5">Bulan Tahun</span>
           </div>
-          <div className="flex items-center justify-between gap-1.5 py-2">
+          <div className={`flex items-center justify-between py-2 ${weekDays.length === 8 ? 'gap-1' : 'gap-1.5'}`}>
             {weekDays.map((item) => (
               <div
                 key={item.dateString}
                 data-splash-fallback-pill={item.isToday ? 'actual-date-pill' : undefined}
-                className={`flex flex-col items-center justify-center flex-1 min-w-[42px] ${
+                className={`flex flex-col items-center justify-center flex-1 ${
+                  weekDays.length === 8 ? 'min-w-[36px] sm:min-w-[42px]' : 'min-w-[42px]'
+                } ${
                   item.isToday ? 'py-3.5 rounded-full transform -translate-y-0.5' : 'py-3 rounded-full'
                 }`}
               >
-                <span className="text-base font-bold leading-tight">{item.num}</span>
-                <span className="text-[10px] font-semibold mt-0.5">{item.label}</span>
+                <span className={`${weekDays.length === 8 ? 'text-sm sm:text-base' : 'text-base'} font-bold leading-tight`}>
+                  {item.num}
+                </span>
+                <span className={`${weekDays.length === 8 ? 'text-[9px] sm:text-[10px]' : 'text-[10px]'} font-semibold mt-0.5`}>
+                  {item.label}
+                </span>
               </div>
             ))}
           </div>
