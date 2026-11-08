@@ -1,4 +1,5 @@
 import type { StorySlide } from '../components/EmployeeStoriesBar';
+import { GAS_VAULT_API_URL } from '../services/cloudScheduleSyncService';
 
 export const FMCU_GDRIVE_FOLDER_ID = '1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
 export const FMCU_GDRIVE_FOLDER_URL =
@@ -104,6 +105,25 @@ export const uploadStoryToGasGDrive = async (
     base64: slide.imageUrl.replace(/^data:image\/\w+;base64,/, ''),
   };
 
+  // Concurrently push story metadata to Edge Cloud Vault for immediate multi-device visibility
+  (async () => {
+    try {
+      const existing = (await fetchActiveStoriesFromGasGDrive()) || [];
+      const updated = [slide, ...existing.filter((s) => s.id !== slide.id)];
+      await fetch(GAS_VAULT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'db_save_collection',
+          collection: 'stories',
+          data: updated,
+        }),
+      });
+    } catch {
+      // ignore
+    }
+  })();
+
   try {
     const response = await fetch(gasUrl, {
       method: 'POST',
@@ -154,30 +174,66 @@ export const uploadStoryToGasGDrive = async (
 
 /**
  * Fetch active (<24h) stories from Google Drive folder via Google Apps Script automatically.
+ * Queries both primary Google Drive Script & Edge Cloud Vault in parallel for instant cross-device pickup.
  */
 export const fetchActiveStoriesFromGasGDrive = async (): Promise<StorySlide[] | null> => {
-  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return null;
   }
 
-  try {
-    const sep = gasUrl.includes('?') ? '&' : '?';
-    const res = await fetch(
-      `${gasUrl}${sep}action=getActiveStories&folderId=${encodeURIComponent(
-        FMCU_GDRIVE_FOLDER_ID
-      )}&t=${Date.now()}`,
-      { method: 'GET' }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.ok && Array.isArray(data.stories)) {
-      return data.stories;
+  const nowMs = Date.now();
+  const storyMap = new Map<string, StorySlide>();
+
+  // 1. Query Edge Cloud Vault (Fast ~2s)
+  const vaultPromise = (async () => {
+    try {
+      const res = await fetch(GAS_VAULT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'db_get_collection', collection: 'stories' }),
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
+        json.data.forEach((s: StorySlide) => {
+          if (s && s.id && (s.expiresAtMs ? s.expiresAtMs > nowMs : true)) {
+            storyMap.set(s.id, s);
+          }
+        });
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // Silent fallback if offline or CORS redirect
-  }
-  return null;
+  })();
+
+  // 2. Query Primary GDrive Folder Backend
+  const primaryPromise = (async () => {
+    try {
+      const sep = DEFAULT_GAS_GDRIVE_URL.includes('?') ? '&' : '?';
+      const res = await fetch(
+        `${DEFAULT_GAS_GDRIVE_URL}${sep}action=getActiveStories&folderId=${encodeURIComponent(
+          FMCU_GDRIVE_FOLDER_ID
+        )}&t=${nowMs}`,
+        { method: 'GET' }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.stories)) {
+        data.stories.forEach((s: StorySlide) => {
+          if (s && s.id && (s.expiresAtMs ? s.expiresAtMs > nowMs : true)) {
+            storyMap.set(s.id, s);
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+  })();
+
+  await Promise.allSettled([vaultPromise, primaryPromise]);
+
+  const list = Array.from(storyMap.values()).sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+  return list.length > 0 ? list : null;
 };
 
 /**

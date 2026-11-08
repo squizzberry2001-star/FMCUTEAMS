@@ -726,11 +726,11 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         <div ref={mapContainerRef} className="w-full h-full z-10" />
 
         {/* TOP BAR HUD: Floating Stats, Tile Switcher, Filter Drawer Toggle & Close Button */}
-        <div className="absolute top-3 left-3 right-3 z-20 flex items-start justify-between gap-2 pointer-events-none">
+        <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between gap-2 pointer-events-none">
           {/* Left Group: Live Counter + Tile Switcher + Filter Button */}
-          <div className="flex flex-wrap items-center gap-1.5 pointer-events-auto max-w-[calc(100vw-4.5rem)]">
+          <div className="flex items-center gap-1.5 pointer-events-auto shrink min-w-0">
             {/* Brand & Counter Pill */}
-            <div className="bg-white px-3 py-2 rounded-2xl shadow-lg border border-slate-200/90 flex items-center gap-2">
+            <div className="bg-white px-2.5 sm:px-3 py-2 rounded-2xl shadow-lg border border-slate-200/90 flex items-center gap-1.5 sm:gap-2 shrink-0">
               <div className="w-6 h-6 rounded-lg bg-[#76C88D] text-white flex items-center justify-center shrink-0">
                 <Compass className="w-3.5 h-3.5" />
               </div>
@@ -740,26 +740,17 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               </span>
               {scheduledStorePoints.length > 0 && (
                 <>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-[11px] font-extrabold text-teal-700 flex items-center gap-1 whitespace-nowrap">
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <span className="hidden sm:flex text-[11px] font-extrabold text-teal-700 items-center gap-1 whitespace-nowrap">
                     <Route className="w-3 h-3" />
                     {scheduledStorePoints.length} Rute ({totalRouteKm} km)
                   </span>
                 </>
               )}
-              {isAdmin && showUserPinpoints && (
-                <>
-                  <span className="text-slate-300 hidden sm:inline">•</span>
-                  <span className="hidden sm:flex text-[11px] font-extrabold text-blue-700 items-center gap-1 whitespace-nowrap">
-                    <Users className="w-3 h-3" />
-                    {adminUserPinpoints.length} User
-                  </span>
-                </>
-              )}
             </div>
 
-            {/* Map Tile Switcher Pill */}
-            <div className="bg-white p-1 rounded-2xl shadow-lg border border-slate-200/90 flex items-center gap-1">
+            {/* Map Tile Switcher Pill (Desktop only inline, Mobile inside drawer) */}
+            <div className="hidden md:flex bg-white p-1 rounded-2xl shadow-lg border border-slate-200/90 items-center gap-1 shrink-0">
               {(['osm', 'street', 'satellite'] as MapTileStyle[]).map((styleKey) => (
                 <button
                   key={styleKey}
@@ -780,7 +771,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             <button
               type="button"
               onClick={() => setShowFloatingControls((v) => !v)}
-              className={`px-3 py-2 rounded-2xl shadow-lg border text-[11px] font-extrabold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-2 rounded-2xl shadow-lg border text-[11px] font-extrabold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
                 showFloatingControls
                   ? 'bg-slate-900 text-white border-slate-900'
                   : 'bg-white text-slate-800 border-slate-200/90 hover:bg-slate-50'
@@ -803,138 +794,197 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
           </button>
         </div>
 
-        {/* FLOATING FILTER & SEARCH DRAWER */}
+        {/* FLOATING FILTER & SEARCH DRAWER (WITH BACKDROP ON MOBILE) */}
         {showFloatingControls && (
-          <div className="absolute top-16 left-3 z-20 w-[min(92vw,360px)] bg-white rounded-3xl p-3.5 shadow-2xl border border-slate-200 space-y-2.5">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari dari 610 toko (kode / nama / kota)..."
-                className="w-full pl-8 pr-7 py-2 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3A657C]"
-              />
-              {searchQuery && (
+          <>
+            {/* Backdrop on mobile so tapping outside on the map closes the drawer immediately */}
+            <div
+              className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[2px] sm:hidden"
+              onClick={() => setShowFloatingControls(false)}
+            />
+
+            {/* Drawer Container: Bottom Sheet on Mobile, Floating Panel on Desktop */}
+            <div className="fixed inset-x-0 bottom-0 max-h-[82vh] z-50 bg-white rounded-t-[32px] p-5 shadow-2xl overflow-y-auto no-scrollbar sm:fixed-none sm:absolute sm:top-16 sm:left-3 sm:bottom-auto sm:inset-x-auto sm:w-[380px] sm:rounded-3xl sm:p-4 border border-slate-200 space-y-3 animate-in slide-in-from-bottom sm:slide-in-from-top-2 duration-200">
+              {/* Header Drawer with Drag handle & Close */}
+              <div className="flex items-center justify-between pb-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-4 rounded-full bg-[#76C88D]" />
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                    Filter &amp; Pencarian Toko
+                  </h4>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  onClick={() => setShowFloatingControls(false)}
+                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition cursor-pointer"
+                  title="Tutup Filter"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
-              )}
-            </div>
+              </div>
 
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setViewMode('all')}
-                className={`flex-1 py-2 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1 border cursor-pointer ${
-                  viewMode === 'all'
-                    ? 'bg-[#3A657C] text-white border-[#3A657C]'
-                    : 'bg-slate-50 text-slate-600 border-slate-200'
-                }`}
-              >
-                <Store className="w-3 h-3" />
-                <span>Semua Toko ({allMasterStores.length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('scheduled')}
-                className={`flex-1 py-2 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1 border cursor-pointer ${
-                  viewMode === 'scheduled'
-                    ? 'bg-[#3A657C] text-white border-[#3A657C]'
-                    : 'bg-slate-50 text-slate-600 border-slate-200'
-                }`}
-              >
-                <Route className="w-3 h-3" />
-                <span>Rute Jadwal ({scheduledStorePoints.length})</span>
-              </button>
-            </div>
-
-            {isAdmin && (
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <select
-                  value={selectedPicFilter}
-                  onChange={(e) => setSelectedPicFilter(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-800 outline-none cursor-pointer"
-                >
-                  <option value="ALL">Semua Personel ({uniquePics.length})</option>
-                  {uniquePics.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="grid grid-cols-4 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setShowUserPinpoints((v) => !v)}
-                    className={`py-1.5 rounded-xl text-[10px] font-extrabold border cursor-pointer ${
-                      showUserPinpoints
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    User
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowStorePinpoints((v) => !v)}
-                    className={`py-1.5 rounded-xl text-[10px] font-extrabold border cursor-pointer ${
-                      showStorePinpoints
-                        ? 'bg-teal-600 text-white border-teal-600'
-                        : 'bg-white text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    Toko
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowRadiusCircle((v) => !v)}
-                    className={`py-1.5 rounded-xl text-[10px] font-extrabold border cursor-pointer ${
-                      showRadiusCircle
-                        ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'bg-white text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    Radius
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowRouteLine((v) => !v)}
-                    className={`py-1.5 rounded-xl text-[10px] font-extrabold border cursor-pointer ${
-                      showRouteLine
-                        ? 'bg-amber-500 text-white border-amber-500'
-                        : 'bg-white text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    Rute
-                  </button>
-                </div>
-
-                {showRadiusCircle && (
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 pt-0.5">
-                    <span className="flex items-center gap-1">
-                      <Radio className="w-3 h-3 text-emerald-600" />
-                      Radius Geofence Toko:
-                    </span>
-                    <select
-                      value={radiusMeters}
-                      onChange={(e) => setRadiusMeters(Number(e.target.value))}
-                      className="px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[10px] font-extrabold text-slate-800 cursor-pointer"
+              {/* Map Tile Switcher on Mobile inside drawer */}
+              <div className="md:hidden flex items-center justify-between bg-slate-100 p-1 rounded-2xl">
+                <span className="text-[10px] font-extrabold text-slate-500 pl-2">Mode Peta:</span>
+                <div className="flex items-center gap-1">
+                  {(['osm', 'street', 'satellite'] as MapTileStyle[]).map((styleKey) => (
+                    <button
+                      key={styleKey}
+                      type="button"
+                      onClick={() => setTileStyle(styleKey)}
+                      className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold transition cursor-pointer ${
+                        tileStyle === styleKey
+                          ? 'bg-[#3A657C] text-white'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
                     >
-                      <option value={150}>150 Meter</option>
-                      <option value={250}>250 Meter</option>
-                      <option value={500}>500 Meter</option>
-                    </select>
-                  </div>
+                      {MAP_TILE_PROVIDERS[styleKey].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari dari 610 toko (kode / nama / kota)..."
+                  className="w-full pl-8 pr-7 py-2.5 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3A657C]"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
-            )}
-          </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('all')}
+                  className={`flex-1 py-2.5 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 border cursor-pointer ${
+                    viewMode === 'all'
+                      ? 'bg-[#3A657C] text-white border-[#3A657C]'
+                      : 'bg-slate-50 text-slate-600 border-slate-200'
+                  }`}
+                >
+                  <Store className="w-3.5 h-3.5" />
+                  <span>Semua Toko ({allMasterStores.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('scheduled')}
+                  className={`flex-1 py-2.5 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 border cursor-pointer ${
+                    viewMode === 'scheduled'
+                      ? 'bg-[#3A657C] text-white border-[#3A657C]'
+                      : 'bg-slate-50 text-slate-600 border-slate-200'
+                  }`}
+                >
+                  <Route className="w-3.5 h-3.5" />
+                  <span>Rute Jadwal ({scheduledStorePoints.length})</span>
+                </button>
+              </div>
+
+              {isAdmin && (
+                <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                  <select
+                    value={selectedPicFilter}
+                    onChange={(e) => setSelectedPicFilter(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-2xl bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-800 outline-none cursor-pointer"
+                  >
+                    <option value="ALL">Semua Personel ({uniquePics.length})</option>
+                    {uniquePics.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowUserPinpoints((v) => !v)}
+                      className={`py-2 rounded-xl text-[10px] font-extrabold border cursor-pointer transition ${
+                        showUserPinpoints
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      User
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowStorePinpoints((v) => !v)}
+                      className={`py-2 rounded-xl text-[10px] font-extrabold border cursor-pointer transition ${
+                        showStorePinpoints
+                          ? 'bg-teal-600 text-white border-teal-600'
+                          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      Toko
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRadiusCircle((v) => !v)}
+                      className={`py-2 rounded-xl text-[10px] font-extrabold border cursor-pointer transition ${
+                        showRadiusCircle
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      Radius
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRouteLine((v) => !v)}
+                      className={`py-2 rounded-xl text-[10px] font-extrabold border cursor-pointer transition ${
+                        showRouteLine
+                          ? 'bg-amber-500 text-white border-amber-500'
+                          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      Rute
+                    </button>
+                  </div>
+
+                  {showRadiusCircle && (
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 pt-0.5">
+                      <span className="flex items-center gap-1">
+                        <Radio className="w-3 h-3 text-emerald-600" />
+                        Radius Geofence Toko:
+                      </span>
+                      <select
+                        value={radiusMeters}
+                        onChange={(e) => setRadiusMeters(Number(e.target.value))}
+                        className="px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[10px] font-extrabold text-slate-800 cursor-pointer"
+                      >
+                        <option value={150}>150 Meter</option>
+                        <option value={250}>250 Meter</option>
+                        <option value={500}>500 Meter</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Apply & Close Button on Mobile */}
+              <button
+                type="button"
+                onClick={() => setShowFloatingControls(false)}
+                className="w-full sm:hidden py-3 rounded-2xl bg-[#3A657C] hover:bg-slate-900 text-white font-extrabold text-xs shadow-md transition cursor-pointer"
+              >
+                Terapkan &amp; Lihat Peta ({displayedStorePoints.length} Toko)
+              </button>
+            </div>
+          </>
         )}
 
         {/* BOTTOM-LEFT FLOATING DOCK: Pusatkan Peta & Toggle Daftar Rute Toko */}

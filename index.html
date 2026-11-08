@@ -14,6 +14,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="color-scheme" content="light" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>FMCU TEAMS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -50,7 +53,42 @@
       });
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js').catch(function () {});
+          navigator.serviceWorker
+            .register('/sw.js')
+            .then(function (reg) {
+              // Auto check for updates on load & every 60 seconds
+              reg.update();
+              setInterval(function () {
+                reg.update();
+              }, 60000);
+
+              // Auto update when tab gains focus
+              document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) {
+                  reg.update();
+                }
+              });
+
+              reg.onupdatefound = function () {
+                var installingWorker = reg.installing;
+                if (installingWorker) {
+                  installingWorker.onstatechange = function () {
+                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                  };
+                }
+              };
+            })
+            .catch(function () {});
+        });
+
+        var isRefreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (!isRefreshing) {
+            isRefreshing = true;
+            window.location.reload();
+          }
         });
       }
     </script>

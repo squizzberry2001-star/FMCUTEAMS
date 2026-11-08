@@ -267,18 +267,35 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
     loadAndSync();
 
+    // 1. Fast background interval (6 seconds) for seamless cross-device story updates
     const timer = setInterval(() => {
-      const nowMs = Date.now();
-      setStories((prev) => {
-        const active = prev.filter((s) => isStoryActive24h(s, nowMs));
-        return active.length === prev.length ? prev : active;
-      });
-      loadAndSync();
-    }, 30000);
+      if (typeof document !== 'undefined' && !document.hidden) {
+        const nowMs = Date.now();
+        setStories((prev) => {
+          const active = prev.filter((s) => isStoryActive24h(s, nowMs));
+          return active.length === prev.length ? prev : active;
+        });
+        loadAndSync();
+      }
+    }, 6000);
+
+    // 2. Immediate sync on tab focus, online, and visibility change
+    const handleImmediateSync = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        loadAndSync();
+      }
+    };
+
+    window.addEventListener('focus', handleImmediateSync);
+    window.addEventListener('online', handleImmediateSync);
+    document.addEventListener('visibilitychange', handleImmediateSync);
 
     return () => {
       mounted = false;
       clearInterval(timer);
+      window.removeEventListener('focus', handleImmediateSync);
+      window.removeEventListener('online', handleImmediateSync);
+      document.removeEventListener('visibilitychange', handleImmediateSync);
     };
   }, []);
 

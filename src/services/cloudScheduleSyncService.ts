@@ -219,9 +219,15 @@ export function normalizeCloudScheduleToAgenda(item: any): ScheduleAgenda | null
 
 async function postCloudEndpoint(url: string, payload: Record<string, any>): Promise<any> {
   try {
-    const res = await fetch(url, {
+    const sep = url.includes('?') ? '&' : '?';
+    const res = await fetch(`${url}${sep}t=${Date.now()}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+      cache: 'no-store',
       body: JSON.stringify(payload),
     });
     if (!res.ok) return null;

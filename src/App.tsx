@@ -27,6 +27,7 @@ import {
   flushOfflineAttendanceQueue,
 } from './services/actualAttendanceService';
 import { Smartphone, Monitor, Shield, ArrowLeft } from 'lucide-react';
+import { GpsEnforcerGuard } from './components/common/GpsEnforcerGuard';
 
 // Code-split heavy components to make initial splash & login load instantly on mobile
 const AdminPortal = lazy(() =>
@@ -417,7 +418,7 @@ export const App: React.FC = () => {
   // 1. If not authenticated, render Login Page
   if (!user) {
     return (
-      <>
+      <GpsEnforcerGuard>
         {showSplash && (
           <SplashScreen
             onComplete={handleSplashComplete}
@@ -431,14 +432,14 @@ export const App: React.FC = () => {
           onLogin={handleLogin}
           onReplaySplash={() => setShowSplash(true)}
         />
-      </>
+      </GpsEnforcerGuard>
     );
   }
 
   // 2. If logged in as ADMIN and not in preview mode, render dedicated Admin Portal
   if (user.isAdmin && !adminPreviewMode) {
     return (
-      <>
+      <GpsEnforcerGuard>
         {showSplash && (
           <SplashScreen
             onComplete={handleSplashComplete}
@@ -474,13 +475,13 @@ export const App: React.FC = () => {
           selectedDate={selectedDate}
           onSelectAgenda={handleSelectAgenda}
         />
-      </>
+      </GpsEnforcerGuard>
     );
   }
 
   // 3. User View (Field Staff View or Admin in Preview Mode)
   return (
-    <>
+    <GpsEnforcerGuard>
       {showSplash && (
         <SplashScreen
           onComplete={handleSplashComplete}
@@ -709,7 +710,7 @@ export const App: React.FC = () => {
         onSelectAgenda={handleSelectAgenda}
       />
     </div>
-    </>
+    </GpsEnforcerGuard>
   );
 };
 
