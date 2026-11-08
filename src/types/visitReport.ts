@@ -87,4 +87,5 @@ export interface VisitReportData {
   assignmentNotes: string;
   status: 'DRAFT' | 'SUBMITTED';
   submittedAt?: string;
+  updatedAtMs?: number;
 }

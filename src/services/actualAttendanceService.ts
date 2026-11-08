@@ -12,8 +12,18 @@ import { pushSingleAgendaToCloud } from './cloudScheduleSyncService';
 
 export const STRICT_STORE_RADIUS_METERS = 50; // Wajib berada dalam radius 1-50m dari titik koordinat toko
 
-const ATTENDANCE_MAP_STORAGE_KEY = 'fmcu_actual_attendance_map_v1';
-const OFFLINE_SYNC_QUEUE_KEY = 'fmcu_actual_attendance_offline_queue_v1';
+const ATTENDANCE_MAP_STORAGE_KEY = 'fmcu_actual_attendance_map_v2';
+const OFFLINE_SYNC_QUEUE_KEY = 'fmcu_actual_attendance_offline_queue_v2';
+
+// Invalidate legacy dummy attendance map
+try {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('fmcu_actual_attendance_map_v1');
+    localStorage.removeItem('fmcu_actual_attendance_offline_queue_v1');
+  }
+} catch {
+  // ignore
+}
 
 export interface SilentGpsSnapshot {
   lat: number;

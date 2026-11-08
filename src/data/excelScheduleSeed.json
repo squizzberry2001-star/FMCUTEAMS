@@ -4212,7 +4212,7 @@
         "3013",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },
@@ -4384,7 +4384,7 @@
         "3005",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },
@@ -5275,7 +5275,7 @@
         "0401",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },
@@ -5335,7 +5335,7 @@
         "0446",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },
@@ -5365,7 +5365,7 @@
         "0448",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },
@@ -5395,7 +5395,7 @@
         "0549",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },
@@ -5425,7 +5425,7 @@
         "0274",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },
@@ -5712,7 +5712,7 @@
         "0058",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },
@@ -5742,7 +5742,7 @@
         "0124",
         "02 - 08 Nov"
       ],
-      "completed": true,
+      "completed": false,
       "priority": "HIGH",
       "createdBy": "Excel Sync"
     },

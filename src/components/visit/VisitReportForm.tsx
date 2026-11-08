@@ -75,6 +75,13 @@ import {
   getTrustedNow,
   formatTimeWib,
 } from '../../services/actualAttendanceService';
+import {
+  fetchVisitReportFromCloud,
+  pushVisitReportToCloud,
+  subscribeToCrossDeviceVisit,
+  saveVisitPhotosToIdb,
+  loadVisitPhotosFromIdb,
+} from '../../services/crossDeviceVisitSyncService';
 
 interface VisitReportFormProps {
   agenda: ScheduleAgenda;
@@ -137,58 +144,8 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
 // INDEXED-DB PHOTO STORAGE & GAS (GOOGLE APPS SCRIPT) GDRIVE AUTO-SYNC ENGINE
 // ============================================================================
 const IDB_NAME = 'fmcu_visit_gdrive_cache_db';
-const IDB_STORE = 'visit_photos';
-
-const openPhotoDb = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      return reject(new Error('IndexedDB not supported'));
-    }
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(IDB_STORE)) {
-        db.createObjectStore(IDB_STORE);
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-};
-
-const savePhotosToIdb = async (
-  key: string,
-  payload: {
-    storeFrontPhoto?: string;
-    qscSheetPhoto?: string;
-    qscSheetTop?: string;
-    qscSheetBottom?: string;
-    evidencePhotos?: EvidencePhoto[];
-    caPhotos?: EvidencePhoto[];
-  }
-): Promise<void> => {
-  try {
-    const db = await openPhotoDb();
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(payload, key);
-  } catch (e) {
-    console.warn('IDB Save Warning:', e);
-  }
-};
-
-const loadPhotosFromIdb = async (key: string): Promise<any | null> => {
-  try {
-    const db = await openPhotoDb();
-    return new Promise((resolve) => {
-      const tx = db.transaction(IDB_STORE, 'readonly');
-      const req = tx.objectStore(IDB_STORE).get(key);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-  } catch {
-    return null;
-  }
-};
+const savePhotosToIdb = saveVisitPhotosToIdb;
+const loadPhotosFromIdb = loadVisitPhotosFromIdb;
 
 // Default GAS WebApp Endpoint & Target GDrive Folder (1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a)
 const FMCU_GDRIVE_FOLDER_ID = '1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
@@ -571,9 +528,14 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   const [activeVoiceKey, setActiveVoiceKey] = useState<string | null>(null);
   const activeRecognitionRef = useRef<any>(null);
 
-  // Restore heavy photos from IndexedDB on mount
+  // Cross-Device Real-time Sync Timestamp Ref
+  const lastSyncTimestampRef = useRef<number>((formData as any).updatedAtMs || 0);
+
+  // Restore heavy photos from IndexedDB on mount & Cross-Device Real-time Hydration
   useEffect(() => {
     let mounted = true;
+
+    // 1. Instant local restore from IndexedDB
     loadPhotosFromIdb(draftKey).then((cached) => {
       if (mounted && cached) {
         setFormData((prev) => ({
@@ -593,10 +555,84 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         }));
       }
     });
+
+    // 2. Fetch latest data from Cloud Vault (Cross-Device Continuity: Mobile -> Desktop)
+    fetchVisitReportFromCloud(agenda.id, true).then((cloudReport) => {
+      if (!mounted || !cloudReport) return;
+
+      const remoteMs = cloudReport.updatedAtMs || 0;
+      const localMs = lastSyncTimestampRef.current;
+
+      const hasCloudData =
+        (Array.isArray(cloudReport.observations) && cloudReport.observations.length > 0) ||
+        (Array.isArray(cloudReport.evidencePhotos) && cloudReport.evidencePhotos.length > 0) ||
+        Boolean(cloudReport.qscSheetPhoto || cloudReport.qscSheetTop || cloudReport.qscSheetBottom);
+
+      if (remoteMs > localMs || hasCloudData) {
+        lastSyncTimestampRef.current = remoteMs || Date.now();
+        setFormData((prev) => ({
+          ...prev,
+          ...cloudReport,
+          crews: Array.isArray(cloudReport.crews) && cloudReport.crews.length > 0 ? cloudReport.crews : prev.crews,
+          observations: Array.isArray(cloudReport.observations) ? cloudReport.observations : prev.observations,
+          evidencePhotos: Array.isArray(cloudReport.evidencePhotos) ? cloudReport.evidencePhotos : prev.evidencePhotos,
+          caPhotos: Array.isArray(cloudReport.caPhotos) ? cloudReport.caPhotos : prev.caPhotos,
+          storeFrontPhoto: cloudReport.storeFrontPhoto || prev.storeFrontPhoto,
+          qscSheetPhoto: cloudReport.qscSheetPhoto || prev.qscSheetPhoto,
+          qscSheetTop: cloudReport.qscSheetTop || prev.qscSheetTop,
+          qscSheetBottom: cloudReport.qscSheetBottom || prev.qscSheetBottom,
+          gasSyncStatus: 'synced',
+        }));
+
+        savePhotosToIdb(draftKey, {
+          storeFrontPhoto: cloudReport.storeFrontPhoto,
+          qscSheetPhoto: cloudReport.qscSheetPhoto,
+          qscSheetTop: cloudReport.qscSheetTop,
+          qscSheetBottom: cloudReport.qscSheetBottom,
+          evidencePhotos: cloudReport.evidencePhotos,
+          caPhotos: cloudReport.caPhotos,
+        });
+      }
+    });
+
+    // 3. Subscribe to Real-Time Cross-Device updates (0ms BroadcastChannel + 6s Cloud Heartbeat)
+    const unsubscribeSync = subscribeToCrossDeviceVisit(
+      agenda.id,
+      () => lastSyncTimestampRef.current,
+      (remoteReport) => {
+        if (!mounted || !remoteReport) return;
+        lastSyncTimestampRef.current = remoteReport.updatedAtMs || Date.now();
+        setFormData((prev) => ({
+          ...prev,
+          ...remoteReport,
+          crews: Array.isArray(remoteReport.crews) && remoteReport.crews.length > 0 ? remoteReport.crews : prev.crews,
+          observations: Array.isArray(remoteReport.observations) ? remoteReport.observations : prev.observations,
+          evidencePhotos: Array.isArray(remoteReport.evidencePhotos) ? remoteReport.evidencePhotos : prev.evidencePhotos,
+          caPhotos: Array.isArray(remoteReport.caPhotos) ? remoteReport.caPhotos : prev.caPhotos,
+          storeFrontPhoto: remoteReport.storeFrontPhoto || prev.storeFrontPhoto,
+          qscSheetPhoto: remoteReport.qscSheetPhoto || prev.qscSheetPhoto,
+          qscSheetTop: remoteReport.qscSheetTop || prev.qscSheetTop,
+          qscSheetBottom: remoteReport.qscSheetBottom || prev.qscSheetBottom,
+          gasSyncStatus: 'synced',
+        }));
+
+        savePhotosToIdb(draftKey, {
+          storeFrontPhoto: remoteReport.storeFrontPhoto,
+          qscSheetPhoto: remoteReport.qscSheetPhoto,
+          qscSheetTop: remoteReport.qscSheetTop,
+          qscSheetBottom: remoteReport.qscSheetBottom,
+          evidencePhotos: remoteReport.evidencePhotos,
+          caPhotos: remoteReport.caPhotos,
+        });
+      },
+      6000
+    );
+
     return () => {
       mounted = false;
+      unsubscribeSync();
     };
-  }, [draftKey]);
+  }, [agenda.id, draftKey]);
 
   // Monitor Online / Offline & Automatic System 1-50m Geofence Attendance
   useEffect(() => {
@@ -799,7 +835,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   const evidenceCameraInputRef = useRef<HTMLInputElement>(null);
   const evidenceGalleryInputRef = useRef<HTMLInputElement>(null);
 
-  // Safe Auto-save draft (Never throws QuotaExceededError!)
+  // Safe Auto-save draft + Real-time Cross-Device Cloud Sync
   useEffect(() => {
     // 1. Save full photos to IndexedDB (unlimited capacity)
     savePhotosToIdb(draftKey, {
@@ -830,6 +866,22 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         console.warn('LocalStorage quota full, using IndexedDB:', innerErr);
       }
     }
+
+    // 3. Debounced Cloud Push (1.8s) for Cross-Device Continuity (Mobile <-> Desktop)
+    const syncTimer = setTimeout(() => {
+      lastSyncTimestampRef.current = Date.now();
+      pushVisitReportToCloud(formData).then((ok) => {
+        if (ok) {
+          setFormData((prev) => ({
+            ...prev,
+            gasSyncStatus: 'synced',
+            lastSyncedAt: getCurrentWibTime(),
+          }));
+        }
+      });
+    }, 1800);
+
+    return () => clearTimeout(syncTimer);
   }, [formData, draftKey]);
 
   // Calculate Form Completion Progress Percentage
@@ -925,7 +977,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         try {
           let w = img.naturalWidth || img.width || 1200;
           let h = img.naturalHeight || img.height || 900;
-          const maxDim = 1200;
+          const maxDim = 1024;
           if (w > maxDim || h > maxDim) {
             if (w > h) {
               h = Math.round((h * maxDim) / w);
@@ -946,7 +998,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           }
 
           ctx.drawImage(img, 0, 0, w, h);
-          const cleanUrl = canvas.toDataURL('image/jpeg', 0.88);
+          const cleanUrl = canvas.toDataURL('image/jpeg', 0.78);
           cleanup();
           resolve(cleanUrl);
         } catch (err) {
@@ -1010,7 +1062,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           ctx.fillText(textStr, padX, h - padY);
           ctx.restore();
 
-          resolve(canvas.toDataURL('image/jpeg', 0.88));
+          resolve(canvas.toDataURL('image/jpeg', 0.78));
         } catch (err) {
           console.warn('stampMinimalistTimestamp error:', err);
           resolve(cleanBase64Url);
@@ -1076,8 +1128,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             );
           }
 
-          const topBase64 = topCanvas.toDataURL('image/jpeg', 0.88);
-          const bottomBase64 = bottomCanvas.toDataURL('image/jpeg', 0.88);
+          const topBase64 = topCanvas.toDataURL('image/jpeg', 0.80);
+          const bottomBase64 = bottomCanvas.toDataURL('image/jpeg', 0.80);
 
           resolve({ top: topBase64, bottom: bottomBase64 });
         } catch (err) {
@@ -1105,13 +1157,16 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       const { stamped: fullStamped } = await processAndStampImage(file);
       const { top: topSplit, bottom: bottomSplit } = await splitImageIntoTopAndBottom(fullStamped);
 
-      setFormData((prev) => ({
-        ...prev,
+      const nextReport: VisitReportData = {
+        ...formData,
         qscSheetPhoto: fullStamped,
         qscSheetTop: topSplit,
         qscSheetBottom: bottomSplit,
         gasSyncStatus: 'syncing',
-      }));
+      };
+      setFormData(nextReport);
+      lastSyncTimestampRef.current = Date.now();
+      pushVisitReportToCloud(nextReport);
 
       // Async upload full photo to Google Drive
       uploadPhotoToGasGDrive({
@@ -1147,15 +1202,20 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleDeleteQsc = () => {
     if (confirm('Hapus foto lembar QSC ini?')) {
-      setFormData((prev) => ({
-        ...prev,
-        qscSheetPhoto: '',
-        qscSheetTop: '',
-        qscSheetBottom: '',
-        qscDriveUrl: '',
-        qscTopDriveUrl: '',
-        qscBottomDriveUrl: '',
-      }));
+      setFormData((prev) => {
+        const nextReport = {
+          ...prev,
+          qscSheetPhoto: '',
+          qscSheetTop: '',
+          qscSheetBottom: '',
+          qscDriveUrl: '',
+          qscTopDriveUrl: '',
+          qscBottomDriveUrl: '',
+        };
+        lastSyncTimestampRef.current = Date.now();
+        pushVisitReportToCloud(nextReport);
+        return nextReport;
+      });
     }
   };
 
@@ -1203,6 +1263,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
     setFormData((prev) => {
       const updated = [...prev.observations, newObs];
+      const nextReport = { ...prev, observations: updated };
+      lastSyncTimestampRef.current = Date.now();
+      pushVisitReportToCloud(nextReport);
       const filtered = updated.filter((o) => o.type.toUpperCase() === type);
       setTimeout(() => {
         setActiveObsIdx(Math.max(0, filtered.length - 1));
@@ -1211,7 +1274,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, 80);
-      return { ...prev, observations: updated };
+      return nextReport;
     });
   };
 
@@ -1237,10 +1300,15 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleRemoveObs = (id: string) => {
     if (confirm('Apakah Anda yakin ingin menghapus kartu temuan ini?')) {
-      setFormData((prev) => ({
-        ...prev,
-        observations: prev.observations.filter((o) => o.id !== id),
-      }));
+      setFormData((prev) => {
+        const nextReport = {
+          ...prev,
+          observations: prev.observations.filter((o) => o.id !== id),
+        };
+        lastSyncTimestampRef.current = Date.now();
+        pushVisitReportToCloud(nextReport);
+        return nextReport;
+      });
       setActiveObsIdx((prevIdx) => Math.max(0, prevIdx - 1));
     }
   };
@@ -1250,23 +1318,28 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     const preset = FINDING_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
 
-    setFormData((prev) => ({
-      ...prev,
-      observations: prev.observations.map((o) =>
-        o.id === obsId
-          ? {
-              ...o,
-              category: preset.category,
-              auditFinding: preset.temuan,
-              idealCondition: preset.kondisiIdeal,
-              rootCause: preset.penyebab,
-              operationalImpact: preset.dampak,
-              actionPlan: preset.tindakanPerbaikan,
-              expectedResult: preset.hasil,
-            }
-          : o
-      ),
-    }));
+    setFormData((prev) => {
+      const nextReport = {
+        ...prev,
+        observations: prev.observations.map((o) =>
+          o.id === obsId
+            ? {
+                ...o,
+                category: preset.category,
+                auditFinding: preset.temuan,
+                idealCondition: preset.kondisiIdeal,
+                rootCause: preset.penyebab,
+                operationalImpact: preset.dampak,
+                actionPlan: preset.tindakanPerbaikan,
+                expectedResult: preset.hasil,
+              }
+            : o
+        ),
+      };
+      lastSyncTimestampRef.current = Date.now();
+      pushVisitReportToCloud(nextReport);
+      return nextReport;
+    });
   };
 
   // AI Auto-Isi (T.A.R.O AI) MURNI Menggunakan Hasil Analisa API Key (Tanpa Fallback Preset)
@@ -1395,13 +1468,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const { stamped, raw } = await processAndStampImage(file);
+        const { stamped } = await processAndStampImage(file);
         const photoId = `ev-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`;
 
         createdPhotos.push({
           id: photoId,
           photoUrl: stamped,
-          rawPhotoUrl: raw,
           caption: '', // DEFAULT KOSONG SESUAI PERMINTAAN USER!
           timestamp: getCurrentWibTime(),
           gpsLocation: formData.liveGps || 'Verified',
@@ -1409,20 +1481,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         });
       }
 
-      // 1. INSTANT ATTACH KE FORM DATA (USER TIDAK PERLU MENUNGGU LOADING)
-      if (isCa) {
-        setFormData((prev) => ({
-          ...prev,
-          caPhotos: [...(prev.caPhotos || []), ...createdPhotos],
-        }));
-      } else {
-        setFormData((prev) => ({
-          ...prev,
-          evidencePhotos: [...prev.evidencePhotos, ...createdPhotos],
-        }));
-      }
+      // 1. INSTANT ATTACH KE FORM DATA & IMMEDIATE CROSS-DEVICE SYNC
+      const nextReport: VisitReportData = {
+        ...formData,
+        ...(isCa
+          ? { caPhotos: [...(formData.caPhotos || []), ...createdPhotos] }
+          : { evidencePhotos: [...formData.evidencePhotos, ...createdPhotos] }),
+      };
+      setFormData(nextReport);
+      lastSyncTimestampRef.current = Date.now();
+      pushVisitReportToCloud(nextReport);
 
-      setUploadStatusMsg(`${createdPhotos.length} foto berhasil ter-attach ke form visit!`);
+      setUploadStatusMsg(`${createdPhotos.length} foto berhasil ter-attach ke form visit & tersinkron!`);
       setTimeout(() => setUploadStatusMsg(null), 3000);
       confetti({ particleCount: 25, spread: 45, origin: { y: 0.6 } });
 
@@ -1494,17 +1564,17 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   };
 
   const handleRemoveEvidencePhoto = (id: string, isCa = false) => {
-    if (isCa) {
-      setFormData((prev) => ({
+    setFormData((prev) => {
+      const nextReport: VisitReportData = {
         ...prev,
-        caPhotos: prev.caPhotos?.filter((p) => p.id !== id),
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        evidencePhotos: prev.evidencePhotos.filter((p) => p.id !== id),
-      }));
-    }
+        ...(isCa
+          ? { caPhotos: (prev.caPhotos || []).filter((p) => p.id !== id) }
+          : { evidencePhotos: prev.evidencePhotos.filter((p) => p.id !== id) }),
+      };
+      lastSyncTimestampRef.current = Date.now();
+      pushVisitReportToCloud(nextReport);
+      return nextReport;
+    });
   };
 
   // Helper to rotate image base64 on client canvas
@@ -1583,23 +1653,33 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     const stamped = await stampMinimalistTimestamp(rawClean);
 
     if (editingPhotoState.isCa) {
-      setFormData((prev) => ({
-        ...prev,
-        caPhotos: (prev.caPhotos || []).map((p) =>
-          p.id === editingPhotoState.photoId
-            ? { ...p, photoUrl: stamped, rawPhotoUrl: rawClean, caption: updated.caption }
-            : p
-        ),
-      }));
+      setFormData((prev) => {
+        const nextReport: VisitReportData = {
+          ...prev,
+          caPhotos: (prev.caPhotos || []).map((p) =>
+            p.id === editingPhotoState.photoId
+              ? { ...p, photoUrl: stamped, caption: updated.caption }
+              : p
+          ),
+        };
+        lastSyncTimestampRef.current = Date.now();
+        pushVisitReportToCloud(nextReport);
+        return nextReport;
+      });
     } else {
-      setFormData((prev) => ({
-        ...prev,
-        evidencePhotos: prev.evidencePhotos.map((p) =>
-          p.id === editingPhotoState.photoId
-            ? { ...p, photoUrl: stamped, rawPhotoUrl: rawClean, caption: updated.caption }
-            : p
-        ),
-      }));
+      setFormData((prev) => {
+        const nextReport: VisitReportData = {
+          ...prev,
+          evidencePhotos: prev.evidencePhotos.map((p) =>
+            p.id === editingPhotoState.photoId
+              ? { ...p, photoUrl: stamped, caption: updated.caption }
+              : p
+          ),
+        };
+        lastSyncTimestampRef.current = Date.now();
+        pushVisitReportToCloud(nextReport);
+        return nextReport;
+      });
     }
 
     // Also update zoom modal state if open
@@ -2077,9 +2157,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           </button>
 
           {/* Tengah: Floating Liquid Glass Title Capsule */}
-          <div className="iphone-glass-mini-dock px-3.5 sm:px-4 py-1.5 rounded-full shadow-lg border border-white/50 text-center min-w-0 max-w-[190px] sm:max-w-xs truncate pointer-events-auto">
-            <span className="text-[9px] font-black text-teal-800 uppercase tracking-wider block leading-none">
-              FMCU Visit Report
+          <div className="iphone-glass-mini-dock px-3.5 sm:px-4 py-1.5 rounded-full shadow-lg border border-white/50 text-center min-w-0 max-w-[210px] sm:max-w-xs truncate pointer-events-auto">
+            <span className="text-[9px] font-black text-teal-800 uppercase tracking-wider flex items-center justify-center gap-1 leading-none">
+              <Cloud className="w-2.5 h-2.5 text-emerald-600 inline shrink-0" />
+              <span>Realtime Cross-Device</span>
             </span>
             <h2 className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate mt-0.5">
               {formData.storeName ? formData.storeName : 'Audit Toko FMCU'}

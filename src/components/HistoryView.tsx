@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   ChevronLeft,
   Store,
@@ -12,6 +12,7 @@ import {
   FileText,
   ExternalLink,
   Cloud,
+  Download,
 } from 'lucide-react';
 import { DeveloperFooter } from './DeveloperFooter';
 import { ScheduleAgenda, User } from '../types';
@@ -22,10 +23,11 @@ import {
   findMasterStoreByCodeOrName,
 } from '../data/masterStoresData';
 import { resolveAgendaGeoPoints } from '../utils/mapGeoUtils';
-import { VisitPdfPreview } from './visit/VisitPdfPreview';
 import {
   getGDriveReportRegistryEntry,
   FMCU_REPORT_GDRIVE_FOLDER_URL,
+  generatePdfDoc,
+  toGDriveEmbedPreviewUrl,
 } from '../services/pdfGeneratorService';
 
 interface HistoryViewProps {
@@ -219,8 +221,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     reportData: VisitReportData;
     gdrivePdfUrl: string;
     gdriveEmbedUrl?: string;
-    viewMode: 'web-pdf' | 'gdrive-embed';
   } | null>(null);
+  const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const currentUserName = user?.name || '';
 
@@ -376,6 +379,40 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     };
   };
 
+  // Effect to generate rendered PDF blob for in-web preview if direct GDrive embed isn't yet available
+  useEffect(() => {
+    if (!activeReportViewer) {
+      if (blobPdfUrl) {
+        URL.revokeObjectURL(blobPdfUrl);
+        setBlobPdfUrl(null);
+      }
+      return;
+    }
+
+    if (activeReportViewer.gdriveEmbedUrl) {
+      return;
+    }
+
+    let active = true;
+    setIsGeneratingPdf(true);
+    generatePdfDoc(activeReportViewer.reportData)
+      .then((doc) => {
+        if (!active) return;
+        const blob = doc.output('blob');
+        const url = URL.createObjectURL(blob);
+        setBlobPdfUrl(url);
+        setIsGeneratingPdf(false);
+      })
+      .catch((err) => {
+        console.warn('PDF blob generation error:', err);
+        if (active) setIsGeneratingPdf(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeReportViewer]);
+
   const handleOpenDirectPdfReport = (params: {
     storeCode?: string;
     storeName?: string;
@@ -385,34 +422,42 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       ...params,
       currentUserName,
     });
-    setActiveReportViewer({
-      ...resolved,
-      viewMode: 'web-pdf',
-    });
+    setActiveReportViewer(resolved);
   };
 
   // ============================================================================
-  // DIRECT IN-WEB GDRIVE PDF VIEWER (PDF LANGSUNG TAMPIL DI WEB)
+  // DIRECT IN-WEB GDRIVE PDF VIEWER (PREVIEW LANGSUNG DARI GDRIVE / PDF DOKUMEN)
   // ============================================================================
   if (activeReportViewer) {
+    const pdfSrc =
+      activeReportViewer.gdriveEmbedUrl ||
+      blobPdfUrl ||
+      activeReportViewer.gdrivePdfUrl;
+
     return (
-      <div className="fixed inset-0 z-[9999] bg-slate-950 flex flex-col overflow-y-auto">
+      <div className="fixed inset-0 z-[9999] bg-slate-950 flex flex-col">
         {/* Top GDrive Cloud PDF Banner */}
-        <div className="sticky top-0 z-50 bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-white">
+        <div className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-white">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
-              onClick={() => setActiveReportViewer(null)}
+              onClick={() => {
+                if (blobPdfUrl) {
+                  URL.revokeObjectURL(blobPdfUrl);
+                  setBlobPdfUrl(null);
+                }
+                setActiveReportViewer(null);
+              }}
               className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shrink-0"
             >
               <ChevronLeft className="w-4 h-4" />
-              <span>Kembali ke Coverage Store</span>
+              <span>Kembali</span>
             </button>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[10px] font-black">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[10px] font-black">
                   <Cloud className="w-3 h-3" />
-                  <span>GDrive PDF • Tampil di Web</span>
+                  <span>Preview PDF Google Drive</span>
                 </span>
                 <span className="text-xs font-black text-white truncate">
                   Toko {activeReportViewer.reportData.storeName} (#{activeReportViewer.reportData.storeCode})
@@ -422,71 +467,52 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {activeReportViewer.gdriveEmbedUrl && (
-              <div className="flex items-center bg-slate-800 p-0.5 rounded-xl text-[10px] font-extrabold">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveReportViewer((prev) =>
-                      prev ? { ...prev, viewMode: 'web-pdf' } : null
-                    )
+            {activeReportViewer.reportData && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const doc = await generatePdfDoc(activeReportViewer.reportData);
+                    doc.save(`Laporan_Visit_${activeReportViewer.reportData.storeCode}_${activeReportViewer.reportData.visitDate}.pdf`);
+                  } catch (e) {
+                    console.error(e);
                   }
-                  className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                    activeReportViewer.viewMode === 'web-pdf'
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  PDF Web Langsung
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveReportViewer((prev) =>
-                      prev ? { ...prev, viewMode: 'gdrive-embed' } : null
-                    )
-                  }
-                  className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                    activeReportViewer.viewMode === 'gdrive-embed'
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  Embed GDrive
-                </button>
-              </div>
+                }}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh PDF</span>
+              </button>
             )}
 
             <a
               href={activeReportViewer.gdrivePdfUrl || FMCU_REPORT_GDRIVE_FOLDER_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-extrabold flex items-center gap-1.5 transition shrink-0"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white text-[11px] font-extrabold flex items-center gap-1.5 transition shrink-0 shadow-sm"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>Folder Google Drive</span>
+              <span>Buka di Google Drive</span>
             </a>
           </div>
         </div>
 
-        {/* Direct Web PDF Body */}
-        {activeReportViewer.viewMode === 'gdrive-embed' && activeReportViewer.gdriveEmbedUrl ? (
-          <div className="flex-1 w-full bg-slate-900 p-2 sm:p-4 flex flex-col">
+        {/* Direct In-Web PDF Preview Frame */}
+        <div className="flex-1 w-full bg-slate-900 p-2 sm:p-4 flex flex-col relative overflow-hidden">
+          {isGeneratingPdf && !activeReportViewer.gdriveEmbedUrl ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-3">
+              <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs font-semibold">Memuat preview PDF dari Google Drive...</p>
+            </div>
+          ) : (
             <iframe
-              src={activeReportViewer.gdriveEmbedUrl}
-              title={`Laporan PDF GDrive ${activeReportViewer.reportData.storeName}`}
-              className="w-full flex-1 min-h-[82vh] rounded-2xl border border-slate-700 bg-white"
+              src={pdfSrc}
+              title={`Preview PDF GDrive ${activeReportViewer.reportData.storeName}`}
+              className="w-full flex-1 rounded-2xl border border-slate-700 bg-white shadow-2xl"
               allow="autoplay"
             />
-          </div>
-        ) : (
-          <div className="flex-1">
-            <VisitPdfPreview
-              data={activeReportViewer.reportData}
-              onBack={() => setActiveReportViewer(null)}
-            />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }

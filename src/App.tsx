@@ -58,9 +58,10 @@ export const App: React.FC = () => {
   // 2. Master State for Agendas (Jadwal resmi dari TEMPLET EXCEL JADWAL.xlsx + Live Cloud Sync + Offline Attendance)
   const [agendas, setAgendas] = useState<ScheduleAgenda[]>(() => {
     try {
+      localStorage.removeItem('fmcu_agendas_master_v5');
       localStorage.removeItem('fmcu_agendas_master_v3');
       localStorage.removeItem('fmcu_agendas_master_v2');
-      const saved = localStorage.getItem('fmcu_agendas_master_v5');
+      const saved = localStorage.getItem('fmcu_agendas_master_v6');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -136,6 +137,15 @@ export const App: React.FC = () => {
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
+    // Jika hari ini Minggu (day === 0), otomatis aktif mulai dari hari Senin besok sesuai instruksi operasional
+    if (now.getDay() === 0) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(now.getDate() + 1);
+      const year = tomorrow.getFullYear();
+      const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+      const day = String(tomorrow.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
@@ -194,7 +204,7 @@ export const App: React.FC = () => {
   // Save master agendas to localStorage safely
   useEffect(() => {
     try {
-      localStorage.setItem('fmcu_agendas_master_v5', JSON.stringify(agendas));
+      localStorage.setItem('fmcu_agendas_master_v6', JSON.stringify(agendas));
     } catch (e) {
       console.warn('localStorage agendas quota warning:', e);
     }
@@ -251,7 +261,7 @@ export const App: React.FC = () => {
     };
     const handleFocus = () => syncSchedulesFromCloud();
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'fmcu_agendas_master_v5' && e.newValue) {
+      if (e.key === 'fmcu_agendas_master_v6' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setAgendas(parsed);
