@@ -4,17 +4,18 @@ import { resolvePrimaryAgendaGeoPoint } from '../utils/mapGeoUtils';
 import { pushSingleAgendaToCloud } from './cloudScheduleSyncService';
 
 // ============================================================================
-// SILENT BACKGROUND ATTENDANCE & MULTI-STORE OFFLINE-FIRST ENGINE
-// - Zero visible GPS prompts/labels on user UI (100% silent background telemetry)
-// - Supports 08:30 - 17:30 working hours & multi-store visits (1 day 2+ stores)
-// - Monotonic clock lock to prevent phone clock tampering while offline
-// - Offline-first local storage + automatic background cloud sync when online
+// AUTOMATIC SYSTEM ATTENDANCE & STRICT 1-50M STORE GEOFENCE ENGINE
+// - 100% Automatic IN/OUT by System (Zero manual time input / zero free-text)
+// - Strict Geofence Rule: Actual IN/OUT ONLY records when GPS is 1-50m from store coordinate
+// - Offline Mode: System auto-detects monotonic clock & sensor state without user free-text
 // ============================================================================
+
+export const STRICT_STORE_RADIUS_METERS = 50; // Wajib berada dalam radius 1-50m dari titik koordinat toko
 
 const ATTENDANCE_MAP_STORAGE_KEY = 'fmcu_actual_attendance_map_v1';
 const OFFLINE_SYNC_QUEUE_KEY = 'fmcu_actual_attendance_offline_queue_v1';
 
-interface SilentGpsSnapshot {
+export interface SilentGpsSnapshot {
   lat: number;
   lng: number;
   accuracyMeters: number;
@@ -28,6 +29,22 @@ let trustedSatelliteOffsetMs = 0;
 
 let latestSilentGps: SilentGpsSnapshot | null = null;
 let watchId: number | null = null;
+const gpsSubscribers = new Set<(snapshot: SilentGpsSnapshot) => void>();
+
+/**
+ * Subscribe to real-time silent GPS updates for automatic 1-50m geofence triggers
+ */
+export function subscribeSilentGpsUpdates(
+  cb: (snapshot: SilentGpsSnapshot) => void
+): () => void {
+  gpsSubscribers.add(cb);
+  if (latestSilentGps) {
+    cb(latestSilentGps);
+  }
+  return () => {
+    gpsSubscribers.delete(cb);
+  };
+}
 
 /**
  * Returns trusted current timestamp using monotonic clock to prevent offline manual time tampering
@@ -42,7 +59,6 @@ export function getTrustedNow(): { now: Date; clockTamperDetected: boolean } {
   const monotonicNowMs = bootWallTimeMs + elapsedMs + trustedSatelliteOffsetMs;
   const driftMinutes = Math.abs(wallNow - monotonicNowMs) / 60000;
 
-  // If device clock was manually shifted by more than 5 minutes while app was open
   if (driftMinutes > 5) {
     return {
       now: new Date(monotonicNowMs),
@@ -97,20 +113,20 @@ export function computeDistanceMeters(
 }
 
 /**
- * Starts silent background geolocation listener (never shows any UI or error to user)
+ * Starts silent background geolocation listener
  */
 export function initSilentBackgroundPositioning(): void {
   if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
 
   const handlePosition = (pos: GeolocationPosition) => {
-    latestSilentGps = {
+    const snap: SilentGpsSnapshot = {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
-      accuracyMeters: Math.round(pos.coords.accuracy || 25),
+      accuracyMeters: Math.round(pos.coords.accuracy || 15),
       capturedAtMs: Date.now(),
     };
+    latestSilentGps = snap;
 
-    // Update monotonic satellite reference if valid
     if (pos.timestamp && Math.abs(pos.timestamp - Date.now()) < 3600000) {
       const expectedMonotonic = bootWallTimeMs + (performance.now() - bootPerfTimeMs);
       trustedSatelliteOffsetMs = pos.timestamp - expectedMonotonic;
@@ -125,24 +141,28 @@ export function initSilentBackgroundPositioning(): void {
     } catch {
       // ignore storage errors
     }
+
+    gpsSubscribers.forEach((cb) => {
+      try {
+        cb(snap);
+      } catch {
+        // ignore subscriber error
+      }
+    });
   };
 
   try {
     navigator.geolocation.getCurrentPosition(
       handlePosition,
-      () => {
-        // Silent fail - never disturb user
-      },
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
+      () => {},
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 15000 }
     );
 
     if (watchId === null) {
       watchId = navigator.geolocation.watchPosition(
         handlePosition,
-        () => {
-          // Silent fail
-        },
-        { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
       );
     }
   } catch {
@@ -151,10 +171,10 @@ export function initSilentBackgroundPositioning(): void {
 }
 
 /**
- * Attempt a fast silent GPS read (max 1200ms) or return cached snapshot immediately
+ * Attempt a fast silent GPS read (max 1500ms) or return recent cached snapshot
  */
-async function acquireSilentGpsSnapshot(): Promise<SilentGpsSnapshot | null> {
-  if (latestSilentGps && Date.now() - latestSilentGps.capturedAtMs < 120000) {
+export async function acquireSilentGpsSnapshot(): Promise<SilentGpsSnapshot | null> {
+  if (latestSilentGps && Date.now() - latestSilentGps.capturedAtMs < 45000) {
     return latestSilentGps;
   }
   if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
@@ -168,7 +188,7 @@ async function acquireSilentGpsSnapshot(): Promise<SilentGpsSnapshot | null> {
         settled = true;
         resolve(latestSilentGps);
       }
-    }, 1200);
+    }, 1500);
 
     try {
       navigator.geolocation.getCurrentPosition(
@@ -177,7 +197,7 @@ async function acquireSilentGpsSnapshot(): Promise<SilentGpsSnapshot | null> {
           latestSilentGps = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            accuracyMeters: Math.round(pos.coords.accuracy || 25),
+            accuracyMeters: Math.round(pos.coords.accuracy || 15),
             capturedAtMs: Date.now(),
           };
           if (!settled) {
@@ -192,7 +212,7 @@ async function acquireSilentGpsSnapshot(): Promise<SilentGpsSnapshot | null> {
             resolve(latestSilentGps);
           }
         },
-        { enableHighAccuracy: true, timeout: 1100, maximumAge: 90000 }
+        { enableHighAccuracy: true, timeout: 1400, maximumAge: 30000 }
       );
     } catch {
       clearTimeout(timer);
@@ -202,6 +222,43 @@ async function acquireSilentGpsSnapshot(): Promise<SilentGpsSnapshot | null> {
       }
     }
   });
+}
+
+/**
+ * Evaluate current GPS distance against the target store's coordinates (Strict 1-50m rule)
+ */
+export async function checkStoreGeofence50m(targetAgenda: ScheduleAgenda): Promise<{
+  withinRadius50m: boolean;
+  distanceMeters: number | null;
+  storeLat: number;
+  storeLng: number;
+  userLat?: number;
+  userLng?: number;
+}> {
+  const storePoint = resolvePrimaryAgendaGeoPoint(targetAgenda);
+  const gps = await acquireSilentGpsSnapshot();
+  if (!gps) {
+    return {
+      withinRadius50m: false,
+      distanceMeters: null,
+      storeLat: storePoint.lat,
+      storeLng: storePoint.lng,
+    };
+  }
+  const distanceMeters = computeDistanceMeters(
+    gps.lat,
+    gps.lng,
+    storePoint.lat,
+    storePoint.lng
+  );
+  return {
+    withinRadius50m: distanceMeters >= 0 && distanceMeters <= STRICT_STORE_RADIUS_METERS,
+    distanceMeters,
+    storeLat: storePoint.lat,
+    storeLng: storePoint.lng,
+    userLat: gps.lat,
+    userLng: gps.lng,
+  };
 }
 
 /**
@@ -274,9 +331,6 @@ export function hydrateAgendasWithLocalAttendance(
   });
 }
 
-/**
- * Queue an updated agenda for automatic cloud sync when signal/internet returns
- */
 function enqueueOfflineAttendanceSync(updatedAgenda: ScheduleAgenda): void {
   try {
     const raw = localStorage.getItem(OFFLINE_SYNC_QUEUE_KEY);
@@ -330,13 +384,12 @@ export async function flushOfflineAttendanceQueue(): Promise<void> {
 
 /**
  * Compute daily multi-store context for a person on a specific date
- * Handles 1 day = 1 store OR 1 day = 2+ stores
  */
 export function getDailyStoreSequenceInfo(
   targetAgenda: ScheduleAgenda,
   allAgendas: ScheduleAgenda[]
 ): {
-  storeOrderIndex: number; // 1-based
+  storeOrderIndex: number;
   totalStoresToday: number;
   sameDayVisitAgendas: ScheduleAgenda[];
   previousStoreAgenda: ScheduleAgenda | null;
@@ -349,7 +402,6 @@ export function getDailyStoreSequenceInfo(
         (isSamePersonName(a.pic, targetAgenda.pic) || a.pic === targetAgenda.pic)
     )
     .sort((a, b) => {
-      // If one already has actualInIso, order by actualInIso first, then scheduled time, then id
       if (a.actualInIso && b.actualInIso) {
         return a.actualInIso.localeCompare(b.actualInIso);
       }
@@ -375,34 +427,30 @@ export function getDailyStoreSequenceInfo(
 }
 
 /**
- * Record ACTUAL IN for a store visit agenda:
- * - Captures GPS silently in background & computes distance to store
- * - Checks 08:30 rule for Store #1, or calculates Transit Time from Store #1 if this is Store #2
- * - Auto-closes Store #1 Actual OUT if user forgot to press OUT at Store #1 before arriving at Store #2
- * - Works 100% offline with instant local persistence + automatic cloud sync
+ * AUTOMATIC SYSTEM ACTUAL IN:
+ * - Strictly requires user GPS to be within 1-50m (0..50m) of the store's coordinate!
+ * - Zero manual free-text time input: always uses trusted monotonic system clock.
+ * - If user is outside 50m radius, Actual IN is NOT recorded (`recorded: false`).
  */
 export async function performSilentActualCheckIn(
   targetAgenda: ScheduleAgenda,
-  allAgendas: ScheduleAgenda[],
-  customTimeHHmm?: string
+  allAgendas: ScheduleAgenda[]
 ): Promise<{
   updatedTarget: ScheduleAgenda;
   autoClosedPrevStore?: ScheduleAgenda;
+  recorded: boolean;
+  withinRadius50m: boolean;
+  distanceMeters?: number;
 }> {
   const { now, clockTamperDetected } = getTrustedNow();
-  const timeWib = customTimeHHmm
-    ? customTimeHHmm.includes('WIB')
-      ? customTimeHHmm
-      : `${customTimeHHmm} WIB`
-    : formatTimeWib(now);
+  const timeWib = formatTimeWib(now);
   const nowIso = now.toISOString();
   const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
-  // 1. Silent GPS acquisition & distance to store
+  // 1. Silent GPS acquisition & strict 1-50m distance check
   const gps = await acquireSilentGpsSnapshot();
   const storePoint = resolvePrimaryAgendaGeoPoint(targetAgenda);
   let distanceToStore: number | undefined;
-  let locationStatus: ActualAttendanceSilentAudit['inLocationStatus'] = 'SILENT_BG';
 
   if (gps) {
     distanceToStore = computeDistanceMeters(
@@ -411,14 +459,35 @@ export async function performSilentActualCheckIn(
       storePoint.lat,
       storePoint.lng
     );
-    if (distanceToStore <= 150) {
-      locationStatus = 'VERIFIED_AT_STORE';
-    } else if (distanceToStore <= 350) {
-      locationStatus = 'NEAR_STORE_INDOOR';
-    } else {
-      locationStatus = 'OUTSIDE_STORE_RADIUS';
-    }
   }
+
+  const withinRadius50m =
+    distanceToStore !== undefined &&
+    distanceToStore >= 0 &&
+    distanceToStore <= STRICT_STORE_RADIUS_METERS;
+
+  // STRICT RULE: Record Actual IN ONLY if GPS radius is 1-50m (0..50m) from store coordinate!
+  if (!withinRadius50m) {
+    const blockedAudit: ActualAttendanceSilentAudit = {
+      ...(targetAgenda.silentAudit || {}),
+      inLat: gps?.lat,
+      inLng: gps?.lng,
+      inAccuracyMeters: gps?.accuracyMeters,
+      inDistanceToStoreMeters: distanceToStore,
+      inLocationStatus: 'OUTSIDE_STORE_RADIUS',
+    };
+    return {
+      updatedTarget: {
+        ...targetAgenda,
+        silentAudit: blockedAudit,
+      },
+      recorded: false,
+      withinRadius50m: false,
+      distanceMeters: distanceToStore,
+    };
+  }
+
+  const locationStatus: ActualAttendanceSilentAudit['inLocationStatus'] = 'VERIFIED_AT_STORE';
 
   // 2. Multi-store daily sequence analysis (08:30 - 17:30 & 1 Day 2 Stores)
   const { storeOrderIndex, totalStoresToday, previousStoreAgenda } =
@@ -428,7 +497,6 @@ export async function performSilentActualCheckIn(
   let transitMinutesFromPrevStore: number | undefined;
 
   if (previousStoreAgenda && previousStoreAgenda.actualIn && !previousStoreAgenda.actualOut) {
-    // User moved to Store #2 without pressing OUT on Store #1 -> Auto-close Store #1 so record is never missed
     const prevAudit: ActualAttendanceSilentAudit = {
       ...(previousStoreAgenda.silentAudit || {}),
       outLat: gps?.lat,
@@ -469,7 +537,6 @@ export async function performSilentActualCheckIn(
   }
 
   // 3. Evaluate 08:30 Working Hours Rule
-  // Store #1 uses 08:30 target; Store #2+ is a continuation visit after Store #1
   const inMinutes = parseTimeWibToMinutes(timeWib) ?? 8 * 60 + 30;
   const targetStartMinutes = 8 * 60 + 30; // 08:30
   let inTimingStatus: ActualAttendanceSilentAudit['inTimingStatus'] = 'ON_TIME';
@@ -502,8 +569,8 @@ export async function performSilentActualCheckIn(
 
   const updatedTarget: ScheduleAgenda = {
     ...targetAgenda,
-    actualIn: timeWib,
-    actualInIso: nowIso,
+    actualIn: targetAgenda.actualIn || timeWib,
+    actualInIso: targetAgenda.actualInIso || nowIso,
     silentAudit: nextAudit,
   };
 
@@ -519,33 +586,37 @@ export async function performSilentActualCheckIn(
     pushSingleAgendaToCloud(updatedTarget);
   }
 
-  return { updatedTarget, autoClosedPrevStore };
+  return {
+    updatedTarget,
+    autoClosedPrevStore,
+    recorded: true,
+    withinRadius50m: true,
+    distanceMeters: distanceToStore,
+  };
 }
 
 /**
- * Record ACTUAL OUT for a store visit agenda:
- * - Captures GPS silently in background & computes distance to store
- * - Checks whether this is Store #1 of a 2-store day (TRANSIT_TO_NEXT_STORE) or final store of the day (target >= 17:30)
- * - Works 100% offline with instant local persistence + automatic cloud sync
+ * AUTOMATIC SYSTEM ACTUAL OUT:
+ * - Strictly requires user GPS to be within 1-50m (0..50m) of the store's coordinate!
+ * - Zero manual free-text time input: always uses trusted monotonic system clock.
  */
 export async function performSilentActualCheckOut(
   targetAgenda: ScheduleAgenda,
-  allAgendas: ScheduleAgenda[],
-  customTimeHHmm?: string
-): Promise<ScheduleAgenda> {
+  allAgendas: ScheduleAgenda[]
+): Promise<{
+  updatedTarget: ScheduleAgenda;
+  recorded: boolean;
+  withinRadius50m: boolean;
+  distanceMeters?: number;
+}> {
   const { now, clockTamperDetected } = getTrustedNow();
-  const timeWib = customTimeHHmm
-    ? customTimeHHmm.includes('WIB')
-      ? customTimeHHmm
-      : `${customTimeHHmm} WIB`
-    : formatTimeWib(now);
+  const timeWib = formatTimeWib(now);
   const nowIso = now.toISOString();
   const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
   const gps = await acquireSilentGpsSnapshot();
   const storePoint = resolvePrimaryAgendaGeoPoint(targetAgenda);
   let distanceToStore: number | undefined;
-  let locationStatus: ActualAttendanceSilentAudit['outLocationStatus'] = 'SILENT_BG';
 
   if (gps) {
     distanceToStore = computeDistanceMeters(
@@ -554,14 +625,24 @@ export async function performSilentActualCheckOut(
       storePoint.lat,
       storePoint.lng
     );
-    if (distanceToStore <= 150) {
-      locationStatus = 'VERIFIED_AT_STORE';
-    } else if (distanceToStore <= 350) {
-      locationStatus = 'NEAR_STORE_INDOOR';
-    } else {
-      locationStatus = 'OUTSIDE_STORE_RADIUS';
-    }
   }
+
+  const withinRadius50m =
+    distanceToStore !== undefined &&
+    distanceToStore >= 0 &&
+    distanceToStore <= STRICT_STORE_RADIUS_METERS;
+
+  // STRICT RULE: Record Actual OUT ONLY if GPS radius is 1-50m from store coordinate!
+  if (!withinRadius50m) {
+    return {
+      updatedTarget: targetAgenda,
+      recorded: false,
+      withinRadius50m: false,
+      distanceMeters: distanceToStore,
+    };
+  }
+
+  const locationStatus: ActualAttendanceSilentAudit['outLocationStatus'] = 'VERIFIED_AT_STORE';
 
   const { storeOrderIndex, totalStoresToday } = getDailyStoreSequenceInfo(
     targetAgenda,
@@ -574,7 +655,6 @@ export async function performSilentActualCheckOut(
   let earlyOutMinutes = 0;
 
   if (storeOrderIndex < totalStoresToday) {
-    // Masih ada jadwal visit toko ke-2 hari ini -> Check-Out Toko 1 dicatat sebagai Transit ke Toko berikutnya
     outTimingStatus = 'TRANSIT_TO_NEXT_STORE';
   } else if (outMinutes < targetEndMinutes) {
     outTimingStatus = 'EARLY_OUT';
@@ -600,7 +680,7 @@ export async function performSilentActualCheckOut(
 
   const updatedTarget: ScheduleAgenda = {
     ...targetAgenda,
-    actualIn: targetAgenda.actualIn || '08:30 WIB',
+    actualIn: targetAgenda.actualIn || timeWib,
     actualOut: timeWib,
     actualOutIso: nowIso,
     completed: true,
@@ -622,5 +702,10 @@ export async function performSilentActualCheckOut(
     pushSingleAgendaToCloud(updatedTarget);
   }
 
-  return updatedTarget;
+  return {
+    updatedTarget,
+    recorded: true,
+    withinRadius50m: true,
+    distanceMeters: distanceToStore,
+  };
 }

@@ -1588,7 +1588,7 @@ export async function syncReportToGoogleDrive(
   const result = await response.json();
   onProgress?.(100, 'Berhasil disinkronkan ke Google Drive Toko!');
 
-  return {
+  const syncRes: GDriveSyncResult = {
     success: result.status === 'SUCCESS',
     pdfUrl: result.pdfUrl,
     qscPdfUrl: result.qscPdfUrl,
@@ -1598,5 +1598,89 @@ export async function syncReportToGoogleDrive(
     yearFolderUrl: result.yearFolderUrl,
     message: result.message
   };
+
+  saveGDriveReportRegistryEntry(report, syncRes);
+  return syncRes;
 }
+
+const GDRIVE_PDF_REGISTRY_KEY = 'fmcu_gdrive_pdf_registry_v1';
+
+export interface GDriveRegistryRecord {
+  storeCode: string;
+  storeName: string;
+  agendaId?: string;
+  visitDate: string;
+  visitorName: string;
+  pdfUrl?: string;
+  gdriveEmbedUrl?: string;
+  storeFolderUrl?: string;
+  updatedAt: string;
+}
+
+export function toGDriveEmbedPreviewUrl(rawUrl?: string): string | undefined {
+  if (!rawUrl) return undefined;
+  const match = rawUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/file/d/${match[1]}/preview`;
+  }
+  return undefined;
+}
+
+export function saveGDriveReportRegistryEntry(
+  report: VisitReportData,
+  syncRes?: GDriveSyncResult
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(GDRIVE_PDF_REGISTRY_KEY);
+    const map: Record<string, GDriveRegistryRecord> = raw ? JSON.parse(raw) : {};
+    const codeKey = String(report.storeCode || '').toUpperCase().trim();
+    const nameKey = String(report.storeName || '').toUpperCase().trim();
+    const record: GDriveRegistryRecord = {
+      storeCode: report.storeCode || '',
+      storeName: report.storeName || '',
+      agendaId: report.agendaId,
+      visitDate: report.visitDate || new Date().toISOString().split('T')[0],
+      visitorName: report.visitorName || '',
+      pdfUrl: syncRes?.pdfUrl || FMCU_REPORT_GDRIVE_FOLDER_URL,
+      gdriveEmbedUrl: toGDriveEmbedPreviewUrl(syncRes?.pdfUrl),
+      storeFolderUrl: syncRes?.storeFolderUrl || FMCU_REPORT_GDRIVE_FOLDER_URL,
+      updatedAt: new Date().toISOString(),
+    };
+    if (codeKey) map[`CODE:${codeKey}`] = record;
+    if (nameKey) map[`NAME:${nameKey}`] = record;
+    if (report.agendaId) map[`AGENDA:${report.agendaId}`] = record;
+    localStorage.setItem(GDRIVE_PDF_REGISTRY_KEY, JSON.stringify(map));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+export function getGDriveReportRegistryEntry(params: {
+  storeCode?: string;
+  storeName?: string;
+  agendaId?: string;
+}): GDriveRegistryRecord | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(GDRIVE_PDF_REGISTRY_KEY);
+    if (!raw) return null;
+    const map: Record<string, GDriveRegistryRecord> = JSON.parse(raw) || {};
+    if (params.agendaId && map[`AGENDA:${params.agendaId}`]) {
+      return map[`AGENDA:${params.agendaId}`];
+    }
+    const codeKey = String(params.storeCode || '').toUpperCase().trim();
+    if (codeKey && map[`CODE:${codeKey}`]) {
+      return map[`CODE:${codeKey}`];
+    }
+    const nameKey = String(params.storeName || '').toUpperCase().trim();
+    if (nameKey && map[`NAME:${nameKey}`]) {
+      return map[`NAME:${nameKey}`];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 

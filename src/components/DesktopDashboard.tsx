@@ -27,6 +27,7 @@ import { ScheduleAgenda, User } from '../types';
 import { CalendarStrip, CalendarFocusTrigger } from './CalendarStrip';
 import { DeveloperFooter } from './DeveloperFooter';
 import { ScheduleCard } from './ScheduleCard';
+import { HistoryView } from './HistoryView';
 import { isSamePersonName } from '../data/masterStoresData';
 import {
   getMondayOfWeek,
@@ -306,8 +307,17 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
         </div>
       </aside>
 
-      {/* 2. Main Middle Area: Header, Stats, Calendar, Schedule List */}
+      {/* 2. Main Middle Area: Header, Stats, Calendar, Schedule List OR Coverage Store */}
       <main className="flex-1 overflow-y-auto px-8 py-7">
+        {activeMenu === 'coverage' || activeMenu === 'history' ? (
+          <HistoryView
+            user={user}
+            agendas={agendas}
+            onSelectAgenda={onSelectAgenda}
+            onBack={() => setActiveMenu('dashboard')}
+          />
+        ) : (
+          <>
         {/* Section 1 Item 1: Top Header Revamp (Your Daily Schedule + Greeting) */}
         <div className="flex items-center justify-between gap-4 mb-7">
           <div>
@@ -601,6 +611,8 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
             ))
           )}
         </div>
+          </>
+        )}
       </main>
 
       {/* 3. Right Sidebar Inspector Pane */}

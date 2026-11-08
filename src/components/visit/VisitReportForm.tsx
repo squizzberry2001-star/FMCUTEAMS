@@ -70,6 +70,10 @@ import {
 import {
   performSilentActualCheckIn,
   performSilentActualCheckOut,
+  subscribeSilentGpsUpdates,
+  STRICT_STORE_RADIUS_METERS,
+  getTrustedNow,
+  formatTimeWib,
 } from '../../services/actualAttendanceService';
 
 interface VisitReportFormProps {
@@ -340,9 +344,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       `store.${resolvedStoreName.toLowerCase().replace(/\s+/g, '')}@familymartindonesia.com`;
 
     const savedGps = localStorage.getItem('fmcu_live_gps') || '-6.2293, 106.8256';
-    const initialInTime =
-      agenda.actualIn || localStorage.getItem('fmcu_initial_checkin_time') || getCurrentWibTime();
-    const initialOutTime = agenda.actualOut || '17:30 WIB';
+    const initialInTime = agenda.actualIn || '';
+    const initialOutTime = agenda.actualOut || '';
 
     const saved = localStorage.getItem(draftKey);
     if (saved) {
@@ -352,7 +355,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           ...parsed,
           actualIn: agenda.actualIn || parsed.actualIn || initialInTime,
           actualOut: agenda.actualOut || parsed.actualOut || initialOutTime,
-          actualInSubmitted: Boolean(agenda.actualIn || parsed.actualInSubmitted),
+          actualInSubmitted: Boolean(agenda.actualIn || parsed.actualIn),
           visitorName: user?.name || agenda.pic || parsed.visitorName || 'Marisa Giselina',
           storeName: parsed.storeName || resolvedStoreName,
           storeCode: parsed.storeCode || resolvedStoreCode,
@@ -540,28 +543,25 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   const [aiLoadingIdx, setAiLoadingIdx] = useState<number | null>(null);
   const [isAiCompiling, setIsAiCompiling] = useState(false);
 
-  // GPS & Offline / Weak Signal Detection + Mandatory Actual IN/OUT Pop-Up
+  // Automatic System GPS (1-50m Radius) & Offline Auto-Detection State
   const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
+  const [liveDistanceMeters, setLiveDistanceMeters] = useState<number | undefined>(
+    agenda.silentAudit?.inDistanceToStoreMeters
+  );
+  const [isWithin50mRadius, setIsWithin50mRadius] = useState<boolean>(() => {
+    const dist = agenda.silentAudit?.inDistanceToStoreMeters;
+    return dist !== undefined && dist >= 0 && dist <= STRICT_STORE_RADIUS_METERS;
+  });
   const [isOfflineOrWeakSignal, setIsOfflineOrWeakSignal] = useState<boolean>(() => {
-    return (
-      (typeof navigator !== 'undefined' && !navigator.onLine) ||
-      sessionStorage.getItem('fmcu_gps_offline_mode') === 'true'
-    );
+    return typeof navigator !== 'undefined' && !navigator.onLine;
   });
+  // Popup HANYA muncul jika sistem mendeteksi kondisi Offline (!navigator.onLine)
   const [showCheckInPopup, setShowCheckInPopup] = useState<boolean>(() => {
-    const isOffline =
-      (typeof navigator !== 'undefined' && !navigator.onLine) ||
-      sessionStorage.getItem('fmcu_gps_offline_mode') === 'true';
-    return !formData.actualInSubmitted || isOffline;
+    return typeof navigator !== 'undefined' && !navigator.onLine;
   });
-  const [manualInInput, setManualInInput] = useState<string>(() => {
-    const clean = (formData.actualIn || '08:15').replace(/\s*WIB$/i, '').trim();
-    return /^\d{2}:\d{2}$/.test(clean) ? clean : '08:15';
-  });
-  const [manualOutInput, setManualOutInput] = useState<string>(() => {
-    const clean = (formData.actualOut || '17:45').replace(/\s*WIB$/i, '').trim();
-    return /^\d{2}:\d{2}$/.test(clean) ? clean : '17:45';
-  });
+  const [systemDetectedTimeStr, setSystemDetectedTimeStr] = useState<string>(() =>
+    formatTimeWib(getTrustedNow().now)
+  );
 
   // Upload status feedback
   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
@@ -598,12 +598,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     };
   }, [draftKey]);
 
-  // Monitor Online / Offline & Weak Signal status
+  // Monitor Online / Offline & Automatic System 1-50m Geofence Attendance
   useEffect(() => {
     const handleOnline = () => {
-      if (sessionStorage.getItem('fmcu_gps_offline_mode') !== 'true') {
-        setIsOfflineOrWeakSignal(false);
-      }
+      setIsOfflineOrWeakSignal(false);
+      setShowCheckInPopup(false);
       setFormData((prev) => ({
         ...prev,
         gasSyncStatus: prev.gasSyncStatus === 'offline-queued' ? 'synced' : prev.gasSyncStatus,
@@ -611,6 +610,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     };
     const handleOffline = () => {
       setIsOfflineOrWeakSignal(true);
+      setSystemDetectedTimeStr(formatTimeWib(getTrustedNow().now));
       setShowCheckInPopup(true);
     };
 
@@ -621,6 +621,78 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Automatic System Actual IN Recording (ONLY when user GPS is 1-50m from Store Coordinates)
+  useEffect(() => {
+    let active = true;
+    const list = allAgendas.length > 0 ? allAgendas : [agenda];
+
+    const evaluateAutoAttendance = async () => {
+      const res = await performSilentActualCheckIn(agenda, list);
+      if (!active) return;
+
+      if (res.distanceMeters !== undefined) {
+        setLiveDistanceMeters(res.distanceMeters);
+      }
+      setIsWithin50mRadius(res.withinRadius50m);
+      setSystemDetectedTimeStr(formatTimeWib(getTrustedNow().now));
+
+      if (res.recorded && res.withinRadius50m) {
+        if (res.autoClosedPrevStore && onUpdateAgenda) {
+          onUpdateAgenda(res.autoClosedPrevStore);
+        }
+        if (onUpdateAgenda) {
+          onUpdateAgenda(res.updatedTarget);
+        }
+        setFormData((prev) => ({
+          ...prev,
+          actualIn: prev.actualIn || res.updatedTarget.actualIn || formatTimeWib(getTrustedNow().now),
+          actualInSubmitted: true,
+        }));
+      }
+    };
+
+    evaluateAutoAttendance();
+
+    const unsubscribe = subscribeSilentGpsUpdates(() => {
+      evaluateAutoAttendance();
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [agenda.id]);
+
+  // Automatic System Actual OUT Recording when opening PDF Preview / finishing report (ONLY if within 1-50m)
+  useEffect(() => {
+    if (!showPreview) return;
+    let active = true;
+    const list = allAgendas.length > 0 ? allAgendas : [agenda];
+
+    performSilentActualCheckOut(agenda, list).then((res) => {
+      if (!active) return;
+      if (res.distanceMeters !== undefined) {
+        setLiveDistanceMeters(res.distanceMeters);
+      }
+      setIsWithin50mRadius(res.withinRadius50m);
+      if (res.recorded && res.withinRadius50m) {
+        if (onUpdateAgenda) {
+          onUpdateAgenda(res.updatedTarget);
+        }
+        setFormData((prev) => ({
+          ...prev,
+          actualIn: prev.actualIn || res.updatedTarget.actualIn || '',
+          actualOut: res.updatedTarget.actualOut || formatTimeWib(getTrustedNow().now),
+          actualInSubmitted: true,
+        }));
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [showPreview]);
 
   // Scroll Detection & Auto Navbar Scale (Bottom and Top Navbar with Direction Accumulator)
   const [isScrolled, setIsScrolled] = useState(false);
@@ -775,82 +847,65 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const progressPercent = calculateProgress();
 
-  // Helper: Live GPS Refresh (Silent Coordinate Recording)
-  const handleRefreshGps = () => {
+  // Helper: Refresh Automatic System Geofence Check (1-50m Radius)
+  const handleRefreshGps = async () => {
     setIsGpsRefreshing(true);
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude.toFixed(5);
-          const lng = pos.coords.longitude.toFixed(5);
-          const coordStr = `${lat}, ${lng} (Akurat)`;
-          try {
-            localStorage.setItem('fmcu_live_gps', coordStr);
-            sessionStorage.removeItem('fmcu_gps_offline_mode');
-          } catch (e) {
-            console.warn(e);
-          }
-          setIsOfflineOrWeakSignal(false);
-          setFormData((prev) => ({
-            ...prev,
-            liveGps: coordStr,
-          }));
-          setIsGpsRefreshing(false);
-        },
-        () => {
-          setIsOfflineOrWeakSignal(true);
-          setFormData((prev) => ({
-            ...prev,
-            liveGps: 'Mode Manual / Susah Sinyal',
-          }));
-          setIsGpsRefreshing(false);
-          setShowCheckInPopup(true);
-        },
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
-    } else {
-      setIsOfflineOrWeakSignal(true);
+    try {
+      const list = allAgendas.length > 0 ? allAgendas : [agenda];
+      const res = await performSilentActualCheckIn(agenda, list);
+      if (res.distanceMeters !== undefined) {
+        setLiveDistanceMeters(res.distanceMeters);
+      }
+      setIsWithin50mRadius(res.withinRadius50m);
+      setSystemDetectedTimeStr(formatTimeWib(getTrustedNow().now));
+
+      if (res.recorded && res.withinRadius50m) {
+        if (res.autoClosedPrevStore && onUpdateAgenda) {
+          onUpdateAgenda(res.autoClosedPrevStore);
+        }
+        if (onUpdateAgenda) {
+          onUpdateAgenda(res.updatedTarget);
+        }
+        setFormData((prev) => ({
+          ...prev,
+          actualIn: prev.actualIn || res.updatedTarget.actualIn || formatTimeWib(getTrustedNow().now),
+          actualInSubmitted: true,
+        }));
+      }
+    } finally {
       setIsGpsRefreshing(false);
-      setShowCheckInPopup(true);
     }
   };
 
-  // Submit Mandatory Check-In / Check-Out Popup (Silent Background Telemetry)
-  const handleSubmitCheckInOut = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const formattedIn = manualInInput.includes('WIB') ? manualInInput : `${manualInInput} WIB`;
-    const formattedOut = manualOutInput.includes('WIB') ? manualOutInput : `${manualOutInput} WIB`;
-
-    setFormData((prev) => ({
-      ...prev,
-      actualIn: formattedIn,
-      actualOut: formattedOut,
-      actualInSubmitted: true,
-      isManualCheckIn: isOfflineOrWeakSignal,
-    }));
-    setShowCheckInPopup(false);
-
-    // Run silent background telemetry & update master schedule
+  // Confirm Offline System Auto-Detected Attendance (Zero Free-Text Input, 1-50m Radius Verified)
+  const handleConfirmOfflineSystemAttendance = async () => {
+    setSystemDetectedTimeStr(formatTimeWib(getTrustedNow().now));
     try {
       const list = allAgendas.length > 0 ? allAgendas : [agenda];
-      const { updatedTarget, autoClosedPrevStore } = await performSilentActualCheckIn(
-        agenda,
-        list,
-        manualInInput
-      );
-      if (autoClosedPrevStore && onUpdateAgenda) {
-        onUpdateAgenda(autoClosedPrevStore);
+      const res = await performSilentActualCheckIn(agenda, list);
+      if (res.distanceMeters !== undefined) {
+        setLiveDistanceMeters(res.distanceMeters);
       }
-      const finalUpdated = await performSilentActualCheckOut(
-        updatedTarget,
-        list,
-        manualOutInput
-      );
-      if (onUpdateAgenda) {
-        onUpdateAgenda(finalUpdated);
+      setIsWithin50mRadius(res.withinRadius50m);
+
+      if (res.recorded && res.withinRadius50m) {
+        if (res.autoClosedPrevStore && onUpdateAgenda) {
+          onUpdateAgenda(res.autoClosedPrevStore);
+        }
+        if (onUpdateAgenda) {
+          onUpdateAgenda(res.updatedTarget);
+        }
+        setFormData((prev) => ({
+          ...prev,
+          actualIn: prev.actualIn || res.updatedTarget.actualIn || formatTimeWib(getTrustedNow().now),
+          actualInSubmitted: true,
+          isManualCheckIn: false,
+        }));
       }
     } catch {
-      // Silent background catch
+      // Silent catch
+    } finally {
+      setShowCheckInPopup(false);
     }
   };
 
@@ -1751,55 +1806,38 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       {/* Section / Sub-Tab Blur + Silhouette + Mini "FMCU....." Bouncing Loader */}
       <PageTransitionLoader visible={isSectionTransitioning} />
       {/* =====================================================================
-          MANDATORY POP-UP SUBMIT ACTUAL IN / OUT (BEFORE FILLING FORM / OFFLINE)
+          OFFLINE SYSTEM AUTO-DETECTION POPUP
+          - HANYA muncul jika terdeteksi Offline oleh sistem (!navigator.onLine)
+          - TIDAK ADA input free-text / manual time picker (100% Detect by System)
+          - Record Actual hanya terekam jika radius GPS user 1-50m dari koordinat toko
           ===================================================================== */}
-      {showCheckInPopup && (
+      {showCheckInPopup && isOfflineOrWeakSignal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div
-                  className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shrink-0 ${
-                    isOfflineOrWeakSignal
-                      ? 'bg-gradient-to-tr from-amber-500 to-rose-500'
-                      : 'bg-gradient-to-tr from-emerald-600 to-teal-500'
-                  }`}
-                >
-                  {isOfflineOrWeakSignal ? (
-                    <WifiOff className="w-6 h-6" />
-                  ) : (
-                    <Clock className="w-6 h-6" />
-                  )}
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-white shadow-md shrink-0">
+                  <WifiOff className="w-6 h-6" />
                 </div>
                 <div>
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                      isOfflineOrWeakSignal
-                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    }`}
-                  >
-                    {isOfflineOrWeakSignal
-                      ? 'Terdeteksi Offline / Susah Sinyal'
-                      : 'Verifikasi Wajib Presensi Toko'}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                    Terdeteksi Offline oleh Sistem
                   </span>
                   <h3 className="text-base sm:text-lg font-black text-slate-900 mt-0.5">
-                    Submit Actual IN & OUT
+                    Deteksi Otomatis IN / OUT
                   </h3>
                 </div>
               </div>
-              {formData.actualInSubmitted && (
-                <button
-                  type="button"
-                  onClick={() => setShowCheckInPopup(false)}
-                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowCheckInPopup(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-500">Toko Tujuan:</span>
                 <span className="font-black text-slate-900">
@@ -1811,100 +1849,63 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 <span className="font-bold text-teal-700">{formData.visitorName}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-500">Mode Presensi:</span>
-                <button
-                  type="button"
-                  onClick={() => setIsOfflineOrWeakSignal((prev) => !prev)}
-                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border transition cursor-pointer ${
-                    isOfflineOrWeakSignal
-                      ? 'bg-amber-50 text-amber-800 border-amber-300'
-                      : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                <span className="font-bold text-slate-500">Validasi Radius Toko (1–50m):</span>
+                <span
+                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${
+                    isWithin50mRadius
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      : 'bg-rose-50 text-rose-800 border-rose-300'
                   }`}
                 >
-                  {isOfflineOrWeakSignal
-                    ? '⚡ Mode Offline (Tersimpan di Perangkat)'
-                    : '⚡ Presensi Otomatis Aktif'}
-                </button>
+                  {isWithin50mRadius
+                    ? `Terverifikasi (${liveDistanceMeters ?? 0}m ≤ 50m)`
+                    : liveDistanceMeters !== undefined
+                    ? `Di Luar Radius (${liveDistanceMeters}m > 50m)`
+                    : 'Menunggu Sensor Radius 1–50m'}
+                </span>
               </div>
             </div>
 
-            {isOfflineOrWeakSignal && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/90 text-[11px] font-bold text-amber-900 leading-relaxed">
-                Sinyal lemah atau perangkat sedang offline. Silakan masukkan jam <strong>Actual IN</strong> dan <strong>Actual OUT</strong> secara manual sebelum melanjutkan pengisian form visit.
-              </div>
-            )}
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/90 text-[11px] font-bold text-amber-900 leading-relaxed">
+              Perangkat terdeteksi sedang <strong>Offline</strong>. Seluruh perekaman <strong>Actual IN / OUT</strong> dikunci dan dideteksi otomatis oleh sistem (tanpa input manual) apabila posisi berada dalam <strong>radius 1–50m</strong> dari titik koordinat toko.
+            </div>
 
-            <form onSubmit={handleSubmitCheckInOut} className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-black text-emerald-800 uppercase">
-                      Actual IN *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const now = new Date();
-                        setManualInInput(
-                          `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-                        );
-                      }}
-                      className="text-[10px] font-extrabold text-teal-600 hover:underline"
-                    >
-                      Jam Sekarang
-                    </button>
-                  </div>
-                  <input
-                    type="time"
-                    required
-                    value={manualInInput}
-                    onChange={(e) => setManualInInput(e.target.value)}
-                    className="w-full h-11 bg-emerald-50/60 border-2 border-emerald-300 rounded-xl px-3 text-sm font-black text-slate-900 focus:bg-white focus:border-emerald-600 outline-none"
-                  />
-                  <span className="text-[10px] text-slate-400 font-semibold block">
-                    Standar &le; 08:30 WIB
-                  </span>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-black text-amber-800 uppercase">
-                      Actual OUT *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const now = new Date();
-                        setManualOutInput(
-                          `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-                        );
-                      }}
-                      className="text-[10px] font-extrabold text-amber-600 hover:underline"
-                    >
-                      Jam Sekarang
-                    </button>
-                  </div>
-                  <input
-                    type="time"
-                    required
-                    value={manualOutInput}
-                    onChange={(e) => setManualOutInput(e.target.value)}
-                    className="w-full h-11 bg-amber-50/60 border-2 border-amber-300 rounded-xl px-3 text-sm font-black text-slate-900 focus:bg-white focus:border-amber-600 outline-none"
-                  />
-                  <span className="text-[10px] text-slate-400 font-semibold block">
-                    Standar &ge; 17:30 WIB
-                  </span>
-                </div>
+            {/* Read-Only System-Detected Timestamps (No Free-Text / No Manual Time Input) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+                <span className="text-[10px] font-black text-emerald-800 uppercase block">
+                  Actual IN (By System)
+                </span>
+                <span className="text-sm font-black text-slate-900 block mt-1">
+                  {formData.actualIn ||
+                    (isWithin50mRadius ? systemDetectedTimeStr : 'Menunggu Radius 1–50m')}
+                </span>
+                <span className="text-[9.5px] text-emerald-700 font-semibold block mt-0.5">
+                  Terkunci Otomatis Sistem
+                </span>
               </div>
 
-              <button
-                type="submit"
-                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-black text-xs sm:text-sm shadow-lg transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>SUBMIT ACTUAL IN / OUT & ISI FORM</span>
-              </button>
-            </form>
+              <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200">
+                <span className="text-[10px] font-black text-amber-800 uppercase block">
+                  Actual OUT (By System)
+                </span>
+                <span className="text-sm font-black text-slate-900 block mt-1">
+                  {formData.actualOut || 'Otomatis Saat Selesai'}
+                </span>
+                <span className="text-[9.5px] text-amber-700 font-semibold block mt-0.5">
+                  Radius 1–50m Koordinat Toko
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleConfirmOfflineSystemAttendance}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-black text-xs sm:text-sm shadow-lg transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>LANJUTKAN DENGAN DETEKSI OTOMATIS SISTEM</span>
+            </button>
           </div>
         </div>
       )}
@@ -2180,10 +2181,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                         <Cloud className="w-3 h-3 text-emerald-400" />
                         <span>Auto-Sync GDrive (GAS) Aktif</span>
                       </span>
+                      <span className="flex items-center gap-1 text-[10.5px] font-bold text-emerald-200 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
+                        <span>Otomatis Sistem (Radius 1–50m)</span>
+                      </span>
                       {isOfflineOrWeakSignal && (
                         <span className="flex items-center gap-1 text-[10.5px] font-bold text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-400/30">
                           <WifiOff className="w-3 h-3 text-amber-300" />
-                          <span>Mode Manual IN/OUT</span>
+                          <span>Offline Auto-Detect</span>
                         </span>
                       )}
                     </div>
@@ -2191,75 +2195,75 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 </div>
               </div>
 
-              {/* Right: Actual In / Actual Out Cards & Quick Popup Trigger */}
+              {/* Right: Read-Only Automatic System Actual In / Actual Out Cards (Strictly 1-50m Radius) */}
               <div className="w-full lg:max-w-md space-y-2">
                 <div className="grid grid-cols-2 gap-2">
-                  {/* Actual In Card */}
-                  <div
-                    onClick={() => setShowCheckInPopup(true)}
-                    className="rounded-xl p-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md border border-emerald-400/30 flex flex-col justify-between cursor-pointer transition"
-                  >
+                  {/* Read-Only System Auto Actual In Card */}
+                  <div className="rounded-xl p-2.5 bg-white/10 border border-emerald-400/30 flex flex-col justify-between">
                     <div className="flex items-center justify-between text-[10px] uppercase font-black text-emerald-300">
-                      <span>Actual In</span>
+                      <span>Actual In (Auto)</span>
                       <Clock className="w-3 h-3 text-emerald-400 animate-pulse" />
                     </div>
-                    <div className="font-black text-sm text-white my-1">
-                      {formData.actualIn || '08:15 WIB'}
+                    <div className="font-black text-sm text-white my-1 truncate">
+                      {formData.actualIn ||
+                        (isWithin50mRadius ? systemDetectedTimeStr : 'Menunggu Radius 1–50m')}
                     </div>
-                    <span className="text-[9px] text-emerald-200/80">Klik untuk Ubah / Manual</span>
+                    <span className="text-[9px] text-emerald-200/80">
+                      {formData.actualIn || isWithin50mRadius
+                        ? 'Terekam Otomatis (Radius 1–50m)'
+                        : 'Wajib Radius 1–50m Koordinat Toko'}
+                    </span>
                   </div>
 
-                  {/* Actual Out Card */}
-                  <div
-                    onClick={() => setShowCheckInPopup(true)}
-                    className="rounded-xl p-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md border border-amber-400/30 flex flex-col justify-between cursor-pointer transition"
-                  >
+                  {/* Read-Only System Auto Actual Out Card */}
+                  <div className="rounded-xl p-2.5 bg-white/10 border border-amber-400/30 flex flex-col justify-between">
                     <div className="flex items-center justify-between text-[10px] uppercase font-black text-amber-300">
-                      <span>Actual Out</span>
+                      <span>Actual Out (Auto)</span>
                       <Clock className="w-3 h-3 text-amber-400" />
                     </div>
-                    <div className="font-black text-sm text-white my-1">
-                      {formData.actualOut || '17:45 WIB'}
+                    <div className="font-black text-sm text-white my-1 truncate">
+                      {formData.actualOut || 'Otomatis Saat Selesai'}
                     </div>
-                    <span className="text-[9px] text-amber-200/80">Klik untuk Submit OUT</span>
+                    <span className="text-[9px] text-amber-200/80">
+                      Terekam Otomatis (Radius 1–50m)
+                    </span>
                   </div>
                 </div>
 
-                {/* Geofence & Manual Check-In Bar */}
+                {/* Automatic Geofence 1-50m Status Bar (No Manual IN/OUT Button) */}
                 <div className="rounded-xl p-2 bg-emerald-950/70 border border-emerald-500/40 flex items-center justify-between gap-2 text-xs">
                   <div className="flex items-center gap-2 min-w-0">
                     <span
                       className={`w-2 h-2 rounded-full shrink-0 ${
-                        isOfflineOrWeakSignal ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400 animate-ping'
+                        isWithin50mRadius || Boolean(formData.actualIn)
+                          ? 'bg-emerald-400 animate-ping'
+                          : 'bg-amber-400 animate-pulse'
                       }`}
                     />
                     <div className="min-w-0">
                       <div className="text-[11px] font-black text-emerald-200 leading-none truncate">
-                        {isOfflineOrWeakSignal
-                          ? 'Mode Offline Aktif (Auto-Sync Saat Sinyal Kembali)'
-                          : 'Sistem Presensi Kunjungan Aktif'}
+                        {isWithin50mRadius || Boolean(formData.actualIn)
+                          ? 'Posisi Terverifikasi Dalam Radius 1–50m Toko'
+                          : liveDistanceMeters !== undefined
+                          ? `Posisi Di Luar Radius 1–50m Toko (${liveDistanceMeters}m)`
+                          : 'Sistem Mendeteksi Radius 1–50m Koordinat Toko'}
                       </div>
                       <div className="text-[9.5px] text-emerald-300/80 leading-none mt-1 truncate">
-                        {formData.actualInSubmitted
-                          ? `Presensi tercatat: IN ${formData.actualIn} • OUT ${formData.actualOut}`
-                          : 'Wajib submit Actual IN/OUT'}
+                        {formData.actualIn
+                          ? `Otomatis Sistem: IN ${formData.actualIn}${
+                              formData.actualOut ? ` • OUT ${formData.actualOut}` : ''
+                            }`
+                          : 'Actual IN/OUT otomatis terekam saat berada 1–50m di toko'}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
-                      onClick={() => setShowCheckInPopup(true)}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-500/30 hover:bg-emerald-500/40 border border-emerald-400/40 text-emerald-100 font-extrabold text-[10px] transition cursor-pointer"
-                    >
-                      Input IN/OUT
-                    </button>
-                    <button
-                      type="button"
                       onClick={handleRefreshGps}
                       disabled={isGpsRefreshing}
                       className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
-                      title="Segarkan Status Presensi"
+                      title="Segarkan Deteksi Sistem (Radius 1–50m)"
                     >
                       <RotateCw className={`w-3 h-3 ${isGpsRefreshing ? 'animate-spin' : ''}`} />
                     </button>
