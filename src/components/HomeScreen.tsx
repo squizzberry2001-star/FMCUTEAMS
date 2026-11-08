@@ -1,8 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Bell,
   CalendarDays,
   MapPin,
+  Search,
+  X,
+  Users,
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
 import { CalendarStrip, CalendarFocusTrigger } from './CalendarStrip';
@@ -48,6 +51,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 }) => {
   // Tab Filter: 'Today' (Hari Ini), 'Week' (Minggu Ini), 'AllTeam' (Semua Tim - menggantikan Bulan Ini)
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'AllTeam'>('Today');
+  const [nameFilter, setNameFilter] = useState<string>('');
+  const [selectedPersonDropdown, setSelectedPersonDropdown] = useState<string>('ALL');
   const [calendarFocus, setCalendarFocus] = useState<CalendarFocusTrigger>({
     mode: 'today',
     ts: Date.now(),
@@ -110,26 +115,61 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
+  // Daftar seluruh nama tim unik terurut A-Z untuk fitur Filter by Nama
+  const allTeamNamesAZ = useMemo(() => {
+    const names = Array.from(
+      new Set(agendas.map((a) => (a.pic || '').trim()).filter(Boolean))
+    );
+    return names.sort((a, b) => a.localeCompare(b, 'id', { sensitivity: 'base' }));
+  }, [agendas]);
+
   // Filter agenda berdasarkan tab aktif:
   // - 'Today': Jadwal milik user pada tanggal terpilih
   // - 'Week': Jadwal milik user pada minggu aktual
-  // - 'AllTeam': Jadwal Semua Tim pada tanggal terpilih
-  const displayedAgendas = agendas.filter((item) => {
-    const isMyAgenda =
-      !item.pic ||
-      isSamePersonName(item.pic, fullName) ||
-      item.pic.toLowerCase().includes(fullName.toLowerCase()) ||
-      fullName.toLowerCase().includes(item.pic.toLowerCase());
+  // - 'AllTeam': Jadwal Semua Tim pada tanggal terpilih (Diurutkan A-Z Nama Tim + Filter by Nama)
+  const displayedAgendas = useMemo(() => {
+    const q = nameFilter.trim().toLowerCase();
 
-    if (selectedPeriod === 'Today') {
-      return isMyAgenda && item.date === selectedDate;
+    const filtered = agendas.filter((item) => {
+      const isMyAgenda =
+        !item.pic ||
+        isSamePersonName(item.pic, fullName) ||
+        item.pic.toLowerCase().includes(fullName.toLowerCase()) ||
+        fullName.toLowerCase().includes(item.pic.toLowerCase());
+
+      if (selectedPeriod === 'Today') {
+        return isMyAgenda && item.date === selectedDate;
+      }
+      if (selectedPeriod === 'Week') {
+        return isMyAgenda && item.date >= weekStartStr && item.date <= weekEndStr;
+      }
+      // 'AllTeam' -> Menampilkan jadwal seluruh tim pada tanggal yang dipilih + Filter by Nama
+      if (item.date !== selectedDate) return false;
+
+      if (selectedPersonDropdown !== 'ALL') {
+        if (!isSamePersonName(item.pic, selectedPersonDropdown) && item.pic !== selectedPersonDropdown) {
+          return false;
+        }
+      }
+      if (q) {
+        const matchPic = (item.pic || '').toLowerCase().includes(q);
+        const matchTitle = (item.title || '').toLowerCase().includes(q);
+        const matchLoc = (item.location || '').toLowerCase().includes(q);
+        return matchPic || matchTitle || matchLoc;
+      }
+      return true;
+    });
+
+    if (selectedPeriod === 'AllTeam') {
+      return [...filtered].sort(
+        (a, b) =>
+          (a.pic || '').localeCompare(b.pic || '', 'id', { sensitivity: 'base' }) ||
+          (a.time || '').localeCompare(b.time || '')
+      );
     }
-    if (selectedPeriod === 'Week') {
-      return isMyAgenda && item.date >= weekStartStr && item.date <= weekEndStr;
-    }
-    // 'AllTeam' -> Menampilkan jadwal seluruh tim pada tanggal yang dipilih
-    return item.date === selectedDate;
-  });
+
+    return filtered;
+  }, [agendas, fullName, selectedPeriod, selectedDate, weekStartStr, weekEndStr, nameFilter, selectedPersonDropdown]);
 
   // Scroll detection & auto navbar scale with rAF throttling & icon click restore
   const manualExpandedRef = useRef(false);
@@ -312,16 +352,58 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               {displayedAgendas.length} agenda
             </span>
           </div>
+
+          {/* Fitur Filter by Nama pada tab Semua Tim */}
+          {selectedPeriod === 'AllTeam' && (
+            <div className="flex items-center gap-2 mt-2.5">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  placeholder="Filter nama tim atau agenda..."
+                  className="w-full bg-white/90 border border-slate-200/80 rounded-xl pl-8 pr-7 py-1.5 text-[11px] font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-teal-500 transition-all"
+                />
+                {nameFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setNameFilter('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="relative shrink-0">
+                <Users className="w-3.5 h-3.5 text-teal-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={selectedPersonDropdown}
+                  onChange={(e) => setSelectedPersonDropdown(e.target.value)}
+                  className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[145px] truncate"
+                  title="Filter berdasarkan Nama Tim (A-Z)"
+                >
+                  <option value="ALL">Semua Nama (A-Z)</option>
+                  {allTeamNamesAZ.map((personName) => (
+                    <option key={personName} value={personName}>
+                      {personName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Section 1 Item 3 & 5: List Schedule Agenda */}
-      <div className="space-y-3 pt-2">
+      <div className="space-y-3 pt-1">
         {displayedAgendas.length === 0 ? (
           <div className="text-center py-10 bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
             <p className="text-slate-500 text-xs font-semibold">
               {selectedPeriod === 'AllTeam'
-                ? `Belum ada schedule agenda tim pada tanggal ini (${selectedDate}).`
+                ? `Belum ada schedule agenda tim yang cocok pada tanggal ini (${selectedDate}).`
                 : selectedPeriod === 'Week'
                 ? `Tidak ada agenda yang ditugaskan kepada Anda pada minggu ini.`
                 : `Tidak ada agenda yang ditugaskan kepada Anda pada tanggal ini (${selectedDate}).`}
@@ -339,6 +421,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </button>
               </div>
             )}
+          </div>
+        ) : selectedPeriod === 'AllTeam' ? (
+          /* Minimalist Text List pada Semua Tim (Nama Kecil Bold, Di Bawahnya Agendanya Thin Kecil - Bukan Card) */
+          <div className="divide-y divide-slate-200/60 px-1">
+            {displayedAgendas.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelectAgenda && onSelectAgenda(item)}
+                className="w-full text-left py-2 px-1 hover:bg-slate-100/60 active:bg-slate-100 transition-colors flex items-start justify-between gap-2 cursor-pointer"
+              >
+                <div className="min-w-0 flex-1">
+                  {/* Nama Kecil Bold */}
+                  <p className="text-[11px] font-bold text-slate-900 leading-tight truncate">
+                    {item.pic}
+                  </p>
+                  {/* Di Bawahnya Agendanya Thin Kecil */}
+                  <p className="text-[11px] font-light text-slate-600 leading-snug mt-0.5 truncate">
+                    {item.title}
+                    {item.location &&
+                    item.location !== 'OFF / LIBUR' &&
+                    !item.title.toLowerCase().includes(item.location.toLowerCase())
+                      ? ` — ${item.location}`
+                      : ''}
+                  </p>
+                </div>
+
+                <span className="text-[9px] font-light text-slate-400 shrink-0 tabular-nums pt-0.5">
+                  {item.category === 'OFF' ? 'OFF' : item.time}
+                </span>
+              </button>
+            ))}
           </div>
         ) : (
           displayedAgendas.map((agenda) => (

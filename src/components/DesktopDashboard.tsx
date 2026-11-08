@@ -153,6 +153,14 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
     }
     // 'AllTeam'
     return item.date === selectedDate;
+  }).sort((a, b) => {
+    if (selectedPeriod === 'AllTeam') {
+      return (
+        (a.pic || '').localeCompare(b.pic || '', 'id', { sensitivity: 'base' }) ||
+        (a.time || '').localeCompare(b.time || '')
+      );
+    }
+    return 0;
   });
 
   const completedCount = agendas.filter((a) => a.completed).length;
@@ -505,6 +513,37 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                   + Buat Schedule Sekarang
                 </button>
               </div>
+            </div>
+          ) : selectedPeriod === 'AllTeam' ? (
+            <div className="col-span-full divide-y divide-slate-200/60 px-1">
+              {filteredAgendas.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onSelectAgenda(item)}
+                  className={`w-full text-left py-2 px-2 hover:bg-slate-100/70 transition-colors flex items-start justify-between gap-2 cursor-pointer rounded-lg ${
+                    selectedAgenda?.id === item.id ? 'bg-teal-50/70' : ''
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-slate-900 leading-tight truncate">
+                      {item.pic}
+                    </p>
+                    <p className="text-[11px] font-light text-slate-600 leading-snug mt-0.5 truncate">
+                      {item.title}
+                      {item.location &&
+                      item.location !== 'OFF / LIBUR' &&
+                      !item.title.toLowerCase().includes(item.location.toLowerCase())
+                        ? ` — ${item.location}`
+                        : ''}
+                    </p>
+                  </div>
+
+                  <span className="text-[9px] font-light text-slate-400 shrink-0 tabular-nums pt-0.5">
+                    {item.category === 'OFF' ? 'OFF' : item.time}
+                  </span>
+                </button>
+              ))}
             </div>
           ) : (
             filteredAgendas.map((agenda) => (

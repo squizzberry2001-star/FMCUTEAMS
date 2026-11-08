@@ -702,6 +702,7 @@ export const App: React.FC = () => {
               {/* Section 2: Jadwal Agenda Kerja (Full halaman tanpa navbar) */}
               {mobileTab === 'calendar' && (
                 <CalendarScheduleView
+                  user={user}
                   agendas={agendas}
                   onBack={() => setMobileTab('home')}
                   onSelectAgenda={handleSelectAgenda}
