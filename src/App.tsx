@@ -325,6 +325,7 @@ export const App: React.FC = () => {
   };
 
   const handleAddNewAgenda = (newAgenda: ScheduleAgenda) => {
+    if (user?.isExecutiveViewer) return;
     const updated = [newAgenda, ...agendas];
     setAgendas(updated);
     setSelectedAgenda(newAgenda);
@@ -340,6 +341,7 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateAgenda = (updated: ScheduleAgenda) => {
+    if (user?.isExecutiveViewer) return;
     setAgendas((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
     if (selectedAgenda && selectedAgenda.id === updated.id) {
       setSelectedAgenda(updated);
@@ -348,6 +350,7 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteAgenda = (id: string) => {
+    if (user?.isExecutiveViewer) return;
     setAgendas((prev) => prev.filter((a) => a.id !== id));
     if (selectedAgenda && selectedAgenda.id === id) {
       setSelectedAgenda(null);
@@ -361,6 +364,7 @@ export const App: React.FC = () => {
     importedAgendas: ScheduleAgenda[],
     mode: 'merge' | 'replace' = 'merge'
   ) => {
+    if (user?.isExecutiveViewer) return;
     // Merge users
     const existingMap = new Map(users.map((u) => [u.name.toLowerCase(), u]));
     importedUsers.forEach((u) => {
@@ -477,13 +481,17 @@ export const App: React.FC = () => {
       <PwaInstallPrompt readyToShow={!showSplash} />
       <PageTransitionLoader visible={isPageTransitioning} />
       <div className="min-h-screen w-full bg-[#F8F9FD] flex flex-col relative select-none">
-      {/* Admin Preview Floating Header */}
+      {/* Admin / Executive Viewer Preview Floating Header */}
       {user.isAdmin && adminPreviewMode && (
         <div className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between text-xs sticky top-0 z-50 shadow-md">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <Shield className="w-4 h-4 text-teal-400" />
-            <span className="font-bold">Mode Pratinjau Tampilan User (Super Admin)</span>
+            <span className="font-bold">
+              {user.isExecutiveViewer
+                ? 'Mode Pratinjau Tampilan User (Executive Viewer • Read-Only)'
+                : 'Mode Pratinjau Tampilan User (Master Admin)'}
+            </span>
             <span className="hidden sm:inline text-slate-400">
               — Anda sedang melihat aplikasi dari sudut pandang karyawan lapangan.
             </span>
@@ -491,10 +499,12 @@ export const App: React.FC = () => {
 
           <button
             onClick={() => setAdminPreviewMode(false)}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold transition-all shadow-sm active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Kembali ke Portal Admin</span>
+            <span>
+              {user.isExecutiveViewer ? 'Kembali ke Portal Executive' : 'Kembali ke Portal Admin'}
+            </span>
           </button>
         </div>
       )}

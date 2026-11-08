@@ -78,6 +78,8 @@ export interface User {
   role?: string;
   password?: string;
   isAdmin?: boolean;
+  isExecutiveViewer?: boolean;
+  accessLevel?: 'ADMIN' | 'EXECUTIVE_VIEWER' | 'STAFF';
 }
 
 export interface Medicine {

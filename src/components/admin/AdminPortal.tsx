@@ -28,7 +28,8 @@ import {
   ChevronRight,
   Info,
   Building2,
-  Check
+  Check,
+  Lock
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import confetti from 'canvas-confetti';
@@ -36,6 +37,7 @@ import { ScheduleAgenda, ScheduleCategory, User } from '../../types';
 import excelSeed from '../../data/excelScheduleSeed.json';
 import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from '../visit/HoldingTimeR23Modal';
+import { ExecutiveAnalyticsSuite } from './ExecutiveAnalyticsSuite';
 import {
   HoldingTimeStandards,
   getActiveHoldingTimeStandards,
@@ -93,6 +95,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onReplaySplash,
   onOpenLiveMaps,
 }) => {
+  const isReadOnly = Boolean(
+    adminUser.isExecutiveViewer || adminUser.accessLevel === 'EXECUTIVE_VIEWER'
+  );
+
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<
     | 'dashboard'
@@ -814,33 +820,48 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] flex flex-col select-none text-slate-800">
-      {/* 1. Master Top Bar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-6 pt-[max(0.875rem,env(safe-area-inset-top,14px))] pb-3.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#00A389] to-[#00705E] flex items-center justify-center text-white shadow-pill-teal font-black text-sm">
-            <ShieldCheck className="w-5 h-5" />
+      {/* 1. Master Top Bar (Responsive Mobile, Tablet & Desktop) */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-3.5 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top,12px))] pb-3 flex items-center justify-between gap-2 shadow-xs">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center text-white shadow-sm font-black text-sm shrink-0 ${
+              isReadOnly
+                ? 'bg-gradient-to-tr from-indigo-700 to-blue-600'
+                : 'bg-gradient-to-tr from-[#00A389] to-[#00705E] shadow-pill-teal'
+            }`}
+          >
+            {isReadOnly ? <Eye className="w-5 h-5" /> : <ShieldCheck className="w-5 h-5" />}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="text-xs font-black text-slate-900 tracking-tight">
                 FMCU TEAMS
               </span>
-              <span className="text-[10px] font-extrabold text-[#00A389] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 uppercase">
-                Admin Control Hub
-              </span>
+              {isReadOnly ? (
+                <span className="text-[9.5px] sm:text-[10px] font-extrabold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200 uppercase flex items-center gap-1">
+                  <Lock className="w-2.5 h-2.5" />
+                  <span>Executive Viewer • Head of Division</span>
+                </span>
+              ) : (
+                <span className="text-[9.5px] sm:text-[10px] font-extrabold text-[#00A389] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 uppercase">
+                  Admin Control Hub (PIN 01012026)
+                </span>
+              )}
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">
-              Master Data 610 Toko • 531 Kepemilikan Bestie • Aturan Excel Jadwal
+            <p className="text-[10.5px] sm:text-[11px] text-slate-400 font-medium truncate">
+              {isReadOnly
+                ? 'Akses Pengamat Eksekutif (Read-Only) • Analitik Penuh & 610 Master Toko'
+                : 'Master Data 610 Toko • 531 Kepemilikan Bestie • Kelola & Edit Jadwal'}
             </p>
           </div>
         </div>
 
-        {/* Right Admin Profile & Switch View */}
-        <div className="flex items-center gap-3">
+        {/* Right Admin / Executive Profile & Switch View */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {onReplaySplash && (
             <button
               onClick={onReplaySplash}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all active:scale-95"
+              className="hidden xl:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all active:scale-95 cursor-pointer"
               title="Putar ulang animasi splash FMCU TEAMS"
             >
               <Sparkles className="w-4 h-4 text-teal-600" />
@@ -851,70 +872,87 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           {onOpenLiveMaps && (
             <button
               onClick={onOpenLiveMaps}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#00A389] to-[#007F6B] hover:from-[#008F78] hover:to-[#006B5A] text-white text-xs font-extrabold transition-all shadow-sm active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#00A389] to-[#007F6B] hover:from-[#008F78] hover:to-[#006B5A] text-white text-[11px] sm:text-xs font-extrabold transition-all shadow-sm active:scale-95 cursor-pointer"
               title="Buka Live Maps Admin (Pinpoint User, Pinpoint Toko, Radius & Rute)"
             >
-              <MapPin className="w-4 h-4" />
-              <span className="hidden sm:inline">Live Maps & Radar</span>
-              <span className="sm:hidden">Maps</span>
+              <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden md:inline">Live Maps & Radar</span>
+              <span className="md:hidden">Maps</span>
             </button>
           )}
 
           <button
             onClick={onSwitchToUserView}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer"
             title="Pratinjau tampilan sisi user / karyawan"
           >
-            <Eye className="w-4 h-4 text-teal-600" />
-            <span className="hidden sm:inline">Lihat Tampilan Sisi User</span>
-            <span className="sm:hidden">Sisi User</span>
+            <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-600" />
+            <span className="hidden md:inline">Lihat Tampilan Sisi User</span>
+            <span className="md:hidden">Sisi User</span>
           </button>
 
-          <div className="flex items-center gap-2.5 pl-3 border-l border-slate-200">
+          <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-200">
             <img
               src={
                 adminUser.avatar ||
                 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
               }
               alt={adminUser.name}
-              className="w-8 h-8 rounded-full object-cover ring-2 ring-teal-200"
+              className={`w-8 h-8 rounded-full object-cover ring-2 ${
+                isReadOnly ? 'ring-indigo-300' : 'ring-teal-200'
+              }`}
             />
-            <div className="hidden md:block text-left">
-              <span className="block text-xs font-extrabold text-slate-900 leading-tight">
+            <div className="hidden lg:block text-left">
+              <span className="block text-xs font-extrabold text-slate-900 leading-tight max-w-[160px] truncate">
                 {adminUser.name}
               </span>
-              <span className="block text-[10px] text-teal-700 font-bold leading-tight">
-                Super Admin
+              <span
+                className={`block text-[10px] font-bold leading-tight ${
+                  isReadOnly ? 'text-indigo-600' : 'text-teal-700'
+                }`}
+              >
+                {isReadOnly ? 'Head of Division (Read-Only)' : 'Master Admin (Full Access)'}
               </span>
             </div>
           </div>
 
           <button
             onClick={onLogout}
-            title="Keluar dari Portal Admin"
-            className="w-9 h-9 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition-colors ml-1"
+            title="Keluar dari Portal"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
       </header>
 
-      {/* 2. Admin Navigation Sub-Header */}
-      <nav className="bg-white border-b border-slate-200/80 px-6 py-2.5 overflow-x-auto no-scrollbar">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+      {/* 2. Admin / Executive Navigation Sub-Header */}
+      <nav className="bg-white border-b border-slate-200/80 px-3.5 sm:px-6 py-2.5 overflow-x-auto no-scrollbar">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {[
-              { id: 'dashboard', label: 'Ringkasan & Analitik', icon: LayoutDashboard },
+              {
+                id: 'dashboard',
+                label: 'Analitik & Grafik Eksekutif',
+                icon: LayoutDashboard,
+                badge: isReadOnly ? 'Head of Div' : 'Live BI',
+              },
               {
                 id: 'stores',
                 label: `Master Toko (${allStoresWithOwnership.length})`,
                 icon: Store,
                 badge: `${bestieAssignments.length} Kepemilikan`,
               },
-              { id: 'schedules', label: `Kelola Jadwal (${agendas.length})`, icon: CalendarIcon },
+              {
+                id: 'schedules',
+                label: isReadOnly
+                  ? `Data Jadwal (${agendas.length})`
+                  : `Kelola Jadwal (${agendas.length})`,
+                icon: CalendarIcon,
+              },
               {
                 id: 'import-excel',
-                label: 'Baca & Export Excel',
+                label: isReadOnly ? 'Export Laporan Excel' : 'Baca & Export Excel',
                 icon: FileSpreadsheet,
                 badge: '7 Kolom Resmi',
               },
@@ -937,18 +975,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                  className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-2xl text-[11px] sm:text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
                     isActive
-                      ? 'bg-gradient-to-r from-[#00A389] to-[#00826D] text-white shadow-pill-teal scale-102'
+                      ? isReadOnly
+                        ? 'bg-gradient-to-r from-indigo-700 to-blue-600 text-white shadow-sm scale-102'
+                        : 'bg-gradient-to-r from-[#00A389] to-[#00826D] text-white shadow-pill-teal scale-102'
                       : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>{tab.label}</span>
                   {tab.badge && (
                     <span
                       className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                        isActive ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
+                        isActive
+                          ? 'bg-white/25 text-white'
+                          : isReadOnly
+                          ? 'bg-indigo-50 text-indigo-700'
+                          : 'bg-emerald-100 text-emerald-800'
                       }`}
                     >
                       {tab.badge}
@@ -959,245 +1003,44 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             })}
           </div>
 
-          {/* Quick Create Agenda Button */}
-          <button
-            onClick={handleOpenCreateModal}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-slate-900 text-white text-xs font-extrabold shadow-sm hover:bg-slate-800 transition-all flex-shrink-0 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-teal-400 stroke-[3]" />
-            <span>+ Buat Agenda Baru</span>
-          </button>
+          {/* Quick Create Agenda Button (Admin Only) vs Read-Only Indicator (Executive Viewer) */}
+          {!isReadOnly ? (
+            <button
+              onClick={handleOpenCreateModal}
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-2xl bg-slate-900 text-white text-[11px] sm:text-xs font-extrabold shadow-sm hover:bg-slate-800 transition-all flex-shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-400 stroke-[3]" />
+              <span>+ Buat Agenda Baru</span>
+            </button>
+          ) : (
+            <div className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-extrabold shrink-0">
+              <Lock className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Mode Pengamat (Tanpa Edit Data)</span>
+            </div>
+          )}
         </div>
       </nav>
 
       {/* 3. Main Content Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3.5 sm:p-6 space-y-6">
         {/* =====================================================================
-            TAB 1: DASHBOARD & ANALYTICS
+            TAB 1: DASHBOARD & ANALYTICS (EXECUTIVE & ADMIN COMMAND SUITE)
             ===================================================================== */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            {/* Top Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Card 1: Master Toko & Kepemilikan */}
-              <div
-                onClick={() => setActiveTab('stores')}
-                className="bg-white rounded-3xl p-5 shadow-soft-card border border-slate-200/80 flex items-center justify-between cursor-pointer hover:border-teal-300 transition-all"
-              >
-                <div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Master Data Toko FMI
-                  </span>
-                  <h3 className="text-2xl font-black text-slate-900 mt-1">
-                    {allStoresWithOwnership.length} Cabang
-                  </h3>
-                  <span className="text-xs font-bold text-amber-600 mt-1 flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
-                    <span>{bestieAssignments.length} Toko Kepemilikan Bestie</span>
-                  </span>
-                </div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <Store className="w-6 h-6" />
-                </div>
-              </div>
-
-              {/* Card 2: Total Karyawan */}
-              <div
-                onClick={() => setActiveTab('users')}
-                className="bg-white rounded-3xl p-5 shadow-soft-card border border-slate-200/80 flex items-center justify-between cursor-pointer hover:border-teal-300 transition-all"
-              >
-                <div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Total Karyawan Terdaftar
-                  </span>
-                  <h3 className="text-2xl font-black text-slate-900 mt-1">
-                    {users.filter((u) => !u.isAdmin).length} Pegawai
-                  </h3>
-                  <span className="text-xs font-semibold text-emerald-600 mt-1 block">
-                    Password Default: 0000
-                  </span>
-                </div>
-                <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center">
-                  <Users className="w-6 h-6" />
-                </div>
-              </div>
-
-              {/* Card 3: Total Agenda */}
-              <div
-                onClick={() => setActiveTab('schedules')}
-                className="bg-white rounded-3xl p-5 shadow-soft-card border border-slate-200/80 flex items-center justify-between cursor-pointer hover:border-teal-300 transition-all"
-              >
-                <div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Total Seluruh Agenda
-                  </span>
-                  <h3 className="text-2xl font-black text-slate-900 mt-1">
-                    {agendas.length} Jadwal
-                  </h3>
-                  <span className="text-xs font-semibold text-teal-600 mt-1 block">
-                    {agendas.filter((a) => a.category === 'VISIT').length} Jadwal Visit Store
-                  </span>
-                </div>
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <CalendarIcon className="w-6 h-6" />
-                </div>
-              </div>
-
-              {/* Card 4: Kategori Training & Meeting */}
-              <div className="bg-white rounded-3xl p-5 shadow-soft-card border border-slate-200/80 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Training, NSO & Meeting
-                  </span>
-                  <h3 className="text-2xl font-black text-slate-900 mt-1">
-                    {
-                      agendas.filter(
-                        (a) =>
-                          a.category === 'TRAINING' ||
-                          a.category === 'MEETING' ||
-                          a.category === 'NSO'
-                      ).length
-                    }{' '}
-                    Kegiatan
-                  </h3>
-                  <span className="text-xs font-semibold text-purple-600 mt-1 block">
-                    SBS, NSO & Koordinasi FMCU
-                  </span>
-                </div>
-                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                  <GraduationCap className="w-6 h-6" />
-                </div>
-              </div>
-            </div>
-
-            {/* Banner Master Toko & Excel Sync */}
-            <div className="bg-gradient-to-r from-[#00A389] via-[#00826D] to-[#0A564A] rounded-3xl p-6 text-white shadow-pill-teal flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                  <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-wider">
-                    Master Data Terintegrasi
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-400/25 text-amber-200 border border-amber-300/30 text-[10px] font-black uppercase">
-                    ★ 610 Master Toko & 531 Kepemilikan Bestie
-                  </span>
-                </div>
-                <h2 className="text-lg font-black tracking-tight">
-                  Sistem Baca & Export Excel Jadwal Resmi FMCU (7 Kolom)
-                </h2>
-                <p className="text-xs text-white/85 max-w-2xl mt-1 leading-relaxed">
-                  Mendukung deteksi otomatis multi-poin (1. 2.), pemisahan multi-toko (&amp;), pencocokan 610 Master Toko &amp; Kepemilikan Bestie, pemisahan ketat Visit Store vs NSO/FMCU, serta pengisian otomatis hari libur (Auto-OFF).
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => setActiveTab('stores')}
-                  className="px-4 py-2.5 rounded-2xl bg-white text-teal-900 text-xs font-black shadow-md hover:bg-teal-50 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <Store className="w-4 h-4 text-[#00A389]" />
-                  <span>Buka 610 Master Toko</span>
-                </button>
-                <button
-                  onClick={() => exportScheduleToTemplateExcel(agendas, users, 'ALL')}
-                  className="px-4 py-2.5 rounded-2xl bg-emerald-950/50 border border-white/25 text-white text-xs font-extrabold hover:bg-emerald-950/70 transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Download className="w-4 h-4 text-emerald-300" />
-                  <span>Export Template Jadwal (.xlsx)</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('import-excel')}
-                  className="px-4 py-2.5 rounded-2xl bg-black/25 text-white text-xs font-extrabold hover:bg-black/35 transition-all cursor-pointer"
-                >
-                  Impor Excel
-                </button>
-              </div>
-            </div>
-
-            {/* Recent Agendas Overview Table */}
-            <div className="bg-white rounded-3xl p-6 shadow-soft-card border border-slate-200/80">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">
-                    Daftar Agenda Terkini (Live)
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Data agenda langsung terhubung dengan 610 Master Toko dan otomatis terlihat oleh masing-masing karyawan
-                  </p>
-                </div>
-                <button
-                  onClick={() => setActiveTab('schedules')}
-                  className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer"
-                >
-                  <span>Lihat Semua ({agendas.length})</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="overflow-x-auto no-scrollbar">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 font-extrabold uppercase tracking-wider border-b border-slate-200">
-                      <th className="py-3 px-4">Karyawan (PIC)</th>
-                      <th className="py-3 px-4">Judul Agenda</th>
-                      <th className="py-3 px-4">Kategori</th>
-                      <th className="py-3 px-4">Tanggal & Waktu</th>
-                      <th className="py-3 px-4">Lokasi / Kode Toko</th>
-                      <th className="py-3 px-4 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {agendas.slice(0, 8).map((agenda) => (
-                      <tr key={agenda.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-teal-50 text-teal-700 font-extrabold flex items-center justify-center text-[10px]">
-                            {agenda.pic.charAt(0)}
-                          </div>
-                          <span>{agenda.pic}</span>
-                        </td>
-                        <td className="py-3.5 px-4 font-semibold text-slate-800 max-w-xs truncate">
-                          {agenda.title}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100">
-                            {agenda.category}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 font-semibold text-slate-600">
-                          {agenda.date} • {agenda.time} WIB
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 truncate max-w-[200px]">
-                          {agenda.storeCode ? (
-                            <span className="font-mono font-black text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded mr-1.5 text-[10px]">
-                              {agenda.storeCode}
-                            </span>
-                          ) : null}
-                          {agenda.location}
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleOpenEditModal(agenda)}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
-                              title="Edit Agenda"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => onDeleteAgenda(agenda.id)}
-                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
-                              title="Hapus Agenda"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <ExecutiveAnalyticsSuite
+            currentUser={adminUser}
+            isReadOnly={isReadOnly}
+            agendas={agendas}
+            users={users}
+            stores={allStoresWithOwnership}
+            bestieCount={bestieAssignments.length}
+            onNavigateTab={(tab) => setActiveTab(tab)}
+            onOpenCreateAgenda={handleOpenCreateModal}
+            onOpenEditAgenda={handleOpenEditModal}
+            onDeleteAgenda={onDeleteAgenda}
+            onExportExcel={() => exportScheduleToTemplateExcel(agendas, users, 'ALL')}
+            onOpenLiveMaps={onOpenLiveMaps}
+          />
         )}
 
         {/* =====================================================================
@@ -1350,19 +1193,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
                 {/* Live Sync & Export Buttons */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSyncBestieSheet}
-                    disabled={isSyncingBestieSheet}
-                    className="px-3.5 py-2 rounded-2xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 text-teal-600 ${
-                        isSyncingBestieSheet ? 'animate-spin' : ''
-                      }`}
-                    />
-                    <span>Sync Google Sheet Kepemilikan</span>
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={handleSyncBestieSheet}
+                      disabled={isSyncingBestieSheet}
+                      className="px-3.5 py-2 rounded-2xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 text-teal-600 ${
+                          isSyncingBestieSheet ? 'animate-spin' : ''
+                        }`}
+                      />
+                      <span>Sync Google Sheet Kepemilikan</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -1373,14 +1218,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <span>Export Excel Toko & Kepemilikan</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleOpenAddStoreModal}
-                    className="px-3.5 py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-teal-400 stroke-[3]" />
-                    <span>+ Tambah Toko</span>
-                  </button>
+                  {!isReadOnly ? (
+                    <button
+                      type="button"
+                      onClick={handleOpenAddStoreModal}
+                      className="px-3.5 py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-teal-400 stroke-[3]" />
+                      <span>+ Tambah Toko</span>
+                    </button>
+                  ) : (
+                    <span className="px-3 py-2 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-extrabold flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Read-Only</span>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1575,25 +1427,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           </td>
 
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleQuickScheduleStoreVisit(st)}
-                                className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10.5px] font-extrabold transition flex items-center gap-1 cursor-pointer"
-                                title="Jadwalkan Visit ke Toko Ini"
-                              >
-                                <CalendarIcon className="w-3 h-3" />
-                                <span>Jadwalkan</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditStoreModal(st)}
-                                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                                title="Edit Master Toko & Kepemilikan"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            {!isReadOnly ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickScheduleStoreVisit(st)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10.5px] font-extrabold transition flex items-center gap-1 cursor-pointer"
+                                  title="Jadwalkan Visit ke Toko Ini"
+                                >
+                                  <CalendarIcon className="w-3 h-3" />
+                                  <span>Jadwalkan</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditStoreModal(st)}
+                                  className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                                  title="Edit Master Toko & Kepemilikan"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold">
+                                <Lock className="w-3 h-3" />
+                                <span>Read-Only</span>
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -1693,13 +1552,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </span>
                 </button>
 
-                <button
-                  onClick={handleOpenCreateModal}
-                  className="px-4 py-2 rounded-2xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 active:scale-95 transition-all flex items-center gap-1.5 flex-shrink-0 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 stroke-[3]" />
-                  <span>+ Buat Agenda</span>
-                </button>
+                {!isReadOnly ? (
+                  <button
+                    onClick={handleOpenCreateModal}
+                    className="px-4 py-2 rounded-2xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 active:scale-95 transition-all flex items-center gap-1.5 flex-shrink-0 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>+ Buat Agenda</span>
+                  </button>
+                ) : (
+                  <span className="px-3 py-2 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-extrabold flex items-center gap-1.5 shrink-0">
+                    <Lock className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Mode Pengamat (Read-Only)</span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1780,22 +1646,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             )}
                           </td>
                           <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => handleOpenEditModal(agenda)}
-                                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                                title="Edit Agenda"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => onDeleteAgenda(agenda.id)}
-                                className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
-                                title="Hapus Agenda"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            {!isReadOnly ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleOpenEditModal(agenda)}
+                                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                                  title="Edit Agenda"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => onDeleteAgenda(agenda.id)}
+                                  className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                                  title="Hapus Agenda"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold">
+                                <Lock className="w-3 h-3" />
+                                <span>Read-Only</span>
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -1984,56 +1857,74 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
               )}
 
-              {/* Drag and Drop Zone */}
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDragging(false);
-                  const file = e.dataTransfer.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (evt) => {
-                      const bstr = evt.target?.result;
-                      try {
-                        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
-                        processExcelWorkbook(wb, file.name);
-                      } catch {
-                        alert('Gagal membaca file Excel.');
-                      }
-                    };
-                    reader.readAsBinaryString(file);
-                  }
-                }}
-                className={`border-3 border-dashed rounded-3xl p-10 text-center transition-all cursor-pointer ${
-                  isDragging
-                    ? 'border-emerald-500 bg-emerald-50/50 scale-101'
-                    : 'border-slate-300 bg-slate-50/60 hover:bg-slate-100/60'
-                }`}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <div className="w-16 h-16 rounded-3xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-3 shadow-sm">
-                  <Upload className="w-8 h-8" />
-                </div>
-                <h3 className="text-base font-extrabold text-slate-800">
-                  Tarik & Letakkan File "Templete Jadwal.xlsx" di sini, atau Klik untuk Memilih
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Format file yang didukung: .xlsx, .xls (Otomatis menerapkan Aturan Baca Excel FMCU &amp; pencocokan 610 Master Toko)
-                </p>
+              {/* Drag and Drop Zone (Admin Only) */}
+              {!isReadOnly ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (evt) => {
+                        const bstr = evt.target?.result;
+                        try {
+                          const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+                          processExcelWorkbook(wb, file.name);
+                        } catch {
+                          alert('Gagal membaca file Excel.');
+                        }
+                      };
+                      reader.readAsBinaryString(file);
+                    }
+                  }}
+                  className={`border-3 border-dashed rounded-3xl p-10 text-center transition-all cursor-pointer ${
+                    isDragging
+                      ? 'border-emerald-500 bg-emerald-50/50 scale-101'
+                      : 'border-slate-300 bg-slate-50/60 hover:bg-slate-100/60'
+                  }`}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div className="w-16 h-16 rounded-3xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-3 shadow-sm">
+                    <Upload className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-800">
+                    Tarik & Letakkan File "Templete Jadwal.xlsx" di sini, atau Klik untuk Memilih
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Format file yang didukung: .xlsx, .xls (Otomatis menerapkan Aturan Baca Excel FMCU &amp; pencocokan 610 Master Toko)
+                  </p>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx, .xls"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-              </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx, .xls"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                </div>
+              ) : (
+                <div className="p-6 rounded-3xl bg-indigo-50/70 border border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-indigo-950">
+                        Akses Pengamat Eksekutif (Head of Division • Read-Only)
+                      </h4>
+                      <p className="text-xs text-indigo-700 mt-0.5">
+                        Anda dapat mengunduh laporan jadwal resmi (.xlsx) dan 610 Master Toko di atas. Fitur unggah/timpa jadwal dikhususkan untuk Admin (PIN 01012026).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Official Rules Reference Card */}
               <div className="p-5 rounded-3xl bg-slate-50 border border-slate-200/80 space-y-3">
@@ -2069,25 +1960,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
               </div>
 
-              {/* Quick 1-Click Sync Button */}
-              <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-sm font-extrabold text-slate-900">
-                    Gunakan Data Template Bawaan (Default Seed)
-                  </h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    File "TEMPLET EXCEL JADWAL.xlsx" (582 Jadwal & 36 Akun Pegawai) telah disiapkan.
-                  </p>
+              {/* Quick 1-Click Sync Button (Admin Only) */}
+              {!isReadOnly && (
+                <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">
+                      Gunakan Data Template Bawaan (Default Seed)
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      File "TEMPLET EXCEL JADWAL.xlsx" (582 Jadwal & 36 Akun Pegawai) telah disiapkan.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSyncPreBundledExcel}
+                    className="px-5 py-3 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-95 transition-all flex items-center gap-2 flex-shrink-0 cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Sinkronisasi Ulang Template Excel Bawaan</span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSyncPreBundledExcel}
-                  className="px-5 py-3 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-95 transition-all flex items-center gap-2 flex-shrink-0 cursor-pointer"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Sinkronisasi Ulang Template Excel Bawaan</span>
-                </button>
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -2133,21 +2026,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <span>Pratinjau Standar R23</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => holdingFileInputRef.current?.click()}
-                    className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-pill-teal transition flex items-center gap-2 cursor-pointer"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Unggah File Baru (.pdf / .json)</span>
-                  </button>
-                  <input
-                    ref={holdingFileInputRef}
-                    type="file"
-                    accept=".pdf,.json,.xlsx"
-                    className="hidden"
-                    onChange={handleHoldingFileUpload}
-                  />
+                  {!isReadOnly && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => holdingFileInputRef.current?.click()}
+                        className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-pill-teal transition flex items-center gap-2 cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Unggah File Baru (.pdf / .json)</span>
+                      </button>
+                      <input
+                        ref={holdingFileInputRef}
+                        type="file"
+                        accept=".pdf,.json,.xlsx"
+                        className="hidden"
+                        onChange={handleHoldingFileUpload}
+                      />
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -2217,22 +2114,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
               </div>
 
-              <div className="pt-5 border-t border-slate-100 flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-black text-slate-800">Reset Standar Holding Time</h4>
-                  <p className="text-[11px] text-slate-400">
-                    Kembalikan dataset ke versi original STD/FMI/PD-QC/001/R23
-                  </p>
+              {!isReadOnly && (
+                <div className="pt-5 border-t border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800">Reset Standar Holding Time</h4>
+                    <p className="text-[11px] text-slate-400">
+                      Kembalikan dataset ke versi original STD/FMI/PD-QC/001/R23
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResetHoldingStandards}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Reset Default R23</span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleResetHoldingStandards}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Reset Default R23</span>
-                </button>
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -2371,7 +2270,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* =====================================================================
           MODAL 1: BUAT / EDIT AGENDA KERJA (DENGAN PEMILIH MASTER TOKO & KEPEMILIKAN)
           ===================================================================== */}
-      {showAgendaModal && (
+      {showAgendaModal && !isReadOnly && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="relative w-full max-w-xl bg-white rounded-[32px] shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[92vh] overflow-y-auto">
             {/* Header */}
@@ -2597,7 +2496,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* =====================================================================
           MODAL 2: TAMBAH / EDIT MASTER TOKO & KEPEMILIKAN BESTIE
           ===================================================================== */}
-      {showStoreModal && (
+      {showStoreModal && !isReadOnly && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="relative w-full max-w-2xl bg-white rounded-[32px] shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">

@@ -14,7 +14,13 @@ import {
   Users,
 } from 'lucide-react';
 import { User } from '../types';
-import { ADMIN_PASSWORD, ADMIN_USER, initialUsers } from '../data/mockData';
+import {
+  ADMIN_PASSWORD,
+  ADMIN_USER,
+  EXECUTIVE_VIEWER_PASSWORD,
+  EXECUTIVE_VIEWER_USER,
+  initialUsers,
+} from '../data/mockData';
 import { ParacetamolHero3D } from './3d-icons/Illustrations';
 import { PageTransitionLoader } from './PageTransitionLoader';
 import { DeveloperFooter } from './DeveloperFooter';
@@ -110,7 +116,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }, 5000);
   };
 
-  // Admin Submit Handler (with 5-second loading animation on click Masuk)
+  // Admin & Executive Viewer Submit Handler (with 5-second loading animation on click Masuk)
   const handleAdminSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -118,19 +124,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setIsSubmitting(true);
 
     const entered = adminPasswordInput.trim();
-    if (entered !== ADMIN_PASSWORD && entered !== '607090') {
+    if (entered === EXECUTIVE_VIEWER_PASSWORD) {
       setTimeout(() => {
-        setErrorMessage('Kode Otorisasi salah! Masukkan kode resmi: 607090');
         setIsSubmitting(false);
-      }, 600);
+        onLogin(EXECUTIVE_VIEWER_USER);
+      }, 5000);
       return;
     }
 
-    const adminAccount = users.find((u) => u.isAdmin) || ADMIN_USER;
+    if (entered === ADMIN_PASSWORD || entered === '607090') {
+      setTimeout(() => {
+        setIsSubmitting(false);
+        onLogin(ADMIN_USER);
+      }, 5000);
+      return;
+    }
+
     setTimeout(() => {
+      setErrorMessage(
+        'PIN Otorisasi tidak dikenali! Gunakan PIN Admin (01012026) atau PIN Executive Viewer (20260101).'
+      );
       setIsSubmitting(false);
-      onLogin(adminAccount);
-    }, 5000);
+    }, 600);
   };
 
   return (
@@ -183,18 +198,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             ) : (
               <>
                 <Shield className="w-3.5 h-3.5 text-[#2BB3A0]" />
-                <span>PORTAL RESMI ADMIN</span>
+                <span>PORTAL ADMIN &amp; EXECUTIVE</span>
               </>
             )}
           </div>
 
           <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-1 text-center">
-            {loginMode === 'member' ? 'Login Anggota FMCU' : 'Admin FMCU'}
+            {loginMode === 'member' ? 'Login Anggota FMCU' : 'Admin & Executive Hub'}
           </h1>
           <p className="text-xs text-slate-400 font-medium text-center mt-0.5 max-w-xs">
             {loginMode === 'member'
               ? 'Pilih nama Anda dari 36 user jadwal untuk masuk ke agenda'
-              : 'Akses kendali penuh Master Schedule, Audit Toko & Laporan'}
+              : 'Akses Admin (Full Control) & Executive Viewer (Head of Division)'}
           </p>
         </div>
 
@@ -381,37 +396,80 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 className="w-full py-2.5 px-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-700 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Shield className="w-4 h-4 text-teal-600" />
-                <span>Masuk sebagai Admin FMCU</span>
+                <span>Masuk Portal Admin / Executive</span>
                 <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
               </button>
             </div>
           </form>
         ) : (
           /* -------------------------------------------------------------------------
-              2. FORM ADMIN FMCU (ACTIVATED ON ADMIN BUTTON CLICK)
+              2. FORM ADMIN & EXECUTIVE VIEWER FMCU (UNIFIED PIN GATE)
+              - Admin (01012026): Full Control, Jadwal & Edit Data
+              - Executive Viewer (20260101): Head of Division (Read-Only Analytics)
               ------------------------------------------------------------------------- */
-          <form onSubmit={handleAdminSubmit} className="space-y-4">
-            {/* Admin Account Header Card */}
-            <div className="p-3 bg-gradient-to-r from-teal-50/90 to-blue-50/90 border border-teal-200/70 rounded-2xl flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 flex items-center justify-center text-white shadow-sm flex-shrink-0">
-                <Shield className="w-5 h-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-black text-slate-800">Administrator FMCU</span>
-                  <span className="text-[9px] font-bold bg-teal-600 text-white px-1.5 py-0.2 rounded-full uppercase">
-                    Super Admin
+          <form onSubmit={handleAdminSubmit} className="space-y-3.5">
+            {/* Dual Role Preview Cards (Auto-highlights based on PIN typed) */}
+            <div className="grid grid-cols-2 gap-2">
+              <div
+                className={`p-2.5 rounded-2xl border transition-all duration-300 flex items-center gap-2 ${
+                  adminPasswordInput.trim() === EXECUTIVE_VIEWER_PASSWORD
+                    ? 'bg-slate-50/70 border-slate-200/70 opacity-60'
+                    : 'bg-gradient-to-br from-teal-50/90 to-emerald-50/80 border-teal-300 shadow-xs'
+                }`}
+              >
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-teal-600 to-emerald-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-teal-700 block leading-none">
+                    Full Control
+                  </span>
+                  <span className="text-[11px] font-black text-slate-900 block truncate mt-0.5">
+                    Admin FMCU
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-medium block truncate">
+                    Jadwal &amp; Edit Data
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500 font-medium truncate">admin@fmcuteams.com</p>
               </div>
-              <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
+
+              <div
+                className={`p-2.5 rounded-2xl border transition-all duration-300 flex items-center gap-2 ${
+                  adminPasswordInput.trim() === EXECUTIVE_VIEWER_PASSWORD
+                    ? 'bg-gradient-to-br from-indigo-50/95 to-blue-50/90 border-indigo-300 shadow-xs scale-[1.02]'
+                    : 'bg-slate-50/80 border-slate-200/80'
+                }`}
+              >
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-slate-800 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-indigo-700 block leading-none">
+                    Head of Division
+                  </span>
+                  <span className="text-[11px] font-black text-slate-900 block truncate mt-0.5">
+                    Executive Viewer
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-medium block truncate">
+                    Analitik (Read-Only)
+                  </span>
+                </div>
+              </div>
             </div>
 
-            {/* Password Admin Input */}
+            {/* PIN Otorisasi Input */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs text-slate-600 font-bold">Kode Otorisasi Keamanan</label>
+                <label className="text-xs text-slate-600 font-bold">
+                  PIN Otorisasi (Admin / Executive)
+                </label>
+                <span className="text-[10px] font-bold text-teal-600">
+                  {adminPasswordInput.trim() === EXECUTIVE_VIEWER_PASSWORD
+                    ? 'Terdeteksi: Executive Viewer'
+                    : adminPasswordInput.trim() === ADMIN_PASSWORD
+                    ? 'Terdeteksi: Admin Full Control'
+                    : '8 Digit PIN'}
+                </span>
               </div>
 
               <div className="relative flex items-center">
@@ -424,7 +482,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   autoComplete="off"
                   value={adminPasswordInput}
                   onChange={(e) => setAdminPasswordInput(e.target.value.replace(/\D/g, ''))}
-                  placeholder="Masukkan kode otorisasi..."
+                  placeholder="Masukkan PIN Admin atau Executive..."
                   required
                   autoFocus
                   style={
@@ -445,16 +503,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               </div>
             </div>
 
-            {/* Submit Button Admin */}
+            {/* Submit Button Admin / Executive */}
             <div className="pt-1">
               <button
                 type="submit"
                 data-splash-target="login-submit-btn"
                 disabled={isSubmitting}
-                className="w-full py-3.5 rounded-full bg-gradient-to-r from-teal-600 via-teal-700 to-slate-800 text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
+                className={`w-full py-3.5 rounded-full text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60 ${
+                  adminPasswordInput.trim() === EXECUTIVE_VIEWER_PASSWORD
+                    ? 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-slate-900'
+                    : 'bg-gradient-to-r from-teal-600 via-teal-700 to-slate-800'
+                }`}
               >
                 <Shield className="w-4 h-4 stroke-[2.5]" />
-                <span>Masuk sebagai Admin FMCU</span>
+                <span>
+                  {adminPasswordInput.trim() === EXECUTIVE_VIEWER_PASSWORD
+                    ? 'Masuk sebagai Executive Viewer (HOD)'
+                    : 'Masuk Portal Otorisasi FMCU'}
+                </span>
                 <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
