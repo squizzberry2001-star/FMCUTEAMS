@@ -758,48 +758,71 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   useEffect(() => {
     let ticking = false;
+    let touchStartY = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches && e.touches[0]) {
+        touchStartY = e.touches[0].clientY;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!e.touches || !e.touches[0]) return;
+      const touchCurrentY = e.touches[0].clientY;
+      const touchDelta = touchStartY - touchCurrentY; // > 0 = geser ke atas (scroll ke bawah)
+      const top = getScrollTop();
+
+      if (top <= 15) {
+        setShowTopNavbar(true);
+        setIsScrolled(false);
+        manualExpandedRef.current = false;
+        return;
+      }
+
+      if (touchDelta > 8 && top > 20) {
+        // Scroll ke BAWAH: sembunyikan top navbar & action buttons
+        setShowTopNavbar(false);
+        setIsScrolled(true);
+      } else if (touchDelta < -8) {
+        // Scroll ke ATAS: munculkan kembali top navbar & action buttons
+        setShowTopNavbar(true);
+        setIsScrolled(false);
+      }
+    };
 
     const onScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          const currentY = getScrollTop();
-          const delta = currentY - lastScrollYRef.current;
-          lastScrollYRef.current = currentY;
+          const top = getScrollTop();
+          const delta = top - lastScrollYRef.current;
+          lastScrollYRef.current = top;
 
-          // 1. Di paling atas halaman (<= 25px): reset
-          if (currentY <= 25) {
+          // 1. Di paling atas halaman (<= 15px): reset
+          if (top <= 15) {
             setShowTopNavbar(true);
             setIsScrolled(false);
-            scrollDeltaAccRef.current = 0;
             manualExpandedRef.current = false;
             ticking = false;
             return;
           }
 
-          // 2. Akumulasi delta untuk menyaring getaran micro touch / rubber-banding
-          if ((delta > 0 && scrollDeltaAccRef.current < 0) || (delta < 0 && scrollDeltaAccRef.current > 0)) {
-            scrollDeltaAccRef.current = delta;
-          } else {
-            scrollDeltaAccRef.current += delta;
-          }
-
-          // 3. Jika user menekan tombol bottom navbar saat mengecil -> pertahankan
+          // 2. Manual expanded override jika baru diklik
           if (manualExpandedRef.current) {
-            if (currentY > manualExpandedScrollTopRef.current + 16 || delta > 6) {
+            if (top > manualExpandedScrollTopRef.current + 8 || delta > 4) {
               manualExpandedRef.current = false;
               setShowTopNavbar(false);
-              setIsScrolled((prev) => (prev ? prev : true));
+              setIsScrolled(true);
             }
           }
-          // 4. Scroll ke BAWAH: sembunyikan top navbar & action buttons
-          else if (scrollDeltaAccRef.current > 35 && currentY > 60) {
-            setShowTopNavbar(false);
-            setIsScrolled((prev) => (prev ? prev : true));
-          }
-          // 5. Scroll ke ATAS: tampilkan kembali top navbar & action buttons
-          else if (scrollDeltaAccRef.current < -16) {
+          // 3. Scroll ke ATAS: tampilkan kembali top navbar & action buttons
+          else if (delta < -4) {
             setShowTopNavbar(true);
-            setIsScrolled((prev) => (!prev ? prev : false));
+            setIsScrolled(false);
+          }
+          // 4. Scroll ke BAWAH: sembunyikan top navbar & action buttons
+          else if (delta > 4 && top > 20) {
+            setShowTopNavbar(false);
+            setIsScrolled(true);
           }
 
           ticking = false;
@@ -814,7 +837,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }
     window.addEventListener('scroll', onScroll, { passive: true, capture: true });
     document.addEventListener('scroll', onScroll, { passive: true, capture: true });
-    window.addEventListener('touchmove', onScroll, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
     window.addEventListener('wheel', onScroll, { passive: true });
 
     onScroll();
@@ -825,7 +849,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       }
       window.removeEventListener('scroll', onScroll, true);
       document.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('touchmove', onScroll);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('wheel', onScroll);
     };
   }, []);
@@ -3717,10 +3742,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           ===================================================================== */}
       {activeSection === 2 && isCurrentObsSubTabEnabled && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
             isScrolled
-              ? 'translate-y-28 pointer-events-none'
-              : 'translate-y-0 pointer-events-auto'
+              ? 'translate-y-36 opacity-0 pointer-events-none'
+              : 'translate-y-0 opacity-100 pointer-events-auto'
           }`}
         >
           {/* Quick Prev / Next Card Navigation Pill with Liquid Glass */}
@@ -3764,10 +3789,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {activeSection === 3 && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
             isScrolled
-              ? 'translate-y-28 pointer-events-none'
-              : 'translate-y-0 pointer-events-auto'
+              ? 'translate-y-36 opacity-0 pointer-events-none'
+              : 'translate-y-0 opacity-100 pointer-events-auto'
           }`}
         >
           {/* Button Icon Gallery with Liquid Glass */}
