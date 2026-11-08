@@ -1514,17 +1514,21 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* Top Navbar: Fixed Header with 90% Blur & Feathered Bottom Edge */}
+      {/* Top Navbar: Fixed Header with Authentic Apple Liquid Glass Aesthetic & Feathered Bottom Edge */}
       <header
-        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
+        className={`fixed top-0 left-0 right-0 z-40 iphone-glass-top-navbar transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
           showTopNavbar
-            ? 'translate-y-0 opacity-100 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.04)]'
+            ? 'translate-y-0 opacity-100'
             : '-translate-y-full opacity-0 pointer-events-none'
         }`}
       >
-        <div className="bg-[#F8F9FD]/90 backdrop-blur-xl px-4 sm:px-6 pt-[max(0.6rem,env(safe-area-inset-top,12px))] pb-2.5 max-w-6xl mx-auto w-full flex items-center justify-between relative">
-          {/* Feather Bottom Edge: Smooth gradual fade into page content */}
-          <div className="absolute inset-x-0 -bottom-3.5 h-3.5 bg-gradient-to-b from-[#F8F9FD]/90 via-[#F8F9FD]/40 to-transparent pointer-events-none" />
+        {/* Internal Liquid Glass Specular Shine */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/35 via-transparent to-white/10" />
+
+        {/* Feather Bottom Edge: Smooth gradual fade into page content */}
+        <div className="absolute inset-x-0 -bottom-3.5 h-3.5 bg-gradient-to-b from-white/40 via-white/15 to-transparent pointer-events-none" />
+
+        <div className="px-4 sm:px-6 pt-[max(0.6rem,env(safe-area-inset-top,12px))] pb-2.5 max-w-6xl mx-auto w-full flex items-center justify-between relative z-10">
 
           <button
             type="button"
