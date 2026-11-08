@@ -195,15 +195,15 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
           {/* Garis Pembatas */}
           <span className="h-3.5 w-px bg-slate-300/80 block shrink-0" />
 
-          {/* Button Trakteer Coffee */}
+          {/* Button Trakteer Coffee (Tanpa Background) */}
           <a
             href="https://trakteer.id/HEHBESTIE/tip"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-[10px] font-black text-amber-800 hover:text-amber-950 bg-amber-50 hover:bg-amber-100/90 border border-amber-200/90 px-3 py-1 rounded-full shadow-2xs transition-all active:scale-95 cursor-pointer tracking-wider uppercase"
+            className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-amber-600 hover:text-amber-700 tracking-wider transition-colors cursor-pointer py-1 px-1.5 uppercase"
             title="Trakteer Hai BESTIE! (@HEHBESTIE) di Trakteer - Trakteer.id"
           >
-            <Coffee className="w-3 h-3 text-amber-600 shrink-0" />
+            <Coffee className="w-3.5 h-3.5 text-amber-500 shrink-0" />
             <span>TRAKTEER COFFEE</span>
           </a>
         </div>

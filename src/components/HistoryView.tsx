@@ -855,44 +855,44 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       {/* ============================================================
           FLOATING APPLE LIQUID GLASS BOTTOM NAVBAR IN HALAMAN COVERAGE
-          Tabs: Coverage Store & Leaderboard Top Visit
+          Ukuran diperpendek ramping (Compact & Short)
           ============================================================ */}
-      <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
-        <div className="w-full max-w-[280px] sm:max-w-[300px] flex items-center pointer-events-auto origin-center relative overflow-hidden select-none p-1.5 rounded-[32px] iphone-glass-dock shadow-2xl">
+      <div className="fixed bottom-3 sm:bottom-3.5 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
+        <div className="w-full max-w-[210px] sm:max-w-[225px] flex items-center pointer-events-auto origin-center relative overflow-hidden select-none p-1 rounded-[26px] iphone-glass-dock shadow-xl">
           {/* Top specular hairline */}
-          <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-50 z-0" />
+          <div className="pointer-events-none absolute inset-x-4 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-50 z-0" />
 
           {/* Ambient bottom light refraction rim */}
-          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-30 z-0" />
+          <div className="pointer-events-none absolute inset-x-6 bottom-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-30 z-0" />
 
           {/* Sliding Glass Lens Pill */}
           <div
-            className="absolute top-1.5 bottom-1.5 rounded-[22px] iphone-glass-pill pointer-events-none dock-pill-transition z-0"
+            className="absolute top-1 bottom-1 rounded-[20px] iphone-glass-pill pointer-events-none dock-pill-transition z-0"
             style={{
-              width: 'calc((100% - 12px) / 2)',
+              width: 'calc((100% - 8px) / 2)',
               transform: `translateX(calc(${activeCoverageTab === 'coverage' ? 0 : 1} * 100%))`,
-              left: '6px',
+              left: '4px',
             }}
           >
-            <div className="pointer-events-none absolute inset-x-2.5 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-60" />
-            <div className="pointer-events-none absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+            <div className="pointer-events-none absolute inset-x-2 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-60" />
+            <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
           </div>
 
           {/* Tab 1: Coverage Store */}
           <button
             type="button"
             onClick={() => setActiveCoverageTab('coverage')}
-            className="relative z-10 flex-1 rounded-[22px] flex items-center justify-center py-2 px-2 gap-1.5 dock-btn-transition active:scale-95 cursor-pointer focus:outline-none"
+            className="relative z-10 flex-1 rounded-[20px] flex items-center justify-center py-1.5 px-1.5 gap-1 dock-btn-transition active:scale-95 cursor-pointer focus:outline-none"
           >
             <Store
-              className={`w-4 h-4 transition-all duration-300 ${
+              className={`w-3.5 h-3.5 transition-all duration-300 ${
                 activeCoverageTab === 'coverage'
                   ? 'text-teal-900 stroke-[2.4] scale-105'
                   : 'text-slate-600 stroke-[2]'
               }`}
             />
             <span
-              className={`text-xs font-black transition-all ${
+              className={`text-[11px] font-black transition-all ${
                 activeCoverageTab === 'coverage' ? 'text-teal-950 font-black' : 'text-slate-600 font-bold'
               }`}
             >
@@ -904,17 +904,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <button
             type="button"
             onClick={() => setActiveCoverageTab('leaderboard')}
-            className="relative z-10 flex-1 rounded-[22px] flex items-center justify-center py-2 px-2 gap-1.5 dock-btn-transition active:scale-95 cursor-pointer focus:outline-none"
+            className="relative z-10 flex-1 rounded-[20px] flex items-center justify-center py-1.5 px-1.5 gap-1 dock-btn-transition active:scale-95 cursor-pointer focus:outline-none"
           >
             <Trophy
-              className={`w-4 h-4 transition-all duration-300 ${
+              className={`w-3.5 h-3.5 transition-all duration-300 ${
                 activeCoverageTab === 'leaderboard'
                   ? 'text-purple-900 stroke-[2.4] scale-105'
                   : 'text-slate-600 stroke-[2]'
               }`}
             />
             <span
-              className={`text-xs font-black transition-all ${
+              className={`text-[11px] font-black transition-all ${
                 activeCoverageTab === 'leaderboard' ? 'text-purple-950 font-black' : 'text-slate-600 font-bold'
               }`}
             >

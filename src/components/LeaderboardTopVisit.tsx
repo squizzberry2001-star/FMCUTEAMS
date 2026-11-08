@@ -8,7 +8,7 @@ import {
   Search,
   X,
   UserCheck,
-  Cloud,
+  FileText,
   RefreshCw,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -102,6 +102,11 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       });
 
       setGdriveReports(Array.from(reportMap.values()));
+
+      // Animasi confetti selebrasi keluar SETELAH data laporan GDrive berhasil disinkronkan
+      setTimeout(() => {
+        fireConfetti();
+      }, 350);
     } catch (err) {
       console.warn('Gdrive reports fetch error:', err);
     } finally {
@@ -113,7 +118,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
     loadGdriveReports();
   }, []);
 
-  // 3. Efek Animasi Confetti (Celebration) saat Mount & Ganti Periode
+  // 3. Efek Animasi Confetti (Celebration)
   const fireConfetti = () => {
     try {
       // Dual-cannon celebration confetti
@@ -133,10 +138,6 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       // ignore
     }
   };
-
-  useEffect(() => {
-    fireConfetti();
-  }, [selectedPeriod]);
 
   // 4. Filter 36 Staff Users (exclude Admin)
   const staffMembers = useMemo(() => {
@@ -213,6 +214,13 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
 
     // DETEKSI JUMLAH LAPORAN VISIT YANG SUDAH DISIMPAN DI GDRIVE
     for (const rep of gdriveReports) {
+      const repDate = (rep.visitDate || (rep.submittedAt ? rep.submittedAt.split('T')[0] : '')).trim();
+      if (repDate) {
+        if (selectedPeriod === 'Daily' && repDate !== todayYmd) continue;
+        if (selectedPeriod === 'Weekly' && (repDate < weekStartStr || repDate > weekEndStr)) continue;
+        if (selectedPeriod === 'Monthly' && !repDate.startsWith(currentMonthPrefix)) continue;
+      }
+
       const visitor = (rep.visitorName || (rep as Record<string, any>).pic || (rep as Record<string, any>).auditorName || '').trim().toLowerCase();
       if (!visitor) continue;
 
@@ -231,7 +239,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       }
     }
 
-    // Bangun daftar peringkat lengkap dengan rumus skor kompetitif
+    // Bangun daftar peringkat berdasarkan total laporan visit GDrive
     const entries: LeaderboardRankItem[] = staffMembers.map((staff) => {
       const staffKey = staff.name.trim().toLowerCase();
       const st = statsMap.get(staffKey) || {
@@ -241,24 +249,6 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         gdriveReportCount: 0,
       };
 
-      const ownedStoresCount = getStoresWithOwnership(staff.name).filter(
-        (s) => s.isOwnedByBestie
-      ).length;
-
-      let periodMultiplier = 1;
-      if (selectedPeriod === 'Daily') periodMultiplier = 2.0;
-      else if (selectedPeriod === 'Weekly') periodMultiplier = 1.4;
-      else if (selectedPeriod === 'Monthly') periodMultiplier = 1.1;
-
-      // TARIKAN DATA UTAMA: LAPORAN VISIT TERSIMPAN DI GDRIVE
-      const rawScore =
-        st.gdriveReportCount * 125 * periodMultiplier +
-        st.visitCount * 55 * periodMultiplier +
-        st.completedCount * 30 +
-        st.otherCount * 15 +
-        Math.min(ownedStoresCount * 6, 80);
-
-      const finalScore = Math.max(35, Math.round(rawScore));
       const avatarUrl = staff.avatar || '';
 
       return {
@@ -270,17 +260,17 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         visitCount: st.visitCount,
         completedVisits: st.completedCount,
         gdriveReportsCount: st.gdriveReportCount,
-        score: finalScore,
+        score: st.gdriveReportCount,
         isCurrentUser: Boolean(
           currentUserName && isSamePersonName(staff.name, currentUserName)
         ),
       };
     });
 
-    // Urutkan berdasarkan Laporan GDrive Terbanyak -> Skor tertinggi -> Visit Count terbanyak -> Abjad A-Z
+    // Urutkan murni berdasarkan Laporan GDrive Terbanyak -> Kunjungan Selesai -> Total Agenda -> Abjad A-Z
     entries.sort((a, b) => {
       if (b.gdriveReportsCount !== a.gdriveReportsCount) return b.gdriveReportsCount - a.gdriveReportsCount;
-      if (b.score !== a.score) return b.score - a.score;
+      if (b.completedVisits !== a.completedVisits) return b.completedVisits - a.completedVisits;
       if (b.visitCount !== a.visitCount) return b.visitCount - a.visitCount;
       return a.name.localeCompare(b.name, 'id', { sensitivity: 'base' });
     });
@@ -367,29 +357,25 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         </div>
 
         {/* Realtime GDrive Reports Detection Status Bar */}
-        <div className="relative z-10 flex items-center justify-between gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-black/35 backdrop-blur-md border border-white/15 mb-4 text-[10.5px]">
+        <div className="relative z-10 flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 rounded-2xl bg-black/35 backdrop-blur-md border border-white/15 mb-4 text-[10.5px]">
           <div className="flex items-center gap-2 min-w-0">
             <div className="relative flex h-2.5 w-2.5 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </div>
             <div className="min-w-0">
-              <span className="font-extrabold text-white">Cloud GDrive: </span>
+              <span className="font-extrabold text-white">Google Drive: </span>
               <span className="text-emerald-300 font-black">
                 {gdriveReports.length} Laporan Visit Tersimpan
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={loadGdriveReports}
-            disabled={isSyncingGdrive}
-            className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold flex items-center gap-1 shrink-0 transition-all cursor-pointer disabled:opacity-50"
-            title="Sinkronkan data laporan dari Google Drive"
-          >
-            <RefreshCw className={`w-3 h-3 ${isSyncingGdrive ? 'animate-spin text-emerald-300' : 'text-slate-300'}`} />
-            <span className="text-[10px] font-medium">Sync</span>
-          </button>
+          {isSyncingGdrive && (
+            <div className="flex items-center gap-1 text-[10px] text-purple-200 shrink-0">
+              <RefreshCw className="w-3 h-3 animate-spin text-emerald-300" />
+              <span>Sinkronisasi...</span>
+            </div>
+          )}
         </div>
 
         {/* Filter Pills: Daily, Weekly, Monthly, All Time */}
@@ -454,19 +440,11 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                 {rank2.name.split(' ')[0]}
               </span>
 
-              {/* Score Pill dengan Sparkle */}
-              <div className="mt-1 mb-1 px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center gap-1 shadow-sm">
-                <span className="text-[10px]">💥</span>
-                <span className="text-[11px] font-black text-purple-200">
-                  {rank2.score}
-                </span>
-              </div>
-
-              {/* GDrive Reports Pill */}
-              <div className="mb-2 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-400/30 flex items-center gap-1 shadow-2xs">
-                <Cloud className="w-2.5 h-2.5 text-emerald-300" />
-                <span className="text-[9px] font-black text-emerald-200">
-                  {rank2.gdriveReportsCount} GDrive
+              {/* Total Laporan Pill */}
+              <div className="mt-1.5 mb-2 px-2.5 py-1 rounded-full bg-purple-950/80 border border-purple-400/40 flex items-center gap-1 shadow-sm">
+                <FileText className="w-3 h-3 text-purple-300" />
+                <span className="text-[11px] font-black text-purple-100">
+                  {rank2.gdriveReportsCount} Laporan
                 </span>
               </div>
 
@@ -520,19 +498,11 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                 {rank1.name.split(' ')[0]}
               </span>
 
-              {/* Score Pill Juara 1 */}
-              <div className="mt-1 mb-1 px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/40 flex items-center gap-1 shadow-sm">
-                <span className="text-xs">💥</span>
+              {/* Total Laporan Pill Juara 1 */}
+              <div className="mt-1.5 mb-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 flex items-center gap-1.5 shadow-sm">
+                <FileText className="w-3.5 h-3.5 text-amber-300" />
                 <span className="text-xs font-black text-amber-300">
-                  {rank1.score}
-                </span>
-              </div>
-
-              {/* GDrive Reports Pill Juara 1 */}
-              <div className="mb-2 px-2.5 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-300/40 flex items-center gap-1 shadow-2xs">
-                <Cloud className="w-2.5 h-2.5 text-emerald-300 animate-pulse" />
-                <span className="text-[9.5px] font-black text-emerald-200">
-                  {rank1.gdriveReportsCount} GDrive
+                  {rank1.gdriveReportsCount} Laporan
                 </span>
               </div>
 
@@ -579,19 +549,11 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                 {rank3.name.split(' ')[0]}
               </span>
 
-              {/* Score Pill */}
-              <div className="mt-1 mb-1 px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-400/30 flex items-center gap-1 shadow-sm">
-                <span className="text-[10px]">💥</span>
-                <span className="text-[11px] font-black text-purple-200">
-                  {rank3.score}
-                </span>
-              </div>
-
-              {/* GDrive Reports Pill */}
-              <div className="mb-2 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-400/30 flex items-center gap-1 shadow-2xs">
-                <Cloud className="w-2.5 h-2.5 text-emerald-300" />
-                <span className="text-[9px] font-black text-emerald-200">
-                  {rank3.gdriveReportsCount} GDrive
+              {/* Total Laporan Pill Juara 3 */}
+              <div className="mt-1.5 mb-2 px-2.5 py-1 rounded-full bg-purple-950/80 border border-purple-400/40 flex items-center gap-1 shadow-sm">
+                <FileText className="w-3 h-3 text-purple-300" />
+                <span className="text-[11px] font-black text-purple-100">
+                  {rank3.gdriveReportsCount} Laporan
                 </span>
               </div>
 
@@ -611,18 +573,18 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       </div>
 
       {/* =========================================================================
-          DAFTAR PERINGKAT 4+ (DARK SLEEK CARD ALA SCREENSHOT REFERENSI)
-          Menampilkan baris dengan nomor besar, avatar, nama, dan score pill 💥
+          DAFTAR PERINGKAT 4+ (CLEAN EXECUTIVE WHITE CARD)
+          Menampilkan baris dengan nomor besar, avatar, nama, dan Total Laporan
           ========================================================================= */}
-      <div className="bg-[#18181b] rounded-3xl p-4 sm:p-5 text-white shadow-soft-card border border-slate-800">
+      <div className="bg-white rounded-3xl p-4 sm:p-5 text-slate-800 shadow-soft-card border border-slate-100">
         <div className="flex items-center justify-between gap-2 mb-3 px-1">
           <div className="flex items-center gap-2">
-            <Medal className="w-4 h-4 text-purple-400" />
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">
+            <Medal className="w-4 h-4 text-purple-600" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
               Peringkat Lainnya
             </h3>
           </div>
-          <span className="text-[11px] font-bold text-slate-400">
+          <span className="text-[11px] font-bold text-slate-500">
             {remainingRanks.length} Personel
           </span>
         </div>
@@ -635,13 +597,13 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari nama personel di leaderboard..."
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-7 py-2 text-xs font-medium text-slate-200 placeholder:text-slate-500 outline-none focus:border-purple-500 transition-all"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-2 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:bg-white focus:border-purple-500 transition-all"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -651,7 +613,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         {/* Baris Peringkat 4, 5, 6, 7, ... */}
         <div className="space-y-2">
           {remainingRanks.length === 0 ? (
-            <div className="py-6 text-center text-slate-500 text-xs font-medium">
+            <div className="py-6 text-center text-slate-400 text-xs font-medium">
               Tidak ada personel yang cocok dengan pencarian &quot;{searchQuery}&quot;.
             </div>
           ) : (
@@ -660,18 +622,18 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                 key={item.userId}
                 className={`flex items-center justify-between p-2.5 rounded-2xl transition-all ${
                   item.isCurrentUser
-                    ? 'bg-purple-900/40 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
-                    : 'bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80'
+                    ? 'bg-purple-50/90 border border-purple-200 shadow-xs'
+                    : 'bg-slate-50/80 hover:bg-slate-100/90 border border-slate-100'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {/* Nomor Peringkat Besar Muted Sesuai Screenshot */}
-                  <span className="w-7 text-center font-black text-2xl text-slate-500/70 shrink-0 tabular-nums">
+                  <span className="w-7 text-center font-black text-2xl text-slate-400 shrink-0 tabular-nums">
                     {item.rank}
                   </span>
 
                   {/* Avatar */}
-                  <div className="w-10 h-10 rounded-full ring-2 ring-white/10 overflow-hidden bg-slate-800 shrink-0 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full ring-2 ring-slate-200 overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center">
                     {item.avatar ? (
                       <img
                         src={item.avatar}
@@ -679,7 +641,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-tr from-indigo-900 to-purple-900 text-white font-bold text-xs flex items-center justify-center uppercase">
+                      <div className="w-full h-full bg-gradient-to-tr from-purple-700 to-indigo-800 text-white font-bold text-xs flex items-center justify-center uppercase">
                         {item.name.substring(0, 2)}
                       </div>
                     )}
@@ -688,37 +650,29 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                   {/* Nama & Info */}
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-xs sm:text-sm font-bold text-white truncate">
+                      <p className="text-xs sm:text-sm font-bold text-slate-800 truncate">
                         {item.name}
                       </p>
                       {item.isCurrentUser && (
-                        <span className="px-1.5 py-0.2 rounded-md bg-purple-500 text-[9px] font-black uppercase tracking-tight text-white shrink-0">
+                        <span className="px-1.5 py-0.2 rounded-md bg-purple-600 text-[9px] font-black uppercase tracking-tight text-white shrink-0">
                           Anda
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                      <span className="text-[10px] text-slate-400 font-medium">
+                      <span className="text-[10px] text-slate-500 font-medium">
                         {item.visitCount > 0
-                          ? `${item.visitCount} Visit`
+                          ? `${item.visitCount} Agenda Visit`
                           : `${item.role}`}
                       </span>
-                      {item.gdriveReportsCount > 0 && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-emerald-950/80 border border-emerald-400/30 text-emerald-300 text-[9px] font-extrabold shadow-2xs">
-                          <Cloud className="w-2.5 h-2.5 text-emerald-400" />
-                          <span>{item.gdriveReportsCount} GDrive</span>
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Score Pill 💥 */}
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-950/90 border border-purple-500/40 text-purple-300 shrink-0 shadow-xs">
-                  <span className="text-[11px]">💥</span>
-                  <span className="text-xs font-black tabular-nums">
-                    {item.score}
-                  </span>
+                {/* Total Laporan Pill */}
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-200 text-xs font-black shrink-0 shadow-2xs">
+                  <FileText className="w-3.5 h-3.5 text-purple-600" />
+                  <span className="tabular-nums">{item.gdriveReportsCount} Laporan</span>
                 </div>
               </div>
             ))
@@ -739,15 +693,15 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                 Posisi Anda Saat Ini
               </p>
               <p className="text-[10px] text-purple-200">
-                {currentUserRank.visitCount} Visit • {currentUserRank.completedVisits} Selesai •{' '}
-                <span className="text-emerald-300 font-bold">{currentUserRank.gdriveReportsCount} Laporan GDrive</span>
+                {currentUserRank.visitCount} Agenda • {currentUserRank.completedVisits} Selesai •{' '}
+                <span className="text-emerald-300 font-bold">{currentUserRank.gdriveReportsCount} Laporan Tersimpan</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-white text-purple-950 font-black text-xs shadow-md">
-            <span>💥</span>
-            <span>{currentUserRank.score} Poin</span>
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-purple-950 font-black text-xs shadow-md">
+            <FileText className="w-3.5 h-3.5 text-purple-600" />
+            <span>{currentUserRank.gdriveReportsCount} Laporan</span>
           </div>
         </div>
       )}
