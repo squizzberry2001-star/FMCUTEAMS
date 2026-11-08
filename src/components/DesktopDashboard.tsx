@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Bell,
   Search,
@@ -6,16 +6,12 @@ import {
   LayoutGrid,
   Calendar as CalendarIcon,
   Store,
-  Building2,
-  CheckCircle2,
   Settings,
   LogOut,
   ChevronRight,
   ChevronLeft,
   FileSpreadsheet,
-  TrendingUp,
   Clock,
-  Sparkles,
   ClipboardList,
   MapPin,
   Camera,
@@ -23,14 +19,19 @@ import {
   Shield,
   ArrowRight,
   Share2,
-  MessageSquare
+  Navigation,
+  Tag,
+  CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
-import { ScheduleAgenda, User } from '../types';
+import { ScheduleAgenda, User, SCHEDULE_CATEGORY_OPTIONS } from '../types';
 import { CalendarStrip, CalendarFocusTrigger } from './CalendarStrip';
 import { DeveloperFooter } from './DeveloperFooter';
 import { ScheduleCard } from './ScheduleCard';
 import { HistoryView } from './HistoryView';
-import { isSamePersonName } from '../data/masterStoresData';
+import { CalendarScheduleView } from './CalendarScheduleView';
+import { ProfileView } from './ProfileView';
+import { isSamePersonName, getStoresWithOwnership } from '../data/masterStoresData';
 import {
   getMondayOfWeek,
   getFullWeekDays,
@@ -51,6 +52,8 @@ interface DesktopDashboardProps {
   onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
   onLogout: () => void;
   onOpenAdminPortal?: () => void;
+  onUpdateUser?: (updatedUser: User) => void;
+  users?: User[];
 }
 
 export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
@@ -66,16 +69,21 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   onOpenVisitForm,
   onLogout,
   onOpenAdminPortal,
+  onUpdateUser,
+  users = [],
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'AllTeam'>('Today');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [calendarFocus, setCalendarFocus] = useState<CalendarFocusTrigger>({
     mode: 'today',
     ts: Date.now(),
   });
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'schedule' | 'coverage' | 'profile'>('dashboard');
 
-  // Waktu sapaan berdasarkan jam aktual (Pagi, Siang, Sore, Malam)
+  const fullName = user.name || 'Bestie FMCU';
+
+  // 1. Waktu Sapaan berdasarkan Jam Aktual
   const getTimeGreeting = () => {
     const hour = new Date().getHours();
     if (hour >= 4 && hour < 11) return 'Pagi';
@@ -84,16 +92,17 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
     return 'Malam';
   };
 
-  const fullName = user.name || 'Sarah Jenkins';
-
   const monthNames = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
   ];
   const now = new Date();
   const currentMonthYear = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
 
-  // Reference Monday for active week view (Default: Monday of running week)
+  // 2. Reference Monday for running week
   const [currentWeekMonday, setCurrentWeekMonday] = useState<string>(() => getMondayOfWeek());
 
   const handlePrevWeek = () => {
@@ -117,18 +126,10 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   const weekEndStr = activeWeekDays[activeWeekDays.length - 1]?.dateStr || currentWeekMonday;
   const isCurrentRunningWeek = currentWeekMonday === getMondayOfWeek();
 
-  const getTodayYmd = () => {
-    const dt = new Date();
-    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(
-      dt.getDate()
-    ).padStart(2, '0')}`;
-  };
-
   const handleSelectPeriodTab = (period: 'Today' | 'Week' | 'AllTeam') => {
     setSelectedPeriod(period);
-    const todayStr = getTodayYmd();
     if (period === 'Today') {
-      onSelectDate(todayStr);
+      onSelectDate(todayYmd);
       setCalendarFocus({ mode: 'today', ts: Date.now() });
     } else if (period === 'Week' || period === 'AllTeam') {
       setCalendarFocus({ mode: 'week', ts: Date.now() });
@@ -143,39 +144,51 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
     return `${shortDayNames[dt.getDay()]}, ${String(dt.getDate()).padStart(2, '0')} ${shortMonthNames[dt.getMonth()]}`;
   };
 
-  const filteredAgendas = agendas.filter((item) => {
-    const matchesSearch =
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.pic.toLowerCase().includes(searchQuery.toLowerCase());
+  // 3. Filter Agendas Sesuai User, Periode, Kategori, & Pencarian
+  const filteredAgendas = useMemo(() => {
+    return agendas.filter((item) => {
+      // Filter Kategori
+      if (selectedCategory !== 'ALL' && item.category !== selectedCategory) {
+        return false;
+      }
 
-    if (!matchesSearch) return false;
+      // Filter Pencarian Text
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesSearch =
+          item.title.toLowerCase().includes(q) ||
+          item.location.toLowerCase().includes(q) ||
+          (item.pic || '').toLowerCase().includes(q);
+        if (!matchesSearch) return false;
+      }
 
-    const isMyAgenda =
-      !item.pic ||
-      isSamePersonName(item.pic, fullName) ||
-      item.pic.toLowerCase().includes(fullName.toLowerCase());
+      // Filter Hak Kepemilikan User
+      const isMyAgenda =
+        !item.pic ||
+        isSamePersonName(item.pic, fullName) ||
+        item.pic.toLowerCase().includes(fullName.toLowerCase());
 
-    if (selectedPeriod === 'Today') {
-      return isMyAgenda && item.date === selectedDate;
-    }
-    if (selectedPeriod === 'Week') {
-      return isMyAgenda && item.date >= weekStartStr && item.date <= weekEndStr;
-    }
-    // 'AllTeam' -> 1 Minggu Penuh
-    return item.date >= weekStartStr && item.date <= weekEndStr;
-  }).sort((a, b) => {
-    if (selectedPeriod === 'AllTeam') {
-      return (
-        (a.pic || '').localeCompare(b.pic || '', 'id', { sensitivity: 'base' }) ||
-        (a.date || '').localeCompare(b.date || '') ||
-        (a.time || '').localeCompare(b.time || '')
-      );
-    }
-    return 0;
-  });
+      if (selectedPeriod === 'Today') {
+        return isMyAgenda && item.date === selectedDate;
+      }
+      if (selectedPeriod === 'Week') {
+        return isMyAgenda && item.date >= weekStartStr && item.date <= weekEndStr;
+      }
+      // 'AllTeam' -> Seluruh Tim pada 1 Minggu Berjalan
+      return item.date >= weekStartStr && item.date <= weekEndStr;
+    }).sort((a, b) => {
+      if (selectedPeriod === 'AllTeam') {
+        return (
+          (a.pic || '').localeCompare(b.pic || '', 'id', { sensitivity: 'base' }) ||
+          (a.date || '').localeCompare(b.date || '') ||
+          (a.time || '').localeCompare(b.time || '')
+        );
+      }
+      return (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || '');
+    });
+  }, [agendas, selectedCategory, searchQuery, fullName, selectedPeriod, selectedDate, weekStartStr, weekEndStr]);
 
-  const groupedAllTeamWeekByPerson = (() => {
+  const groupedAllTeamWeekByPerson = useMemo(() => {
     if (selectedPeriod !== 'AllTeam') return [];
     const groupsMap = new Map<string, ScheduleAgenda[]>();
     for (const item of filteredAgendas) {
@@ -195,12 +208,50 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
             (x.time || '').localeCompare(y.time || '')
         ),
       }));
-  })();
+  }, [filteredAgendas, selectedPeriod]);
 
-  const completedCount = agendas.filter((a) => a.completed).length;
-  const totalCount = agendas.length;
-  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  // 4. Hitungan Data Aktual & Glanceable Metrik Toko
+  const ownedStores = useMemo(() => {
+    return getStoresWithOwnership(fullName).filter((s) => s.isOwnedByBestie);
+  }, [fullName]);
 
+  const totalOwnedStoresCount = ownedStores.length;
+  const visitedOwnedStoresCount = useMemo(() => {
+    const visitedCodes = new Set(
+      agendas
+        .filter((a) => a.completed && (isSamePersonName(a.pic, fullName) || !a.pic))
+        .map((a) => (a.storeCode || a.location || '').trim().toLowerCase())
+    );
+    return ownedStores.filter(
+      (s) => visitedCodes.has(s.code.toLowerCase()) || visitedCodes.has(s.name.toLowerCase())
+    ).length;
+  }, [agendas, fullName, ownedStores]);
+
+  const userCoveragePct = totalOwnedStoresCount > 0
+    ? Math.round((visitedOwnedStoresCount / totalOwnedStoresCount) * 100)
+    : 100;
+
+  const myAgendasThisPeriod = useMemo(() => {
+    return agendas.filter((a) => {
+      const isMine = !a.pic || isSamePersonName(a.pic, fullName);
+      if (selectedPeriod === 'Today') return isMine && a.date === selectedDate;
+      return isMine && a.date >= weekStartStr && a.date <= weekEndStr;
+    });
+  }, [agendas, fullName, selectedPeriod, selectedDate, weekStartStr, weekEndStr]);
+
+  const completedCount = myAgendasThisPeriod.filter((a) => a.completed).length;
+  const totalPeriodCount = myAgendasThisPeriod.length;
+
+  // Kegiatan Terdekat Hari Ini (Chronological Next Agenda)
+  const upcomingAgenda = useMemo(() => {
+    const myTodayAgendas = agendas.filter(
+      (a) => a.date === todayYmd && (isSamePersonName(a.pic, fullName) || !a.pic)
+    );
+    const incomplete = myTodayAgendas.filter((a) => !a.completed);
+    return incomplete[0] || myTodayAgendas[0] || null;
+  }, [agendas, todayYmd, fullName]);
+
+  // Broadcast WhatsApp Rincian Agenda
   const handleShareWhatsApp = (agenda: ScheduleAgenda) => {
     const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://fmcu-teams.web.app';
     const storeInfo = agenda.storeCode ? `[${agenda.storeCode}] ${agenda.location}` : agenda.location || '-';
@@ -226,429 +277,450 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#F8F9FD] overflow-hidden">
-      {/* 1. Left Sidebar Navigation */}
-      <aside className="w-64 bg-white border-r border-slate-100 flex flex-col justify-between p-6 z-20 flex-shrink-0">
-        <div>
-          {/* Logo & App Brand */}
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] flex items-center justify-center text-white shadow-pill-teal font-extrabold text-sm">
-              F
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-teal-600 tracking-wider uppercase block">
-                FMCU TEAMS
-              </span>
-              <h2 className="text-base font-extrabold text-slate-800 leading-tight">
-                Operations Portal
-              </h2>
-            </div>
+    <div className="flex h-screen w-full bg-[#F8F9FD] overflow-hidden select-none">
+      {/* =========================================================================
+          1. LEFT SIDEBAR NAVIGATION: FIT SCREEN HEIGHT (USER & LOGOUT NEVER CUT OFF)
+          ========================================================================= */}
+      <aside className="w-60 lg:w-64 bg-white border-r border-slate-100 flex flex-col h-full p-4 lg:p-5 z-20 flex-shrink-0">
+        {/* Brand & Logo */}
+        <div className="flex items-center gap-3 mb-6 shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] flex items-center justify-center text-white shadow-pill-teal font-extrabold text-sm shrink-0">
+            F
           </div>
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold text-teal-600 tracking-wider uppercase block">
+              FMCU TEAMS
+            </span>
+            <h2 className="text-sm lg:text-base font-extrabold text-slate-800 leading-tight truncate">
+              Operations Portal
+            </h2>
+          </div>
+        </div>
 
-          {/* Nav Links */}
-          <nav className="space-y-1.5">
-            {[
-              { id: 'dashboard', label: 'Daily Schedule', icon: LayoutGrid },
-              { id: 'schedule', label: 'Master Kalender', icon: CalendarIcon },
-              { id: 'coverage', label: 'Coverage Store', icon: Store },
-              { id: 'history', label: 'History Aktivitas', icon: ClipboardList },
-              { id: 'settings', label: 'Pengaturan', icon: Settings },
-            ].map((item) => {
-              const Icon = item.icon;
-              const isActive = activeMenu === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveMenu(item.id)}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
-                    isActive
-                      ? 'bg-[#EAF8F2] text-[#2BB3A0] shadow-sm'
-                      : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
+        {/* Scrollable Navigation Area (Mencegah elemen bawah terdorong keluar layar) */}
+        <div className="flex-1 overflow-y-auto no-scrollbar space-y-1.5 pr-0.5">
+          {[
+            { id: 'dashboard' as const, label: 'Daily Schedule', icon: LayoutGrid },
+            { id: 'schedule' as const, label: 'Master Kalender', icon: CalendarIcon },
+            { id: 'coverage' as const, label: 'Coverage Store', icon: Store },
+            { id: 'profile' as const, label: 'Akun & Profil', icon: UserIcon },
+          ].map((item) => {
+            const Icon = item.icon;
+            const isActive = activeMenu === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveMenu(item.id)}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-[#EAF8F2] text-[#2BB3A0] shadow-2xs font-extrabold'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
 
-            {/* Admin Return Shortcut */}
-            {user.isAdmin && onOpenAdminPortal && (
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={onOpenAdminPortal}
-                  className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-sm hover:brightness-105 active:scale-95 transition-all text-xs font-bold"
-                >
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4" />
-                    <span>Portal Admin FMCU</span>
-                  </div>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </nav>
+          {/* Admin Return Shortcut (Hanya jika user admin) */}
+          {user.isAdmin && onOpenAdminPortal && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={onOpenAdminPortal}
+                className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-sm hover:brightness-105 active:scale-95 transition-all text-xs font-bold cursor-pointer"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Shield className="w-4 h-4 shrink-0" />
+                  <span className="text-[11px] truncate">Portal Admin FMCU</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            </div>
+          )}
 
-          {/* Coverage Summary Box */}
-          <div className="mt-8 bg-gradient-to-br from-slate-50 via-teal-50/40 to-slate-50 rounded-2xl p-4 border border-teal-100/60">
+          {/* Dynamic Real Coverage Summary Box */}
+          <div className="mt-5 bg-gradient-to-br from-slate-50 via-teal-50/40 to-slate-50 rounded-2xl p-3.5 border border-teal-100/60">
             <div className="flex items-center justify-between text-teal-700 font-bold text-xs mb-1">
               <span className="flex items-center gap-1.5">
                 <Store className="w-3.5 h-3.5" />
-                <span>Coverage Store</span>
+                <span>Coverage Toko</span>
               </span>
-              <span className="text-xs font-black">94.8%</span>
+              <span className="text-xs font-black">{userCoveragePct}%</span>
             </div>
-            <p className="text-[11px] text-slate-500 mb-2">
-              28 dari 30 toko telah selesai dikunjungi bulan ini.
+            <p className="text-[10.5px] text-slate-500 mb-2 font-medium">
+              {visitedOwnedStoresCount} dari {totalOwnedStoresCount || 30} toko Anda telah dikunjungi.
             </p>
-            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-gradient-to-r from-teal-400 to-teal-600 h-2 rounded-full transition-all duration-500 w-[94.8%]"
+                className="bg-gradient-to-r from-teal-400 to-teal-600 h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${userCoveragePct}%` }}
               />
             </div>
           </div>
         </div>
 
-        {/* User Card & Logout */}
-        <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] text-white font-black text-xs flex items-center justify-center ring-2 ring-teal-100 uppercase shadow-soft-sm shrink-0">
+        {/* User Card & Logout Button: FIT SCREEN, ALWAYS VISIBLE */}
+        <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0 mt-auto">
+          <div className="flex items-center gap-2.5 min-w-0 pr-1">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] text-white font-black text-xs flex items-center justify-center ring-2 ring-teal-100 uppercase shadow-soft-sm shrink-0">
               {user.name.substring(0, 2)}
             </div>
             <div className="min-w-0">
               <h4 className="text-xs font-bold text-slate-800 truncate">{user.name}</h4>
-              <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+              <p className="text-[9.5px] text-slate-400 truncate">{user.role || 'Bestie FMCU'}</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onLogout}
-            title="Log Out"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            title="Keluar dari Akun (Logout)"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200/70 hover:border-red-200 transition-all cursor-pointer shrink-0 shadow-2xs"
           >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
       </aside>
 
-      {/* 2. Main Middle Area: Header, Stats, Calendar, Schedule List OR Coverage Store */}
-      <main className="flex-1 overflow-y-auto px-6 lg:px-8 py-7">
+      {/* =========================================================================
+          2. MAIN MIDDLE CONTENT: SWITCHES PER ACTIVE MENU
+          ========================================================================= */}
+      <main className="flex-1 overflow-y-auto px-5 lg:px-8 py-6">
         <div className="w-full max-w-[1240px] mx-auto">
-          {activeMenu === 'coverage' || activeMenu === 'history' ? (
+          {activeMenu === 'schedule' ? (
+            /* Halaman Master Kalender */
+            <div className="bg-white rounded-3xl p-5 shadow-soft-card border border-slate-100">
+              <CalendarScheduleView
+                user={user}
+                agendas={agendas}
+                onBack={() => setActiveMenu('dashboard')}
+                onSelectAgenda={onSelectAgenda}
+              />
+            </div>
+          ) : activeMenu === 'coverage' ? (
+            /* Halaman Coverage Store & Leaderboard */
             <HistoryView
               user={user}
               agendas={agendas}
+              users={users}
               onSelectAgenda={onSelectAgenda}
               onBack={() => setActiveMenu('dashboard')}
             />
-          ) : (
-            <>
-        {/* Section 1 Item 1: Top Header Revamp (Your Daily Schedule + Greeting) */}
-        <div className="flex items-center justify-between gap-4 mb-7">
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Your Weekly Schedule
-            </h1>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
-              Selamat {getTimeGreeting()}, {fullName}! 👋
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Search Input */}
-            <div className="relative flex items-center">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Cari agenda atau lokasi..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-white border border-slate-200/80 rounded-full pl-10 pr-4 py-2 text-xs font-medium text-slate-800 outline-none focus:border-teal-500 w-60 transition-all"
+          ) : activeMenu === 'profile' ? (
+            /* Halaman Akun & Pengaturan Profil */
+            <div className="bg-white rounded-3xl p-5 shadow-soft-card border border-slate-100 max-w-2xl mx-auto">
+              <ProfileView
+                user={user}
+                medicinesCount={agendas.filter((a) => isSamePersonName(a.pic, fullName)).length}
+                onBack={() => setActiveMenu('dashboard')}
+                onLogout={onLogout}
+                onUpdateUser={onUpdateUser}
               />
             </div>
-
-            {/* Live Maps Button */}
-            {onOpenLiveMaps && (
-              <button
-                type="button"
-                onClick={onOpenLiveMaps}
-                className="w-10 h-10 rounded-full bg-[#EAF8F2] flex items-center justify-center text-teal-700 shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative cursor-pointer"
-                title="Buka Live Maps Pinpoint & Rute Toko"
-              >
-                <MapPin className="w-5 h-5" />
-                <span className="w-2 h-2 rounded-full bg-emerald-500 absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
-              </button>
-            )}
-
-            {/* Notification Bell */}
-            <button
-              onClick={() => alert(`Notifikasi: Ada ${filteredAgendas.length} agenda terjadwal.`)}
-              className="w-10 h-10 rounded-full bg-[#EAF8F2] flex items-center justify-center text-[#2BB3A0] shadow-soft-sm hover:scale-105 active:scale-95 transition-all relative"
-            >
-              <Bell className="w-5 h-5" />
-              <span className="w-2 h-2 rounded-full bg-[#2BB3A0] absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
-            </button>
-
-            {/* Action Buttons: Upload Schedule by Excel (Admin Only) & Create New Schedule */}
-            <div className="flex items-center gap-2">
-              {user?.isAdmin && onOpenExcelUpload && (
-                <button
-                  type="button"
-                  onClick={onOpenExcelUpload}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white hover:bg-slate-50 text-teal-700 border border-teal-300/80 text-xs font-black shadow-soft-sm hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                  title="Upload Schedule by Excel (Auto Extract)"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span>Upload Jadwal (Excel)</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={onOpenNewAgenda}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-              >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>+ Buat Schedule</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 3 Top Summary Stat Cards */}
-        <div className="grid grid-cols-3 gap-5 mb-7">
-          {/* Card 1: Coverage Store */}
-          <div className="bg-white rounded-[26px] p-5 shadow-soft-card flex items-center justify-between border border-transparent hover:border-teal-100 transition-all">
-            <div>
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Coverage Store
-              </span>
-              <h3 className="text-2xl font-black text-slate-800 mt-1">
-                94.8% Toko
-              </h3>
-              <p className="text-xs text-teal-600 font-semibold mt-1">
-                28 dari 30 target cabang
-              </p>
-            </div>
-            <div className="w-14 h-14 rounded-2xl bg-[#EAF8F2] text-[#2BB3A0] flex items-center justify-center">
-              <Store className="w-7 h-7" />
-            </div>
-          </div>
-
-          {/* Card 2: Total Agenda Hari Ini */}
-          <div className="bg-white rounded-[26px] p-5 shadow-soft-card flex items-center justify-between border border-transparent hover:border-orange-100 transition-all">
-            <div>
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Agenda Terjadwal
-              </span>
-              <h3 className="text-2xl font-black text-slate-800 mt-1">
-                {agendas.length} Kegiatan
-              </h3>
-              <p className="text-xs text-orange-500 font-semibold mt-1">
-                {completedCount} kegiatan selesai
-              </p>
-            </div>
-            <div className="w-14 h-14 rounded-2xl bg-[#FFF4ED] text-[#FF9E79] flex items-center justify-center">
-              <CalendarIcon className="w-7 h-7" />
-            </div>
-          </div>
-
-          {/* Card 3: Upcoming Next */}
-          <div className="bg-white rounded-[26px] p-5 shadow-soft-card flex items-center justify-between border border-transparent hover:border-pink-100 transition-all">
-            <div>
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Kegiatan Berikutnya
-              </span>
-              <h3 className="text-2xl font-black text-slate-800 mt-1">
-                13:30 WIB
-              </h3>
-              <p className="text-xs text-pink-500 font-semibold mt-1">
-                NSO Walkthrough Bandung Timur
-              </p>
-            </div>
-            <div className="w-14 h-14 rounded-2xl bg-[#FFEAF0] text-[#FF6B8B] flex items-center justify-center">
-              <Clock className="w-7 h-7" />
-            </div>
-          </div>
-        </div>
-
-        {/* Section 1 Item 2: Horizontal Calendar Strip */}
-        <div className="bg-white rounded-[28px] p-5 shadow-soft-card mb-7">
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-sm font-bold text-slate-800">Kalender Mingguan</h3>
-            <span className="text-xs font-bold text-teal-800 bg-teal-50 px-3 py-1 rounded-full border border-teal-200/80 flex items-center gap-1.5">
-              <CalendarIcon className="w-3.5 h-3.5 text-teal-600" />
-              <span>{currentMonthYear}</span>
-            </span>
-          </div>
-          <CalendarStrip
-            selectedDate={selectedDate}
-            onSelectDate={onSelectDate}
-            baseDate={currentWeekMonday}
-            focusTrigger={calendarFocus}
-          />
-        </div>
-
-        {/* Period Filter Tabs (Hari Ini, Minggu Ini, Semua Tim) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-6 px-1">
-            {(['Today', 'Week', 'AllTeam'] as const).map((period) => {
-              const isActive = selectedPeriod === period;
-              return (
-                <button
-                  key={period}
-                  type="button"
-                  onClick={() => handleSelectPeriodTab(period)}
-                  className="relative pb-1.5 transition-colors cursor-pointer"
-                >
-                  <span
-                    className={`text-sm font-bold transition-colors ${
-                      isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                  >
-                    {period === 'Today' ? 'Hari Ini' : period === 'Week' ? 'Minggu Ini' : 'Semua Tim'}
-                  </span>
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-1 bg-[#4E80EE] rounded-full" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Sub Section "Semua Agenda" Week Navigator Controls (Tombol Kiri-Kanan) */}
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shadow-xs">
-              <button
-                type="button"
-                onClick={handlePrevWeek}
-                className="w-7 h-7 rounded-xl bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center transition shadow-xs cursor-pointer active:scale-95"
-                title="Lihat Minggu Sebelumnya"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              <div className="px-2 text-xs font-black text-slate-800 flex items-center gap-1.5">
-                <span>{formatWeekRangeDisplay(currentWeekMonday)}</span>
-                {isCurrentRunningWeek && (
-                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
-                    Minggu Berjalan
-                  </span>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={handleNextWeek}
-                className="w-7 h-7 rounded-xl bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center transition shadow-xs cursor-pointer active:scale-95"
-                title="Lihat Minggu Berikutnya"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            <span className="text-xs text-slate-400 font-medium whitespace-nowrap">
-              {filteredAgendas.length} agenda
-            </span>
-          </div>
-        </div>
-
-        {/* Section 1 Item 3: List Schedule Agenda Grid */}
-        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
-          {filteredAgendas.length === 0 ? (
-            <div className="col-span-full py-10 text-center bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
-              <p className="text-slate-400 text-xs font-medium">
-                Belum ada schedule agenda untuk {selectedPeriod === 'Today' ? `tanggal ${selectedDate}` : `minggu ${formatWeekRangeDisplay(currentWeekMonday)}`}.
-              </p>
-              <div className="mt-3 flex items-center justify-center gap-2.5">
-                {user?.isAdmin && onOpenExcelUpload && (
-                  <button
-                    type="button"
-                    onClick={onOpenExcelUpload}
-                    className="px-4 py-2.5 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    <span>Upload Jadwal (Excel)</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={onOpenNewAgenda}
-                  className="px-5 py-2.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal cursor-pointer"
-                >
-                  + Buat Schedule Sekarang
-                </button>
-              </div>
-            </div>
-          ) : selectedPeriod === 'AllTeam' ? (
-            <div className="col-span-full divide-y divide-slate-200/70 px-1">
-              {groupedAllTeamWeekByPerson.map((group) => (
-                <div key={group.picName} className="py-2.5 px-1">
-                  <p className="text-[11px] font-bold text-slate-900 leading-tight mb-1">
-                    {group.picName}
+          ) : (
+            /* Halaman Utama: Daily & Weekly Schedule */
+            <>
+              {/* Top Header: Salam, Search Box & Dropdown Kategori Sejajar */}
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                <div>
+                  <h1 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight">
+                    Your Weekly Schedule
+                  </h1>
+                  <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                    Selamat {getTimeGreeting()}, {fullName}! 👋
                   </p>
-                  <div className="space-y-0.5 pl-2 border-l border-slate-200/80">
-                    {group.items.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => onSelectAgenda(item)}
-                        className={`w-full text-left py-1 px-1.5 rounded-lg hover:bg-slate-100/70 transition-colors flex items-start justify-between gap-2 cursor-pointer ${
-                          selectedAgenda?.id === item.id ? 'bg-teal-50/70' : ''
-                        }`}
-                      >
-                        <p className="text-[11px] font-light text-slate-600 leading-snug min-w-0 flex-1">
-                          <span className="font-normal text-slate-500">
-                            {formatShortDayDate(item.date)} •{' '}
-                          </span>
-                          <span>
-                            {item.title}
-                            {item.location &&
-                            item.location !== 'OFF / LIBUR' &&
-                            !item.title.toLowerCase().includes(item.location.toLowerCase())
-                              ? ` — ${item.location}`
-                              : ''}
-                          </span>
-                        </p>
+                </div>
 
-                        <span className="text-[9px] font-light text-slate-400 shrink-0 tabular-nums pt-0.5">
-                          {item.category === 'OFF' ? 'OFF' : item.time}
-                        </span>
+                {/* Filter Controls: Search Textbox & Dropdown Kategori Sejajar */}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {/* Search Input */}
+                  <div className="relative flex items-center">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Cari agenda atau lokasi..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-white border border-slate-200/90 rounded-full pl-9 pr-4 py-2 text-xs font-medium text-slate-800 outline-none focus:border-teal-500 w-52 lg:w-60 shadow-2xs transition-all"
+                    />
+                  </div>
+
+                  {/* Dropdown Kategori Agenda (Sejajar dengan Search) */}
+                  <div className="relative flex items-center">
+                    <Tag className="w-3.5 h-3.5 text-teal-600 absolute left-3 pointer-events-none" />
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="bg-white border border-slate-200/90 rounded-full pl-8 pr-7 py-2 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer shadow-2xs max-w-[155px] truncate transition-all"
+                      title="Filter Kategori Agenda"
+                    >
+                      <option value="ALL" className="text-xs font-semibold text-slate-800">Semua Kategori</option>
+                      {SCHEDULE_CATEGORY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value} className="text-xs font-medium text-slate-800">
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Live Maps Pinpoint Shortcut */}
+                  {onOpenLiveMaps && (
+                    <button
+                      type="button"
+                      onClick={onOpenLiveMaps}
+                      className="w-9 h-9 rounded-full bg-[#EAF8F2] flex items-center justify-center text-teal-700 shadow-2xs hover:scale-105 active:scale-95 transition-all relative cursor-pointer"
+                      title="Buka Live Maps Pinpoint & Rute Toko"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 absolute top-1.5 right-1.5 border-2 border-white ring-1 ring-[#EAF8F2]" />
+                    </button>
+                  )}
+
+                  {/* Action Khusus Admin Saja (Disembunyikan dari User) */}
+                  {user.isAdmin && (
+                    <div className="flex items-center gap-2">
+                      {onOpenExcelUpload && (
+                        <button
+                          type="button"
+                          onClick={onOpenExcelUpload}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white hover:bg-slate-50 text-teal-700 border border-teal-300/80 text-xs font-bold shadow-2xs cursor-pointer"
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Upload Excel</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={onOpenNewAgenda}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white text-xs font-bold shadow-pill-teal cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Buat Schedule</span>
                       </button>
-                    ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 3 Top Summary Stat Cards: Data Aktual Dinamis */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* Card 1: Real Coverage Store */}
+                <div className="bg-white rounded-3xl p-4 lg:p-5 shadow-soft-card flex items-center justify-between border border-transparent hover:border-teal-100 transition-all">
+                  <div>
+                    <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Coverage Toko Anda
+                    </span>
+                    <h3 className="text-2xl font-black text-slate-800 mt-1">
+                      {userCoveragePct}%
+                    </h3>
+                    <p className="text-xs text-teal-600 font-semibold mt-0.5">
+                      {visitedOwnedStoresCount} dari {totalOwnedStoresCount || 30} toko selesai
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-[#EAF8F2] text-[#2BB3A0] flex items-center justify-center shrink-0">
+                    <Store className="w-6 h-6" />
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            filteredAgendas.map((agenda) => (
-              <div
-                key={agenda.id}
-                className={`transition-all ${
-                  selectedAgenda?.id === agenda.id ? 'ring-2 ring-teal-400 rounded-[28px]' : ''
-                }`}
-              >
-                <ScheduleCard
-                  agenda={agenda}
-                  onClick={onSelectAgenda}
+
+                {/* Card 2: Total Agenda Periode Ini */}
+                <div className="bg-white rounded-3xl p-4 lg:p-5 shadow-soft-card flex items-center justify-between border border-transparent hover:border-orange-100 transition-all">
+                  <div>
+                    <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Agenda Terjadwal
+                    </span>
+                    <h3 className="text-2xl font-black text-slate-800 mt-1">
+                      {totalPeriodCount} Kegiatan
+                    </h3>
+                    <p className="text-xs text-orange-500 font-semibold mt-0.5">
+                      {completedCount} kegiatan selesai
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-[#FFF4ED] text-[#FF9E79] flex items-center justify-center shrink-0">
+                    <CalendarIcon className="w-6 h-6" />
+                  </div>
+                </div>
+
+                {/* Card 3: Upcoming Next Real Time */}
+                <div className="bg-white rounded-3xl p-4 lg:p-5 shadow-soft-card flex items-center justify-between border border-transparent hover:border-pink-100 transition-all">
+                  <div className="min-w-0 pr-2">
+                    <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Kegiatan Berikutnya
+                    </span>
+                    <h3 className="text-xl lg:text-2xl font-black text-slate-800 mt-1 truncate">
+                      {upcomingAgenda ? (upcomingAgenda.category === 'OFF' ? 'OFF' : `${upcomingAgenda.time} WIB`) : 'Selesai'}
+                    </h3>
+                    <p className="text-xs text-pink-500 font-semibold mt-0.5 truncate">
+                      {upcomingAgenda ? upcomingAgenda.title : 'Tidak ada agenda tertunda'}
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-[#FFEAF0] text-[#FF6B8B] flex items-center justify-center shrink-0">
+                    <Clock className="w-6 h-6" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Horizontal Calendar Strip */}
+              <div className="bg-white rounded-3xl p-4 lg:p-5 shadow-soft-card mb-6 border border-slate-100">
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <h3 className="text-xs lg:text-sm font-bold text-slate-800">Kalender Mingguan</h3>
+                  <span className="text-xs font-bold text-teal-800 bg-teal-50 px-3 py-1 rounded-full border border-teal-200/80 flex items-center gap-1.5">
+                    <CalendarIcon className="w-3.5 h-3.5 text-teal-600" />
+                    <span>{currentMonthYear}</span>
+                  </span>
+                </div>
+                <CalendarStrip
+                  selectedDate={selectedDate}
+                  onSelectDate={onSelectDate}
+                  baseDate={currentWeekMonday}
+                  focusTrigger={calendarFocus}
                 />
               </div>
-            ))
+
+              {/* Period Filter Tabs (Hari Ini, Minggu Ini, Semua Tim) */}
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-6 px-1">
+                  {(['Today', 'Week', 'AllTeam'] as const).map((period) => {
+                    const isActive = selectedPeriod === period;
+                    return (
+                      <button
+                        key={period}
+                        type="button"
+                        onClick={() => handleSelectPeriodTab(period)}
+                        className="relative pb-1.5 transition-colors cursor-pointer"
+                      >
+                        <span
+                          className={`text-xs lg:text-sm font-bold transition-colors ${
+                            isActive ? 'text-slate-800 font-black' : 'text-slate-400 hover:text-slate-600'
+                          }`}
+                        >
+                          {period === 'Today' ? 'Hari Ini' : period === 'Week' ? 'Minggu Ini' : 'Semua Tim'}
+                        </span>
+                        {isActive && (
+                          <span className="absolute bottom-0 left-0 right-0 h-1 bg-[#4E80EE] rounded-full" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Week Navigator Controls */}
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={handlePrevWeek}
+                      className="w-7 h-7 rounded-xl bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center transition shadow-2xs cursor-pointer active:scale-95"
+                      title="Lihat Minggu Sebelumnya"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    <div className="px-2 text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <span>{formatWeekRangeDisplay(currentWeekMonday)}</span>
+                      {isCurrentRunningWeek && (
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                          Minggu Berjalan
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleNextWeek}
+                      className="w-7 h-7 rounded-xl bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center transition shadow-2xs cursor-pointer active:scale-95"
+                      title="Lihat Minggu Berikutnya"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <span className="text-xs text-slate-400 font-medium whitespace-nowrap">
+                    {filteredAgendas.length} agenda
+                  </span>
+                </div>
+              </div>
+
+              {/* List Schedule Agenda Grid */}
+              <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4 pb-8">
+                {filteredAgendas.length === 0 ? (
+                  <div className="col-span-full py-10 text-center bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
+                    <p className="text-slate-400 text-xs font-medium">
+                      Belum ada agenda yang cocok untuk {selectedPeriod === 'Today' ? `tanggal ${selectedDate}` : `minggu ${formatWeekRangeDisplay(currentWeekMonday)}`}.
+                    </p>
+                  </div>
+                ) : selectedPeriod === 'AllTeam' ? (
+                  <div className="col-span-full divide-y divide-slate-200/70 px-1 bg-white rounded-3xl p-4 shadow-soft-card">
+                    {groupedAllTeamWeekByPerson.map((group) => (
+                      <div key={group.picName} className="py-2.5 px-1">
+                        <p className="text-[11px] font-bold text-slate-900 leading-tight mb-1">
+                          {group.picName}
+                        </p>
+                        <div className="space-y-0.5 pl-2 border-l border-slate-200/80">
+                          {group.items.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => onSelectAgenda(item)}
+                              className={`w-full text-left py-1.5 px-2 rounded-xl hover:bg-slate-100/70 transition-colors flex items-start justify-between gap-2 cursor-pointer ${
+                                selectedAgenda?.id === item.id ? 'bg-teal-50/80' : ''
+                              }`}
+                            >
+                              <p className="text-[11px] font-normal text-slate-600 leading-snug min-w-0 flex-1">
+                                <span className="font-semibold text-slate-500">
+                                  {formatShortDayDate(item.date)} •{' '}
+                                </span>
+                                <span>
+                                  {item.title}
+                                  {item.location &&
+                                  item.location !== 'OFF / LIBUR' &&
+                                  !item.title.toLowerCase().includes(item.location.toLowerCase())
+                                    ? ` — ${item.location}`
+                                    : ''}
+                                </span>
+                              </p>
+
+                              <span className="text-[9.5px] font-bold text-slate-400 shrink-0 tabular-nums pt-0.5">
+                                {item.category === 'OFF' ? 'OFF' : item.time}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  filteredAgendas.map((agenda) => (
+                    <div
+                      key={agenda.id}
+                      className={`transition-all ${
+                        selectedAgenda?.id === agenda.id ? 'ring-2 ring-teal-400 rounded-[28px]' : ''
+                      }`}
+                    >
+                      <ScheduleCard
+                        agenda={agenda}
+                        onClick={onSelectAgenda}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
           )}
-        </div>
-          </>
-        )}
         </div>
       </main>
 
-      {/* 3. Right Sidebar Inspector Pane */}
-      <aside className="w-80 lg:w-[340px] xl:w-[360px] bg-white border-l border-slate-100 flex flex-col justify-between p-6 overflow-y-auto z-20 flex-shrink-0">
+      {/* =========================================================================
+          3. RIGHT SIDEBAR: AGENDA DETAIL INSPECTOR & ACTIONS
+          ========================================================================= */}
+      <aside className="w-80 lg:w-[340px] xl:w-[360px] bg-white border-l border-slate-100 flex flex-col h-full p-5 overflow-y-auto z-20 flex-shrink-0">
         {selectedAgenda ? (
-          <div>
+          <div className="flex-1 flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3 shrink-0">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Detail Agenda Terpilih
+                Detail Agenda
               </span>
               <span className="text-xs font-bold text-teal-600 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
                 {selectedAgenda.category}
@@ -656,73 +728,73 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
             </div>
 
             {/* Title & Description */}
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">
+            <h2 className="text-lg lg:text-xl font-black text-slate-900 tracking-tight leading-snug">
               {selectedAgenda.title}
             </h2>
 
-            <p className="text-xs text-slate-400 font-normal leading-relaxed mt-2">
+            <p className="text-xs text-slate-400 font-normal leading-relaxed mt-1.5">
               {selectedAgenda.description || 'Tidak ada catatan tambahan untuk agenda ini.'}
             </p>
 
-            {/* Details Badges */}
-            <div className="space-y-2 mt-5">
-              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-                <Clock className="w-4 h-4 text-teal-600 flex-shrink-0" />
+            {/* Info Badges */}
+            <div className="space-y-2 mt-4">
+              <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                <Clock className="w-4 h-4 text-teal-600 shrink-0" />
                 <div className="text-xs font-bold text-slate-700">
                   {selectedAgenda.date} • {selectedAgenda.time} WIB
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-                <MapPin className="w-4 h-4 text-orange-500 flex-shrink-0" />
+              <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
                 <div className="text-xs font-bold text-slate-700 truncate">
                   {selectedAgenda.location}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-slate-100">
-                <UserIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#F8FAFC] border border-slate-100">
+                <UserIcon className="w-4 h-4 text-blue-600 shrink-0" />
                 <div className="text-xs font-bold text-slate-700">
-                  PIC: {selectedAgenda.pic}
+                  PIC: {selectedAgenda.pic || 'Belum Ditentukan'}
                 </div>
               </div>
             </div>
 
-            {/* Tags */}
-            <div className="flex flex-wrap items-center gap-2 mt-5">
-              {selectedAgenda.tags.map((t, idx) => (
-                <span
-                  key={idx}
-                  className="px-3 py-1 rounded-full text-xs font-medium tracking-wide bg-teal-50 text-teal-700 border border-teal-100"
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
+            {/* Action 1: Tombol Rute Google Maps */}
+            <button
+              type="button"
+              onClick={() => {
+                const dest = selectedAgenda.location || selectedAgenda.title;
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`, '_blank');
+              }}
+              className="w-full py-2.5 px-3 rounded-2xl bg-teal-50 hover:bg-teal-100/90 text-teal-800 font-bold text-xs flex items-center justify-center gap-2 border border-teal-200 transition-all active:scale-95 cursor-pointer mt-3"
+            >
+              <Navigation className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+              <span>Rute ke Lokasi (Google Maps)</span>
+            </button>
 
-            {/* Broadcast WhatsApp Action */}
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() => handleShareWhatsApp(selectedAgenda)}
-                className="w-full py-2.5 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 border border-emerald-200 transition-all active:scale-95 cursor-pointer"
-                title="Kirim rincian agenda ke WhatsApp"
-              >
-                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Broadcast Jadwal ke WhatsApp</span>
-              </button>
-            </div>
+            {/* Action 2: Broadcast WhatsApp Action */}
+            <button
+              type="button"
+              onClick={() => handleShareWhatsApp(selectedAgenda)}
+              className="w-full py-2.5 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 border border-emerald-200 transition-all active:scale-95 cursor-pointer mt-2"
+              title="Kirim rincian agenda ke WhatsApp"
+            >
+              <Share2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Broadcast ke WhatsApp</span>
+            </button>
 
-            {/* Tombol Buka Form Visit Report (Hanya untuk Jadwal VISIT) */}
+            {/* Action 3: Tombol Buka Form Visit Report (Khusus Jadwal VISIT) */}
             {selectedAgenda.category === 'VISIT' && (
-              <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
+              <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-teal-200">
                 <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block mb-1">
                   Formulir Kunjungan &amp; Laporan
                 </span>
-                <p className="text-xs text-slate-600 mb-3">
+                <p className="text-[11px] text-slate-600 mb-2.5">
                   Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
                 </p>
                 <button
+                  type="button"
                   onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
                   className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
                 >
@@ -733,7 +805,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
             )}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-center py-16">
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
             <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
               <CalendarIcon className="w-6 h-6" />
             </div>
@@ -744,17 +816,21 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
           </div>
         )}
 
-        {/* Bottom Actions */}
-        <div className="mt-8 space-y-2.5">
-          <button
-            onClick={onOpenNewAgenda}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white font-bold text-sm shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-          >
-            <span>+ Buat Agenda Baru (Admin)</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
+        {/* Footer info & Developer Credits: FIT & NEVER CLIPPED */}
+        <div className="mt-auto pt-4 border-t border-slate-100 shrink-0">
+          {/* Tombol Buat Agenda Baru (HANYA MUNCUL UNTUK ADMIN) */}
+          {user.isAdmin && (
+            <button
+              type="button"
+              onClick={onOpenNewAgenda}
+              className="w-full py-3 mb-2 rounded-full bg-gradient-to-r from-[#32C2AD] to-[#20A894] text-white font-bold text-xs shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>+ Buat Agenda Baru</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
 
-          <DeveloperFooter className="pt-4 pb-1 text-center" />
+          <DeveloperFooter className="text-center" />
         </div>
       </aside>
     </div>

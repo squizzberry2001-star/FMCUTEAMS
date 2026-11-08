@@ -570,7 +570,7 @@ export const App: React.FC = () => {
             allAgendas={agendas}
             onUpdateAgenda={handleUpdateAgenda}
             user={user}
-            onBack={() => setMobileScreen('detail')}
+            onBack={() => setMobileScreen(isMobileLayout ? 'detail' : 'main')}
           />
         </Suspense>
       ) : isMobileLayout ? (
@@ -665,6 +665,8 @@ export const App: React.FC = () => {
             }}
             onLogout={handleLogout}
             onOpenAdminPortal={user.isAdmin ? () => setAdminPreviewMode(false) : undefined}
+            onUpdateUser={handleUpdateUser}
+            users={users}
           />
         </Suspense>
       )}

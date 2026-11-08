@@ -385,16 +385,16 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         </div>
       )}
 
-      {/* Fitur Filter (Search + Pilihan Nama A-Z + Pilihan Kategori Agenda) */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <div className="relative flex-1 min-w-[130px]">
+      {/* Fitur Filter (Search + Dropdown Kategori Sejajar + Dropdown Nama Tim) */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="relative flex-1 min-w-0">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={nameFilter}
             onChange={(e) => setNameFilter(e.target.value)}
-            placeholder="Filter nama tim atau agenda..."
-            className="w-full bg-white/90 border border-slate-200/80 rounded-xl pl-8 pr-7 py-1.5 text-[11px] font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-teal-500 transition-all"
+            placeholder="Cari agenda atau nama..."
+            className="w-full bg-white/95 border border-slate-200/90 rounded-xl pl-8 pr-7 py-1.5 text-[11px] font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-teal-500 shadow-2xs transition-all"
           />
           {nameFilter && (
             <button
@@ -407,34 +407,37 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
           )}
         </div>
 
-        <div className="relative shrink-0">
-          <Users className="w-3.5 h-3.5 text-teal-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        {/* Filter Kategori (Sejajar dengan Textbox Search) */}
+        <div className="relative shrink-0 max-w-[130px] sm:max-w-[145px]">
+          <Tag className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
           <select
-            value={selectedPersonDropdown}
-            onChange={(e) => setSelectedPersonDropdown(e.target.value)}
-            className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[130px] truncate"
-            title="Filter berdasarkan Nama Tim (A-Z)"
+            value={selectedCategoryDropdown}
+            onChange={(e) => setSelectedCategoryDropdown(e.target.value)}
+            className="w-full bg-white/95 border border-slate-200/90 rounded-xl pl-6 pr-5 py-1.5 text-[10.5px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer truncate shadow-2xs"
+            title="Filter berdasarkan Kategori Agenda"
           >
-            <option value="ALL">Semua Nama</option>
-            {allTeamNamesAZ.map((personName) => (
-              <option key={personName} value={personName}>
-                {personName}
+            <option value="ALL" className="text-[10.5px] font-semibold text-slate-800 py-1">Semua Kategori</option>
+            {SCHEDULE_CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value} className="text-[10.5px] font-medium text-slate-800 py-1">
+                {opt.label}
               </option>
             ))}
           </select>
         </div>
 
-        <div className="relative shrink-0">
-          <Tag className="w-3.5 h-3.5 text-teal-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        {/* Filter Nama Tim */}
+        <div className="relative shrink-0 max-w-[115px] sm:max-w-[130px]">
+          <Users className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
           <select
-            value={selectedCategoryDropdown}
-            onChange={(e) => setSelectedCategoryDropdown(e.target.value)}
-            className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[130px] truncate"
-            title="Filter berdasarkan Kategori Agenda"
+            value={selectedPersonDropdown}
+            onChange={(e) => setSelectedPersonDropdown(e.target.value)}
+            className="w-full bg-white/95 border border-slate-200/90 rounded-xl pl-6 pr-5 py-1.5 text-[10.5px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer truncate shadow-2xs"
+            title="Filter berdasarkan Nama Tim (A-Z)"
           >
-            {SCHEDULE_CATEGORY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+            <option value="ALL" className="text-[10.5px] font-semibold text-slate-800 py-1">Semua Nama</option>
+            {allTeamNamesAZ.map((personName) => (
+              <option key={personName} value={personName} className="text-[10.5px] font-medium text-slate-800 py-1">
+                {personName}
               </option>
             ))}
           </select>
