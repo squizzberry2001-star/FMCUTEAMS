@@ -1,11 +1,39 @@
 import React from 'react';
-import { Store, Building2, ClipboardCheck, Users, GraduationCap, MapPin, ChevronRight } from 'lucide-react';
+import {
+  Store,
+  Building2,
+  ClipboardCheck,
+  Users,
+  GraduationCap,
+  MapPin,
+  ChevronRight,
+  Calendar,
+  Clock,
+  User as UserIcon,
+} from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory } from '../types';
 
 interface ScheduleCardProps {
   agenda: ScheduleAgenda;
   onClick?: (agenda: ScheduleAgenda) => void;
   onOpenMenu?: (agenda: ScheduleAgenda, e: React.MouseEvent) => void;
+}
+
+const SHORT_DAYS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+const SHORT_MONTHS_ID = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+];
+
+function formatAgendaDateLabel(dateStr: string): string {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const [y, m, d] = parts;
+  const dt = new Date(y, m - 1, d);
+  const dayName = SHORT_DAYS_ID[dt.getDay()] || '';
+  const monthName = SHORT_MONTHS_ID[m - 1] || '';
+  return `${dayName}, ${String(d).padStart(2, '0')} ${monthName} ${y}`;
 }
 
 export const ScheduleCard: React.FC<ScheduleCardProps> = ({
@@ -70,21 +98,37 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
 
         {/* Text Info */}
         <div className="min-w-0 flex-1">
-          {/* Time & Location Header */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 flex-shrink-0">
-              {agenda.time} WIB
+          {/* Date & Time Header */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80 flex-shrink-0">
+              <Calendar className="w-2.5 h-2.5 text-teal-600" />
+              <span>{formatAgendaDateLabel(agenda.date)}</span>
             </span>
-            <span className="text-[11px] text-slate-400 font-medium truncate flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
-              <span className="truncate">{agenda.location}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100 flex-shrink-0">
+              <Clock className="w-2.5 h-2.5 text-teal-600" />
+              <span>
+                {agenda.time}
+                {agenda.endTime ? ` - ${agenda.endTime}` : ''} WIB
+              </span>
             </span>
           </div>
 
           {/* Judul Agenda Lengkap (ditampilkan penuh tanpa terpotong) */}
-          <h4 className="font-bold text-[13px] sm:text-sm leading-snug break-words mt-1 text-slate-900 group-hover:text-teal-700 transition-colors">
+          <h4 className="font-bold text-[13px] sm:text-sm leading-snug break-words mt-1.5 text-slate-900 group-hover:text-teal-700 transition-colors">
             {agenda.title}
           </h4>
+
+          {/* Detail Nama PIC & Lokasi */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px]">
+            <span className="inline-flex items-center gap-1 font-bold text-slate-700 max-w-full">
+              <UserIcon className="w-3 h-3 text-teal-600 flex-shrink-0" />
+              <span className="truncate">{agenda.pic || '-'}</span>
+            </span>
+            <span className="text-slate-500 font-medium truncate flex items-center gap-1 min-w-0">
+              <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
+              <span className="truncate">{agenda.location}</span>
+            </span>
+          </div>
 
           {/* Badge Kecil Menyamping (Category, Prioritas Tinggi, dan Tags) */}
           <div className="flex items-center gap-1.5 mt-2 overflow-x-auto no-scrollbar py-0.5">

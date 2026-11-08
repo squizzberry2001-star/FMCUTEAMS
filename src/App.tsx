@@ -15,7 +15,6 @@ import { SplashScreen } from './components/SplashScreen';
 import { PageTransitionLoader } from './components/PageTransitionLoader';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { Smartphone, Monitor, Shield, ArrowLeft, MapPin, Navigation, WifiOff, RotateCw } from 'lucide-react';
-import { isSamePersonName } from './data/masterStoresData';
 
 // Code-split heavy components to make initial splash & login load instantly on mobile
 const AdminPortal = lazy(() =>
@@ -592,11 +591,7 @@ export const App: React.FC = () => {
               currentUser={user}
               onBack={() => setMobileScreen('main')}
               onOpenVisitForm={() => {
-                if (user?.isAdmin || isSamePersonName(selectedAgenda.pic, user?.name)) {
-                  setMobileScreen('visit-form');
-                } else {
-                  alert(`Akses Ditolak: Form visit ini ditugaskan kepada ${selectedAgenda.pic}.`);
-                }
+                setMobileScreen('visit-form');
               }}
             />
           ) : (
@@ -669,12 +664,8 @@ export const App: React.FC = () => {
             onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
             onOpenLiveMaps={() => setShowLiveMapsModal(true)}
             onOpenVisitForm={(agenda) => {
-              if (user?.isAdmin || isSamePersonName(agenda.pic, user?.name)) {
-                setSelectedAgenda(agenda);
-                setMobileScreen('visit-form');
-              } else {
-                alert(`Akses Ditolak: Form visit ini ditugaskan kepada ${agenda.pic}.`);
-              }
+              setSelectedAgenda(agenda);
+              setMobileScreen('visit-form');
             }}
             onLogout={handleLogout}
             onOpenAdminPortal={user.isAdmin ? () => setAdminPreviewMode(false) : undefined}

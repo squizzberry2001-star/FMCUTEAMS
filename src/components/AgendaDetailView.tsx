@@ -13,13 +13,11 @@ import {
   Users,
   GraduationCap,
   ArrowRight,
-  ShieldAlert,
-  Navigation,
   Mountain,
-  ExternalLink,
+  FileText,
+  Tag,
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory, User } from '../types';
-import { isSamePersonName } from '../data/masterStoresData';
 import {
   loadLeaflet,
   resolveAgendaGeoPoints,
@@ -33,15 +31,22 @@ interface AgendaDetailViewProps {
   onOpenVisitForm?: () => void;
 }
 
+function getMinimalistPinLabel(rawName: string): string {
+  const cleaned = (rawName || '')
+    .replace(/^(?:familymart|family mart|fm|fmi|toko|cabang)\s+/i, '')
+    .trim();
+  if (cleaned.length <= 11) return cleaned;
+  return `${cleaned.slice(0, 10).trim()}…`;
+}
+
 export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   agenda,
   currentUser,
   onBack,
   onOpenVisitForm,
 }) => {
-  const isOwner =
-    Boolean(currentUser?.isAdmin) ||
-    isSamePersonName(agenda.pic, currentUser?.name);
+  // Hanya tampilkan Maps jika agenda adalah VISIT
+  const isVisitAgenda = agenda.category === 'VISIT';
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -53,6 +58,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   const activePoints = matchedGeoPoints.length > 0 ? matchedGeoPoints : [primaryGeoPoint];
 
   useEffect(() => {
+    if (!isVisitAgenda) return;
     let mounted = true;
     loadLeaflet().then((L) => {
       if (mounted && L) setLeafletReady(true);
@@ -60,10 +66,10 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isVisitAgenda]);
 
   useEffect(() => {
-    if (!leafletReady || !mapContainerRef.current) return;
+    if (!isVisitAgenda || !leafletReady || !mapContainerRef.current) return;
     const L = (window as any).L;
     if (!L) return;
 
@@ -81,10 +87,16 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
 
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
+    // 100% Free OpenStreetMap Tile Server (No API Key Required) with Esri fallback
+    const tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
     }).addTo(map);
+
+    tl.on('tileerror', () => {
+      tl.setUrl(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'
+      );
+    });
 
     const boundsCoords: [number, number][] = [];
 
@@ -111,23 +123,21 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
       });
     }
 
-    // Add Store Pinpoints
+    // Add Minimalist Store Pinpoints (No long oval!)
     activePoints.forEach((pt, idx) => {
       boundsCoords.push([pt.lat, pt.lng]);
+      const shortLabel = getMinimalistPinLabel(pt.name);
+
       const pinIcon = L.divIcon({
-        className: 'fmcu-detail-store-pin',
+        className: 'fmcu-detail-minimal-pin',
         html: `
-          <div style="position:relative;display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%);">
-            <div style="background:linear-gradient(135deg,#0D9488,#059669);color:#fff;font-weight:900;font-size:10px;padding:3px 8px;border-radius:999px;border:2px solid #fff;box-shadow:0 4px 12px rgba(13,148,136,0.45);display:flex;align-items:center;gap:4px;white-space:nowrap;">
-              ${
-                activePoints.length > 1
-                  ? `<span style="background:#fff;color:#0F766E;border-radius:999px;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;">${idx + 1}</span>`
-                  : ''
-              }
-              <span>${pt.code !== 'FMCU' ? `#${pt.code} ` : ''}${pt.name}</span>
+          <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-90%);">
+            <div style="width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#0D9488,#059669);color:#fff;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(13,148,136,0.5);">
+              ${activePoints.length > 1 ? idx + 1 : '•'}
             </div>
-            <div style="width:3px;height:6px;background:#0D9488;"></div>
-            <div style="width:9px;height:9px;border-radius:999px;background:#0D9488;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>
+            <div style="margin-top:1px;background:rgba(15,23,42,0.9);color:#fff;font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15;">
+              ${shortLabel}
+            </div>
           </div>
         `,
         iconSize: [0, 0],
@@ -138,7 +148,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
         .addTo(map)
         .bindPopup(
           `<div style="font-family:system-ui,sans-serif;font-size:11px;">
-            <strong>${pt.name}</strong><br/>
+            <strong>Toko ${pt.name}</strong> ${pt.code !== 'FMCU' ? `(#${pt.code})` : ''}<br/>
             <span style="color:#64748B;font-size:10px;">${pt.address}</span><br/>
             <span style="color:#0D9488;font-weight:800;font-size:10px;">Lat: ${pt.lat.toFixed(5)}° • Lng: ${pt.lng.toFixed(5)}° • Alt: ${pt.altitude} mdpl</span>
           </div>`
@@ -161,7 +171,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
         mapInstanceRef.current = null;
       }
     };
-  }, [leafletReady, primaryGeoPoint, activePoints, currentUser?.isAdmin]);
+  }, [isVisitAgenda, leafletReady, primaryGeoPoint, activePoints, currentUser?.isAdmin]);
 
   const renderCategoryIcon = (category: ScheduleCategory) => {
     switch (category) {
@@ -247,7 +257,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
               <span className="text-[9px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
                 {agenda.category}
               </span>
-              {primaryGeoPoint.code !== 'FMCU' && (
+              {isVisitAgenda && primaryGeoPoint.code !== 'FMCU' && (
                 <span className="text-[9px] font-extrabold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
                   Toko #{primaryGeoPoint.code}
                 </span>
@@ -285,7 +295,8 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
                 Waktu
               </span>
               <p className="text-[11px] font-extrabold text-slate-800 truncate mt-0.5">
-                {agenda.time} WIB
+                {agenda.time}
+                {agenda.endTime ? ` - ${agenda.endTime}` : ''} WIB
               </p>
             </div>
           </div>
@@ -306,7 +317,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             <UserIcon className="w-3.5 h-3.5 text-purple-600 shrink-0" />
             <div className="min-w-0">
               <span className="text-[9px] font-bold text-slate-400 uppercase block leading-none">
-                PIC Lapangan
+                Nama / PIC
               </span>
               <p className="text-[11px] font-extrabold text-slate-800 truncate mt-0.5">
                 {agenda.pic}
@@ -315,8 +326,8 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
           </div>
         </div>
 
-        {/* Short Note */}
-        {agenda.description && (
+        {/* Short Note for Visit */}
+        {isVisitAgenda && agenda.description && (
           <div className="bg-slate-50/80 px-2.5 py-1.5 rounded-xl border border-slate-100 flex items-center justify-between gap-2">
             <p className="text-[10px] text-slate-600 font-medium line-clamp-1 flex-1">
               {agenda.description.replace(/\n+/g, ' • ')}
@@ -330,83 +341,89 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
         )}
       </div>
 
-      {/* 3. Embedded Interactive Live Map Card (Auto-flexes to fill remaining screen height) */}
-      <div className="flex-1 min-h-[160px] bg-white rounded-3xl p-2.5 shadow-soft-card border border-slate-100 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-1 mb-1.5 shrink-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider truncate">
-              Pinpoint Lokasi: {primaryGeoPoint.name}
-            </span>
-          </div>
-
-          <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${primaryGeoPoint.lat},${primaryGeoPoint.lng}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-2.5 py-1 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-extrabold flex items-center gap-1 shrink-0 transition"
-          >
-            <Navigation className="w-2.5 h-2.5" />
-            <span>Buka Rute Maps</span>
-            <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-        </div>
-
-        {/* Interactive Leaflet Container */}
-        <div className="relative flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 border border-slate-200/70">
-          <div ref={mapContainerRef} className="w-full h-full z-10" />
-
-          {/* Coordinate & Altitude Overlay Pill at Map Bottom */}
-          <div className="absolute bottom-2 left-2 right-2 z-20 bg-white/95 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-2 text-[9px] font-bold text-slate-600 tabular-nums">
-            <div className="flex items-center gap-2 truncate">
-              <span>
-                Lat: <strong className="text-slate-900">{primaryGeoPoint.lat.toFixed(5)}°</strong>
-              </span>
-              <span>•</span>
-              <span>
-                Lng: <strong className="text-slate-900">{primaryGeoPoint.lng.toFixed(5)}°</strong>
+      {/* 3. Middle Section:
+          - JIKA VISIT: Tampilkan Peta Interaktif Pinpoint Toko
+          - JIKA BUKAN VISIT: Tidak menampilkan Maps (Tampilkan Detail Catatan & Tag Agenda) */}
+      {isVisitAgenda ? (
+        <div className="flex-1 min-h-[155px] bg-white rounded-3xl p-2.5 shadow-soft-card border border-slate-100 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-1 mb-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider truncate">
+                Pinpoint Toko: {primaryGeoPoint.name}
               </span>
             </div>
-            <span className="text-teal-700 font-extrabold flex items-center gap-0.5 shrink-0">
-              <Mountain className="w-3 h-3" />
-              Alt: {primaryGeoPoint.altitude} mdpl
+            <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100 shrink-0">
+              {primaryGeoPoint.city}
             </span>
           </div>
-        </div>
-      </div>
 
-      {/* 4. Bottom Primary Action Bar (Fits on same screen without scrolling) */}
+          {/* Interactive Leaflet Container (Zero API Key) */}
+          <div className="relative flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 border border-slate-200/70">
+            <div ref={mapContainerRef} className="w-full h-full z-10" />
+
+            {/* Coordinate & Altitude Overlay Pill at Map Bottom */}
+            <div className="absolute bottom-2 left-2 right-2 z-20 bg-white/95 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-2 text-[9px] font-bold text-slate-600 tabular-nums">
+              <div className="flex items-center gap-2 truncate">
+                <span>
+                  Lat: <strong className="text-slate-900">{primaryGeoPoint.lat.toFixed(5)}°</strong>
+                </span>
+                <span>•</span>
+                <span>
+                  Lng: <strong className="text-slate-900">{primaryGeoPoint.lng.toFixed(5)}°</strong>
+                </span>
+              </div>
+              <span className="text-teal-700 font-extrabold flex items-center gap-0.5 shrink-0">
+                <Mountain className="w-3 h-3" />
+                Alt: {primaryGeoPoint.altitude} mdpl
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-[120px] bg-white rounded-3xl p-4 shadow-soft-card border border-slate-100 flex flex-col justify-between overflow-hidden">
+          <div className="space-y-2 overflow-y-auto no-scrollbar">
+            <div className="flex items-center gap-1.5 text-slate-700">
+              <FileText className="w-3.5 h-3.5 text-teal-600" />
+              <span className="text-[10px] font-black uppercase tracking-wider">
+                Rincian &amp; Catatan Kegiatan
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed font-medium whitespace-pre-line">
+              {agenda.description ||
+                `Kegiatan ${agenda.title} dijadwalkan pada ${agenda.date} pukul ${agenda.time} WIB bertempat di ${agenda.location}.`}
+            </p>
+          </div>
+
+          {agenda.tags && agenda.tags.length > 0 && (
+            <div className="pt-2.5 border-t border-slate-100 flex items-center gap-1.5 flex-wrap shrink-0">
+              <Tag className="w-3 h-3 text-slate-400 shrink-0" />
+              {agenda.tags.map((tag, idx) => (
+                <span
+                  key={idx}
+                  className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/70"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4. Bottom Primary Action Bar:
+          - Tambahkan Tombol Buka Form
+          - Hapus Tombol Navigasi ke Lokasi di Bawah */}
       <div className="shrink-0">
-        {agenda.category === 'VISIT' ? (
-          isOwner ? (
-            <button
-              type="button"
-              onClick={onOpenVisitForm}
-              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Camera className="w-4 h-4" />
-              <span>BUKA FORM VISIT REPORT</span>
-              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-            </button>
-          ) : (
-            <div className="bg-slate-100 rounded-2xl px-3.5 py-2.5 border border-slate-200/80 flex items-center gap-2.5">
-              <ShieldAlert className="w-4 h-4 text-slate-500 shrink-0" />
-              <p className="text-[11px] font-bold text-slate-600 truncate">
-                Form visit ditugaskan kepada <span className="text-teal-700">{agenda.pic}</span>
-              </p>
-            </div>
-          )
-        ) : (
-          <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${primaryGeoPoint.lat},${primaryGeoPoint.lng}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full py-3 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center justify-center gap-2 transition"
-          >
-            <Navigation className="w-4 h-4 text-teal-400" />
-            <span>Navigasi ke Lokasi Agenda ({primaryGeoPoint.city})</span>
-          </a>
-        )}
+        <button
+          type="button"
+          onClick={onOpenVisitForm}
+          className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#00A389] to-[#00826D] text-white text-xs font-black shadow-pill-teal hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <Camera className="w-4 h-4" />
+          <span>BUKA FORM VISIT REPORT</span>
+          <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+        </button>
       </div>
     </div>
   );

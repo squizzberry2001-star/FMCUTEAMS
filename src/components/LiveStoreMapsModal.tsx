@@ -12,7 +12,6 @@ import {
   Search,
   ExternalLink,
   Layers,
-  CheckCircle2,
   Calendar,
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
@@ -41,6 +40,40 @@ interface LiveStoreMapsModalProps {
   onSelectAgenda?: (agenda: ScheduleAgenda) => void;
 }
 
+type MapTileStyle = 'osm' | 'street' | 'satellite';
+
+const MAP_TILE_PROVIDERS: Record<
+  MapTileStyle,
+  { label: string; url: string; attribution: string; maxZoom: number }
+> = {
+  osm: {
+    label: 'OpenStreetMap',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19,
+  },
+  street: {
+    label: 'Peta Jalan',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri &copy; OpenStreetMap',
+    maxZoom: 19,
+  },
+  satellite: {
+    label: 'Satelit',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri World Imagery',
+    maxZoom: 19,
+  },
+};
+
+function getMinimalistStoreLabel(rawName: string): string {
+  const cleaned = (rawName || '')
+    .replace(/^(?:familymart|family mart|fm|fmi|toko|cabang)\s+/i, '')
+    .trim();
+  if (cleaned.length <= 10) return cleaned;
+  return `${cleaned.slice(0, 9).trim()}…`;
+}
+
 export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   isOpen,
   onClose,
@@ -52,16 +85,18 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   const isAdmin = Boolean(currentUser?.isAdmin);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
   const layerGroupRef = useRef<any>(null);
 
   const [leafletReady, setLeafletReady] = useState(false);
+  const [tileStyle, setTileStyle] = useState<MapTileStyle>('osm');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStore, setSelectedStore] = useState<StoreGeoPoint | null>(null);
 
   // Filter Scope:
-  // 'scheduled' = Toko yang dijadwalkan (Rute Minggu/Hari Ini)
-  // 'master' = Semua Pinpoint Master Data Store (atau Toko Kepemilikan)
-  const [viewMode, setViewMode] = useState<'scheduled' | 'master'>('scheduled');
+  // 'all' = Menampilkan SEMUA titik koordinat toko yang ada di Master Data (610 toko) + Rute Toko Terjadwal
+  // 'scheduled' = Fokus hanya pada toko yang dijadwalkan
+  const [viewMode, setViewMode] = useState<'all' | 'scheduled'>('all');
 
   // Admin-specific controls: Pinpoint User, Pinpoint Toko, Radius, Rute
   const [selectedPicFilter, setSelectedPicFilter] = useState<string>('ALL');
@@ -79,17 +114,14 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
   // 1. Resolve Scheduled Store Points & Route
   const scheduledStorePoints = useMemo(() => {
-    // Filter agendas in current running week (or selectedDate)
     const relevantAgendas = agendas
       .filter((a) => {
         const inWeek = a.date >= weekStartStr && a.date <= weekEndStr;
         if (!inWeek && a.date !== selectedDate) return false;
 
         if (!isAdmin) {
-          // User mode: ONLY their own scheduled stores
           return isSamePersonName(a.pic, currentUser?.name);
         } else {
-          // Admin mode: filter by selected PIC or ALL
           if (selectedPicFilter !== 'ALL') {
             return isSamePersonName(a.pic, selectedPicFilter);
           }
@@ -114,7 +146,6 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       });
     });
 
-    // Fallback for User if no store matched in current week: show owned stores or top scheduled stores
     if (points.length === 0 && !isAdmin && currentUser?.name) {
       const myAllAgendas = agendas
         .filter((a) => isSamePersonName(a.pic, currentUser.name))
@@ -151,35 +182,45 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     }
 
     return points;
-  }, [agendas, weekStartStr, weekEndStr, selectedDate, isAdmin, currentUser, selectedPicFilter, allMasterStores]);
+  }, [
+    agendas,
+    weekStartStr,
+    weekEndStr,
+    selectedDate,
+    isAdmin,
+    currentUser,
+    selectedPicFilter,
+    allMasterStores,
+  ]);
 
-  // 2. Master Store Points (filtered by search query)
-  const masterGeoPoints = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const baseList = allMasterStores
-      .filter((s) => {
-        if (!q) return true;
-        return (
-          s.code.toLowerCase().includes(q) ||
-          s.name.toLowerCase().includes(q) ||
-          s.city.toLowerCase().includes(q) ||
-          s.address.toLowerCase().includes(q)
-        );
-      })
-      .slice(0, q ? 80 : 120);
+  // Set of scheduled store codes & lookup map for route order
+  const scheduledByCodeMap = useMemo(() => {
+    const map = new Map<string, StoreGeoPoint>();
+    scheduledStorePoints.forEach((pt) => {
+      const key = String(pt.code).toUpperCase();
+      if (!map.has(key)) {
+        map.set(key, pt);
+      }
+    });
+    return map;
+  }, [scheduledStorePoints]);
 
-    return baseList.map((st, idx) =>
-      toStoreGeoPoint(st, {
+  // 2. ALL Master Store GeoPoints (Seluruh 610 Toko di Master Data tanpa pemotongan!)
+  const allMasterGeoPoints = useMemo(() => {
+    return allMasterStores.map((st, idx) => {
+      const sched = scheduledByCodeMap.get(String(st.code).toUpperCase());
+      if (sched) {
+        return sched;
+      }
+      return toStoreGeoPoint(st, {
         routeOrder: idx + 1,
-      })
-    );
-  }, [allMasterStores, searchQuery]);
+      });
+    });
+  }, [allMasterStores, scheduledByCodeMap]);
 
   // Active Store Points displayed on map
   const displayedStorePoints = useMemo(() => {
-    const source = viewMode === 'scheduled' && scheduledStorePoints.length > 0
-      ? scheduledStorePoints
-      : masterGeoPoints;
+    const source = viewMode === 'scheduled' ? scheduledStorePoints : allMasterGeoPoints;
 
     const q = searchQuery.trim().toLowerCase();
     if (!q) return source;
@@ -188,29 +229,45 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         p.code.toLowerCase().includes(q) ||
         p.name.toLowerCase().includes(q) ||
         p.city.toLowerCase().includes(q) ||
+        p.address.toLowerCase().includes(q) ||
         (p.agendaPic || '').toLowerCase().includes(q)
     );
-  }, [viewMode, scheduledStorePoints, masterGeoPoints, searchQuery]);
+  }, [viewMode, scheduledStorePoints, allMasterGeoPoints, searchQuery]);
+
+  // Bottom strip list (prioritizes scheduled route stores first, then master stores)
+  const bottomStripPoints = useMemo(() => {
+    if (viewMode === 'scheduled') return displayedStorePoints;
+    const q = searchQuery.trim().toLowerCase();
+    if (q) return displayedStorePoints.slice(0, 60);
+    if (scheduledStorePoints.length > 0) {
+      const schedCodes = new Set(scheduledStorePoints.map((s) => s.code));
+      const rest = displayedStorePoints.filter((s) => !schedCodes.has(s.code)).slice(0, 40);
+      return [...scheduledStorePoints, ...rest];
+    }
+    return displayedStorePoints.slice(0, 50);
+  }, [viewMode, displayedStorePoints, scheduledStorePoints, searchQuery]);
 
   // 3. Admin User Pinpoints
   const adminUserPinpoints = useMemo(() => {
     if (!isAdmin) return [];
-    const allPoints = buildAdminUserPinpoints(users, scheduledStorePoints, radiusMeters);
+    const targetRef =
+      scheduledStorePoints.length > 0 ? scheduledStorePoints : allMasterGeoPoints.slice(0, 30);
+    const allPoints = buildAdminUserPinpoints(users, targetRef, radiusMeters);
     if (selectedPicFilter === 'ALL') return allPoints;
     return allPoints.filter((u) => isSamePersonName(u.userName, selectedPicFilter));
-  }, [isAdmin, users, scheduledStorePoints, radiusMeters, selectedPicFilter]);
+  }, [isAdmin, users, scheduledStorePoints, allMasterGeoPoints, radiusMeters, selectedPicFilter]);
 
-  // 4. Total Route Distance Calculation
+  // 4. Total Scheduled Route Distance Calculation
   const totalRouteKm = useMemo(() => {
-    if (displayedStorePoints.length < 2) return 0;
+    if (scheduledStorePoints.length < 2) return 0;
     let total = 0;
-    for (let i = 0; i < displayedStorePoints.length - 1; i++) {
-      const a = displayedStorePoints[i];
-      const b = displayedStorePoints[i + 1];
+    for (let i = 0; i < scheduledStorePoints.length - 1; i++) {
+      const a = scheduledStorePoints[i];
+      const b = scheduledStorePoints[i + 1];
       total += calculateHaversineKm(a.lat, a.lng, b.lat, b.lng);
     }
     return Number(total.toFixed(2));
-  }, [displayedStorePoints]);
+  }, [scheduledStorePoints]);
 
   // Load Leaflet on mount
   useEffect(() => {
@@ -226,34 +283,41 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     };
   }, [isOpen]);
 
-  // Initialize & Update Leaflet Map
+  // Initialize Map Instance & Tile Layer (100% Free, Zero API Key)
   useEffect(() => {
     if (!isOpen || !leafletReady || !mapContainerRef.current) return;
     const L = (window as any).L;
     if (!L) return;
 
-    // Create map instance if not created yet
     if (!mapInstanceRef.current) {
       const defaultCenter: [number, number] =
-        displayedStorePoints.length > 0
-          ? [displayedStorePoints[0].lat, displayedStorePoints[0].lng]
+        scheduledStorePoints.length > 0
+          ? [scheduledStorePoints[0].lat, scheduledStorePoints[0].lng]
           : [-6.2297, 106.8295];
 
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
-        zoom: 12,
+        zoom: 11,
         zoomControl: false,
+        preferCanvas: true,
       });
 
       L.control.zoom({ position: 'topright' }).addTo(map);
 
-      // Clean high-contrast CartoDB Voyager / OSM tile layer
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        subdomains: 'abcd',
-        maxZoom: 19,
+      const provider = MAP_TILE_PROVIDERS[tileStyle];
+      const tl = L.tileLayer(provider.url, {
+        attribution: provider.attribution,
+        maxZoom: provider.maxZoom,
       }).addTo(map);
 
+      // Auto-fallback to Esri Street Map if primary tile server fails
+      tl.on('tileerror', () => {
+        if (tileStyle === 'osm' && tileLayerRef.current) {
+          tileLayerRef.current.setUrl(MAP_TILE_PROVIDERS.street.url);
+        }
+      });
+
+      tileLayerRef.current = tl;
       layerGroupRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
 
@@ -261,55 +325,70 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         map.invalidateSize();
       }, 150);
     }
+  }, [isOpen, leafletReady]);
+
+  // Update Tile Style when switched by user
+  useEffect(() => {
+    if (!mapInstanceRef.current || !tileLayerRef.current) return;
+    const provider = MAP_TILE_PROVIDERS[tileStyle];
+    tileLayerRef.current.setUrl(provider.url);
+  }, [tileStyle]);
+
+  // Render All Store Pinpoints, Scheduled Routes, Admin User Pinpoints & Radius
+  useEffect(() => {
+    if (!isOpen || !leafletReady || !mapInstanceRef.current || !layerGroupRef.current) return;
+    const L = (window as any).L;
+    if (!L) return;
 
     const map = mapInstanceRef.current;
     const layerGroup = layerGroupRef.current;
-    if (!map || !layerGroup) return;
-
     layerGroup.clearLayers();
-    const boundsCoords: [number, number][] = [];
 
-    // A. ADMIN ONLY: RADIUS GEOFENCE CIRCLES
+    const focusBoundsCoords: [number, number][] = [];
+
+    // A. ADMIN ONLY: RADIUS GEOFENCE CIRCLES (on scheduled stores or selected store)
     if (isAdmin && showRadiusCircle && showStorePinpoints) {
-      displayedStorePoints.forEach((st) => {
+      const radiusTargets =
+        scheduledStorePoints.length > 0
+          ? scheduledStorePoints
+          : displayedStorePoints.slice(0, 25);
+
+      radiusTargets.forEach((st) => {
         L.circle([st.lat, st.lng], {
           radius: radiusMeters,
           color: '#0D9488',
           weight: 1.5,
           opacity: 0.75,
           fillColor: '#14B8A6',
-          fillOpacity: 0.16,
+          fillOpacity: 0.14,
           dashArray: '4, 4',
         })
-          .bindTooltip(`Radius Geofence Toko ${st.name}: ${radiusMeters}m`, {
+          .bindTooltip(`Radius Geofence ${st.name}: ${radiusMeters}m`, {
             direction: 'top',
           })
           .addTo(layerGroup);
       });
     }
 
-    // B. ROUTE LINES (RUTE TOKO YANG DIJADWALKAN + ADMIN USER-TO-STORE ROUTE)
-    // User always sees route for scheduled stores; Admin can toggle showRouteLine
-    const shouldDrawRoute = (!isAdmin && viewMode === 'scheduled') || (isAdmin && showRouteLine);
+    // B. ROUTE LINES (RUTE TOKO YANG DIJADWALKAN)
+    const shouldDrawRoute = (!isAdmin || showRouteLine) && scheduledStorePoints.length >= 2;
 
-    if (shouldDrawRoute && displayedStorePoints.length >= 2) {
-      const routeLatLngs: [number, number][] = displayedStorePoints.map((p) => [p.lat, p.lng]);
+    if (shouldDrawRoute) {
+      const routeLatLngs: [number, number][] = scheduledStorePoints.map((p) => [p.lat, p.lng]);
 
-      // Outer glow polyline
       L.polyline(routeLatLngs, {
         color: '#0F766E',
         weight: 6,
-        opacity: 0.25,
+        opacity: 0.22,
         lineCap: 'round',
         lineJoin: 'round',
       }).addTo(layerGroup);
 
-      // Main dashed route line
       L.polyline(routeLatLngs, {
         color: '#0D9488',
-        weight: 3.5,
+        weight: 3.2,
         opacity: 0.95,
-        dashArray: '8, 6',
+        dashArray: '7, 5',
         lineCap: 'round',
         lineJoin: 'round',
       }).addTo(layerGroup);
@@ -318,7 +397,9 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     // Admin route from User Pinpoint to Target Store
     if (isAdmin && showRouteLine && showUserPinpoints) {
       adminUserPinpoints.forEach((up) => {
-        const targetStore = displayedStorePoints.find((s) => s.code === up.targetStoreCode);
+        const targetStore =
+          scheduledStorePoints.find((s) => s.code === up.targetStoreCode) ||
+          displayedStorePoints.find((s) => s.code === up.targetStoreCode);
         if (targetStore) {
           L.polyline(
             [
@@ -327,64 +408,85 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             ],
             {
               color: up.isInsideRadius ? '#10B981' : '#3B82F6',
-              weight: 2.5,
+              weight: 2.2,
               opacity: 0.85,
-              dashArray: '4, 5',
+              dashArray: '4, 4',
             }
           ).addTo(layerGroup);
         }
       });
     }
 
-    // C. STORE PINPOINTS (USER & ADMIN)
+    // C. STORE PINPOINTS (ALL 610 MASTER STORES + SCHEDULED HIGHLIGHTS)
+    // UI Pinpoint dibuat MINIMALIST (Pin bulat kecil + label pendek persegi kompak, BUKAN oval panjang!)
     if (!isAdmin || showStorePinpoints) {
-      displayedStorePoints.forEach((st, idx) => {
-        boundsCoords.push([st.lat, st.lng]);
-        const badgeNumber = st.routeOrder || idx + 1;
+      displayedStorePoints.forEach((st) => {
+        const schedInfo = scheduledByCodeMap.get(String(st.code).toUpperCase());
+        const isScheduled = Boolean(schedInfo);
+        const shortName = getMinimalistStoreLabel(st.name);
+
+        if (isScheduled || searchQuery.trim()) {
+          focusBoundsCoords.push([st.lat, st.lng]);
+        }
+
+        // Minimalist Pinpoint HTML: circular pin + compact tiny square tag (no long oval!)
+        const pinHtml = isScheduled
+          ? `
+            <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-90%);">
+              <div style="width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#0D9488,#059669);color:#fff;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(13,148,136,0.5);">
+                ${schedInfo?.routeOrder || '•'}
+              </div>
+              <div style="margin-top:1px;background:rgba(15,23,42,0.88);color:#fff;font-size:8px;font-weight:700;padding:1px 3.5px;border-radius:3px;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15;box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+                ${shortName}
+              </div>
+            </div>
+          `
+          : `
+            <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-85%);">
+              <div style="width:12px;height:12px;border-radius:50%;background:#0D9488;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>
+              <div style="margin-top:1px;background:rgba(255,255,255,0.92);color:#0F172A;border:1px solid rgba(148,163,184,0.45);font-size:7.5px;font-weight:800;padding:0.5px 3px;border-radius:3px;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.1;">
+                ${shortName}
+              </div>
+            </div>
+          `;
 
         const storeIcon = L.divIcon({
-          className: 'fmcu-custom-store-pin',
-          html: `
-            <div style="position:relative;display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%);">
-              <div style="background:linear-gradient(135deg,#0D9488,#059669);color:#fff;font-weight:900;font-size:10px;padding:3px 7px;border-radius:999px;border:2px solid #fff;box-shadow:0 4px 12px rgba(13,148,136,0.45);display:flex;align-items:center;gap:4px;white-space:nowrap;">
-                <span style="background:#fff;color:#0F766E;border-radius:999px;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;">${badgeNumber}</span>
-                <span>${st.name}</span>
-              </div>
-              <div style="width:3px;height:7px;background:#0D9488;border-radius:2px;"></div>
-              <div style="width:8px;height:8px;border-radius:999px;background:#0D9488;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>
-            </div>
-          `,
+          className: 'fmcu-minimal-store-pin',
+          html: pinHtml,
           iconSize: [0, 0],
           iconAnchor: [0, 0],
         });
 
-        const marker = L.marker([st.lat, st.lng], { icon: storeIcon }).addTo(layerGroup);
+        const marker = L.marker([st.lat, st.lng], {
+          icon: storeIcon,
+          zIndexOffset: isScheduled ? 500 : 10,
+        }).addTo(layerGroup);
 
         const popupHtml = `
-          <div style="font-family:system-ui,-apple-system,sans-serif;min-width:210px;padding:2px;">
+          <div style="font-family:system-ui,-apple-system,sans-serif;min-width:205px;padding:2px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;">
-              <span style="background:#CCFBF1;color:#115E59;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;">#${st.code} • ${st.type}</span>
+              <span style="background:#CCFBF1;color:#115E59;font-size:10px;font-weight:800;padding:2px 6px;border-radius:6px;">#${st.code} • ${st.type}</span>
               <span style="font-size:10px;font-weight:700;color:#64748B;">${st.city}</span>
             </div>
-            <div style="font-size:13px;font-weight:900;color:#0F172A;margin-bottom:4px;">Toko ${st.name}</div>
+            <div style="font-size:12.5px;font-weight:900;color:#0F172A;margin-bottom:3px;">Toko ${st.name}</div>
             <div style="font-size:10px;color:#475569;line-height:1.35;margin-bottom:6px;">${st.address}</div>
             <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:6px;font-size:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;">
               <div>
-                <div style="color:#94A3B8;font-weight:700;font-size:9px;">LATITUDE</div>
+                <div style="color:#94A3B8;font-weight:700;font-size:8.5px;">LATITUDE</div>
                 <div style="color:#0F172A;font-weight:800;">${st.lat.toFixed(5)}°</div>
               </div>
               <div>
-                <div style="color:#94A3B8;font-weight:700;font-size:9px;">LONGITUDE</div>
+                <div style="color:#94A3B8;font-weight:700;font-size:8.5px;">LONGITUDE</div>
                 <div style="color:#0F172A;font-weight:800;">${st.lng.toFixed(5)}°</div>
               </div>
               <div>
-                <div style="color:#94A3B8;font-weight:700;font-size:9px;">ALTITUDE</div>
+                <div style="color:#94A3B8;font-weight:700;font-size:8.5px;">ALTITUDE</div>
                 <div style="color:#0D9488;font-weight:800;">${st.altitude} mdpl</div>
               </div>
             </div>
             ${
-              st.agendaPic
-                ? `<div style="font-size:10px;color:#334155;font-weight:700;margin-bottom:4px;">PIC: <span style="color:#0D9488;">${st.agendaPic}</span> (${st.agendaDate || ''} ${st.agendaTime || ''})</div>`
+              schedInfo?.agendaPic
+                ? `<div style="font-size:10px;color:#334155;font-weight:700;margin-bottom:4px;">Jadwal: <span style="color:#0D9488;">${schedInfo.agendaPic}</span> (${schedInfo.agendaDate || ''} ${schedInfo.agendaTime || ''})</div>`
                 : ''
             }
             <a href="https://www.google.com/maps/dir/?api=1&destination=${st.lat},${st.lng}" target="_blank" rel="noopener noreferrer" style="display:block;text-align:center;background:#0D9488;color:#fff;text-decoration:none;font-size:10px;font-weight:800;padding:5px 8px;border-radius:8px;margin-top:4px;">
@@ -395,39 +497,44 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
         marker.bindPopup(popupHtml);
         marker.on('click', () => {
-          setSelectedStore(st);
+          setSelectedStore(schedInfo || st);
         });
       });
     }
 
-    // D. ADMIN ONLY: USER PINPOINTS
+    // D. ADMIN ONLY: USER PINPOINTS (Minimalist circular avatar badge)
     if (isAdmin && showUserPinpoints) {
       adminUserPinpoints.forEach((up) => {
-        boundsCoords.push([up.lat, up.lng]);
+        focusBoundsCoords.push([up.lat, up.lng]);
         const initials = up.userName
           .split(' ')
           .map((w) => w[0])
           .join('')
           .slice(0, 2)
           .toUpperCase();
+        const firstName = up.userName.split(' ')[0] || up.userName;
 
         const userIcon = L.divIcon({
-          className: 'fmcu-custom-user-pin',
+          className: 'fmcu-minimal-user-pin',
           html: `
-            <div style="position:relative;display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%);">
-              <div style="background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;font-weight:900;font-size:10px;padding:3px 8px;border-radius:999px;border:2px solid #fff;box-shadow:0 4px 12px rgba(37,99,235,0.45);display:flex;align-items:center;gap:4px;white-space:nowrap;">
-                <span style="background:#fff;color:#1D4ED8;border-radius:999px;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;">${initials}</span>
-                <span>${up.userName}</span>
+            <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-90%);">
+              <div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;font-weight:900;font-size:9px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(37,99,235,0.5);">
+                ${initials}
               </div>
-              <div style="width:3px;height:6px;background:#2563EB;"></div>
-              <div style="width:10px;height:10px;border-radius:999px;background:#2563EB;border:2px solid #fff;box-shadow:0 0 0 4px rgba(37,99,235,0.25);"></div>
+              <div style="margin-top:1px;background:#1E40AF;color:#fff;font-size:7.5px;font-weight:800;padding:0.5px 3.5px;border-radius:3px;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15;">
+                ${firstName}
+              </div>
             </div>
           `,
           iconSize: [0, 0],
           iconAnchor: [0, 0],
         });
 
-        const uMarker = L.marker([up.lat, up.lng], { icon: userIcon }).addTo(layerGroup);
+        const uMarker = L.marker([up.lat, up.lng], {
+          icon: userIcon,
+          zIndexOffset: 900,
+        }).addTo(layerGroup);
+
         uMarker.bindPopup(`
           <div style="font-family:system-ui,-apple-system,sans-serif;min-width:190px;padding:2px;">
             <div style="font-size:10px;font-weight:800;color:#2563EB;text-transform:uppercase;">PINPOINT USER LAPANGAN</div>
@@ -445,10 +552,10 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       });
     }
 
-    if (boundsCoords.length > 0) {
+    if (focusBoundsCoords.length > 0) {
       try {
-        const bounds = L.latLngBounds(boundsCoords);
-        map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 });
+        const bounds = L.latLngBounds(focusBoundsCoords);
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
       } catch {
         // ignore bounds error
       }
@@ -457,6 +564,8 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     isOpen,
     leafletReady,
     displayedStorePoints,
+    scheduledStorePoints,
+    scheduledByCodeMap,
     isAdmin,
     showUserPinpoints,
     showStorePinpoints,
@@ -465,6 +574,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     radiusMeters,
     adminUserPinpoints,
     viewMode,
+    searchQuery,
   ]);
 
   // Cleanup map instance when modal closes
@@ -472,6 +582,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     if (!isOpen && mapInstanceRef.current) {
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
+      tileLayerRef.current = null;
       layerGroupRef.current = null;
     }
   }, [isOpen]);
@@ -479,22 +590,19 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   const handleFocusStore = (st: StoreGeoPoint) => {
     setSelectedStore(st);
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo([st.lat, st.lng], 16, { duration: 0.8 });
+      mapInstanceRef.current.flyTo([st.lat, st.lng], 16, { duration: 0.7 });
     }
   };
 
   if (!isOpen) return null;
 
-  const uniquePics = Array.from(
-    new Set(agendas.map((a) => a.pic).filter(Boolean))
-  ).sort();
+  const uniquePics = Array.from(new Set(agendas.map((a) => a.pic).filter(Boolean))).sort();
 
   return (
     <div className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-md flex flex-col justify-between overflow-hidden animate-fadeIn">
-      {/* Main Fullscreen Container */}
       <div className="relative w-full h-full bg-[#F8F9FD] flex flex-col overflow-hidden">
         {/* Top Liquid Glass Header */}
-        <div className="z-20 bg-white/90 backdrop-blur-xl border-b border-slate-200/80 px-4 py-3 flex flex-col gap-2.5 shadow-xs">
+        <div className="z-20 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 px-4 py-2.5 flex flex-col gap-2 shadow-xs">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#2BB3A0] to-[#0D9488] text-white flex items-center justify-center shadow-xs shrink-0">
@@ -503,7 +611,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h2 className="text-sm sm:text-base font-black text-slate-900 truncate">
-                    FMCU Live Maps &amp; Geo-Coordinate
+                    FMCU Live Maps &amp; Master Store
                   </h2>
                   <span
                     className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border uppercase tracking-wider ${
@@ -518,9 +626,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500 font-medium truncate">
-                  {isAdmin
-                    ? 'Monitoring titik koordinat personel lapangan, toko, radius geofence, dan rute kunjungan'
-                    : `Menampilkan pinpoint koordinat (Lat, Lng, Altitude) & rute toko terjadwal untuk ${currentUser?.name || 'Anda'}`}
+                  Menampilkan {allMasterStores.length} titik koordinat toko Master Data (Lat, Lng, Altitude) &amp; rute jadwal
                 </p>
               </div>
             </div>
@@ -537,58 +643,76 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
           {/* Filter & Layer Controls Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* Mode Switcher: Rute Terjadwal vs Master Store */}
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+            {/* Mode Switcher: Semua Toko Master (610) vs Rute Terjadwal */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setViewMode('all')}
+                className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
+                  viewMode === 'all'
+                    ? 'bg-white text-teal-700 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Store className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Semua Toko ({allMasterStores.length})</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setViewMode('scheduled')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
                   viewMode === 'scheduled'
                     ? 'bg-white text-teal-700 shadow-2xs'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
                 <Route className="w-3.5 h-3.5 text-teal-600" />
-                <span>Rute Toko Dijadwalkan ({scheduledStorePoints.length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('master')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
-                  viewMode === 'master'
-                    ? 'bg-white text-teal-700 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Store className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Master Store ({allMasterStores.length})</span>
+                <span>Rute Jadwal ({scheduledStorePoints.length})</span>
               </button>
             </div>
 
+            {/* Map Tile Switcher (OSM / Peta Jalan / Satelit - Bebas API Key) */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              {(['osm', 'street', 'satellite'] as MapTileStyle[]).map((styleKey) => (
+                <button
+                  key={styleKey}
+                  type="button"
+                  onClick={() => setTileStyle(styleKey)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer ${
+                    tileStyle === styleKey
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {MAP_TILE_PROVIDERS[styleKey].label}
+                </button>
+              ))}
+            </div>
+
             {/* Search Input */}
-            <div className="relative flex-1 min-w-[160px] max-w-xs">
+            <div className="relative flex-1 min-w-[150px] max-w-xs">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari kode / nama toko / kota..."
+                placeholder="Cari dari 610 toko (kode/nama/kota)..."
                 className="w-full pl-8 pr-3 py-1 rounded-xl bg-slate-100 border border-slate-200/80 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-teal-500"
               />
             </div>
 
-            {/* ADMIN ONLY LAYER TOGGLES: Pinpoint User, Pinpoint Toko, Radius, Rute */}
+            {/* ADMIN ONLY LAYER TOGGLES */}
             {isAdmin && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <select
                   value={selectedPicFilter}
                   onChange={(e) => setSelectedPicFilter(e.target.value)}
-                  className="px-2.5 py-1 rounded-xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-800 focus:outline-none cursor-pointer"
+                  className="px-2.5 py-1 rounded-xl bg-blue-50 border border-blue-200 text-[10px] font-bold text-blue-800 focus:outline-none cursor-pointer"
                 >
                   <option value="ALL">Semua Personel ({uniquePics.length})</option>
                   {uniquePics.map((p) => (
                     <option key={p} value={p}>
-                      Personel: {p}
+                      {p}
                     </option>
                   ))}
                 </select>
@@ -596,33 +720,33 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowUserPinpoints((v) => !v)}
-                  className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
+                  className={`px-2 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
                     showUserPinpoints
                       ? 'bg-blue-600 text-white border-blue-600'
                       : 'bg-white text-slate-500 border-slate-200'
                   }`}
                 >
                   <Users className="w-3 h-3" />
-                  <span>Pinpoint User</span>
+                  <span>User</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowStorePinpoints((v) => !v)}
-                  className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
+                  className={`px-2 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
                     showStorePinpoints
                       ? 'bg-teal-600 text-white border-teal-600'
                       : 'bg-white text-slate-500 border-slate-200'
                   }`}
                 >
                   <MapPin className="w-3 h-3" />
-                  <span>Pinpoint Toko</span>
+                  <span>Toko</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowRadiusCircle((v) => !v)}
-                  className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
+                  className={`px-2 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
                     showRadiusCircle
                       ? 'bg-emerald-600 text-white border-emerald-600'
                       : 'bg-white text-slate-500 border-slate-200'
@@ -635,7 +759,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowRouteLine((v) => !v)}
-                  className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
+                  className={`px-2 py-1 rounded-xl text-[10px] font-extrabold border flex items-center gap-1 transition cursor-pointer ${
                     showRouteLine
                       ? 'bg-amber-500 text-white border-amber-500'
                       : 'bg-white text-slate-500 border-slate-200'
@@ -650,7 +774,6 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                     value={radiusMeters}
                     onChange={(e) => setRadiusMeters(Number(e.target.value))}
                     className="px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 cursor-pointer"
-                    title="Ubah Radius Geofence"
                   >
                     <option value={150}>150m</option>
                     <option value={250}>250m</option>
@@ -671,14 +794,14 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-2xl shadow-md border border-slate-200/80 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-[11px] font-black text-slate-800">
-                {displayedStorePoints.length} Titik Toko
+                {displayedStorePoints.length} Pinpoint Toko Aktif
               </span>
-              {totalRouteKm > 0 && (
+              {scheduledStorePoints.length > 0 && (
                 <>
                   <span className="text-slate-300">•</span>
                   <span className="text-[11px] font-extrabold text-teal-700 flex items-center gap-1">
                     <Route className="w-3 h-3" />
-                    Total Rute: {totalRouteKm} km
+                    {scheduledStorePoints.length} Rute ({totalRouteKm} km)
                   </span>
                 </>
               )}
@@ -687,7 +810,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                   <span className="text-slate-300">•</span>
                   <span className="text-[11px] font-extrabold text-blue-700 flex items-center gap-1">
                     <Users className="w-3 h-3" />
-                    {adminUserPinpoints.length} User Aktif
+                    {adminUserPinpoints.length} User
                   </span>
                 </>
               )}
@@ -699,7 +822,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-80 z-20 bg-white/95 backdrop-blur-xl rounded-2xl p-3.5 shadow-xl border border-teal-200 animate-fadeIn">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div>
-                  <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                  <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
                     #{selectedStore.code} • {selectedStore.type}
                   </span>
                   <h4 className="text-sm font-black text-slate-900 mt-1">
@@ -766,17 +889,17 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         </div>
 
         {/* Bottom Horizontal Route & Store Pinpoints Strip */}
-        <div className="z-20 bg-white border-t border-slate-200/80 px-4 py-2.5">
+        <div className="z-20 bg-white border-t border-slate-200/80 px-4 py-2">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-teal-600" />
-              {viewMode === 'scheduled'
-                ? 'Urutan Rute & Pinpoint Toko Terjadwal (Klik untuk Fokus Peta)'
-                : 'Daftar Pinpoint Koordinat Master Data Store'}
+              <span>
+                Rute &amp; Koordinat Toko ({displayedStorePoints.length} Titik Master Data)
+              </span>
             </span>
-            {displayedStorePoints.length >= 2 && (
+            {scheduledStorePoints.length >= 2 && (
               <a
-                href={`https://www.google.com/maps/dir/${displayedStorePoints
+                href={`https://www.google.com/maps/dir/${scheduledStorePoints
                   .slice(0, 10)
                   .map((p) => `${p.lat},${p.lng}`)
                   .join('/')}`}
@@ -790,76 +913,72 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar pb-1">
-            {displayedStorePoints.length === 0 ? (
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+            {bottomStripPoints.length === 0 ? (
               <div className="text-xs text-slate-400 py-2">
                 Tidak ada titik toko yang cocok dengan pencarian.
               </div>
             ) : (
-              displayedStorePoints.map((st, idx) => {
-                const isSelected = selectedStore?.code === st.code && selectedStore?.routeOrder === st.routeOrder;
-                const prev = idx > 0 ? displayedStorePoints[idx - 1] : null;
-                const distFromPrev = prev
-                  ? calculateHaversineKm(prev.lat, prev.lng, st.lat, st.lng).toFixed(1)
-                  : null;
+              bottomStripPoints.map((st, idx) => {
+                const isSelected = selectedStore?.code === st.code;
+                const isSched = scheduledByCodeMap.has(String(st.code).toUpperCase());
 
                 return (
-                  <React.Fragment key={`${st.code}-${idx}`}>
-                    {distFromPrev && viewMode === 'scheduled' && (
-                      <div className="flex flex-col items-center justify-center shrink-0 text-[9px] font-extrabold text-teal-600 px-1">
-                        <span>+{distFromPrev} km</span>
-                        <span className="text-slate-300">━━▶</span>
+                  <button
+                    key={`${st.code}-${idx}`}
+                    type="button"
+                    onClick={() => handleFocusStore(st)}
+                    className={`shrink-0 text-left p-2 rounded-2xl border transition-all cursor-pointer min-w-[205px] max-w-[225px] ${
+                      isSelected
+                        ? 'bg-teal-50/90 border-teal-500 shadow-xs'
+                        : isSched
+                        ? 'bg-emerald-50/50 hover:bg-white border-teal-200'
+                        : 'bg-slate-50/80 hover:bg-white border-slate-200/80'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={`w-4 h-4 rounded-full text-white text-[9px] font-black flex items-center justify-center shrink-0 ${
+                            isSched ? 'bg-teal-600' : 'bg-slate-500'
+                          }`}
+                        >
+                          {isSched ? st.routeOrder || idx + 1 : '•'}
+                        </span>
+                        <span className="text-[11px] font-black text-slate-800 truncate">
+                          {st.name}
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+                        #{st.code}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-500 tabular-nums">
+                      <span>{st.lat.toFixed(4)}°</span>
+                      <span>•</span>
+                      <span>{st.lng.toFixed(4)}°</span>
+                      <span>•</span>
+                      <span className="text-teal-700 flex items-center gap-0.5">
+                        <Mountain className="w-2.5 h-2.5" />
+                        {st.altitude}m
+                      </span>
+                    </div>
+
+                    {st.agendaDate && (
+                      <div className="mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[9px] text-slate-500 font-semibold">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-2.5 h-2.5 text-teal-600" />
+                          {st.agendaDate} ({st.agendaTime})
+                        </span>
+                        {st.agendaPic && (
+                          <span className="text-teal-700 font-bold truncate max-w-[85px]">
+                            {st.agendaPic}
+                          </span>
+                        )}
                       </div>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => handleFocusStore(st)}
-                      className={`shrink-0 text-left p-2.5 rounded-2xl border transition-all cursor-pointer min-w-[215px] max-w-[240px] ${
-                        isSelected
-                          ? 'bg-teal-50/90 border-teal-500 shadow-xs'
-                          : 'bg-slate-50/80 hover:bg-white border-slate-200/80'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1.5 mb-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="w-5 h-5 rounded-full bg-teal-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                            {st.routeOrder || idx + 1}
-                          </span>
-                          <span className="text-xs font-black text-slate-800 truncate">
-                            {st.name}
-                          </span>
-                        </div>
-                        <span className="text-[9px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
-                          #{st.code}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-[9px] font-bold text-slate-500 tabular-nums">
-                        <span>Lat: {st.lat.toFixed(4)}°</span>
-                        <span>•</span>
-                        <span>Lng: {st.lng.toFixed(4)}°</span>
-                        <span>•</span>
-                        <span className="text-teal-700 flex items-center gap-0.5">
-                          <Mountain className="w-2.5 h-2.5" />
-                          {st.altitude}m
-                        </span>
-                      </div>
-
-                      {st.agendaDate && (
-                        <div className="mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[9px] text-slate-500 font-semibold">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-2.5 h-2.5 text-teal-600" />
-                            {st.agendaDate} ({st.agendaTime})
-                          </span>
-                          {st.agendaPic && (
-                            <span className="text-teal-700 font-bold truncate max-w-[90px]">
-                              {st.agendaPic}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </button>
-                  </React.Fragment>
+                  </button>
                 );
               })
             )}

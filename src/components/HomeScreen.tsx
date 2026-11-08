@@ -217,23 +217,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(1.5rem,env(safe-area-inset-top,24px))] pb-28 max-w-xl mx-auto w-full relative select-none"
     >
       {/* Section 1 Item 1: Top Header with Left Live Maps Icon, Center "Hallo, User!" & Right Notification Bell */}
-      <div className="relative flex items-center justify-center mb-3.5 min-h-[48px]">
+      <div className="relative pt-8 pb-1 mb-4">
         {/* ICON MAPS DI POJOK KIRI ATAS HALAMAN SCHEDULE USER */}
         <button
           type="button"
           onClick={onOpenLiveMaps}
-          className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all flex-shrink-0 cursor-pointer group"
+          className="absolute -left-1 top-0 w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all flex-shrink-0 cursor-pointer group"
           title="Buka Live Maps Pinpoint & Rute Toko"
         >
           <MapPin className="w-5 h-5 stroke-[2.2] text-teal-700 group-hover:scale-110 transition-transform" />
           <span className="w-2.5 h-2.5 rounded-full bg-[#2BB3A0] absolute top-2 right-2 border-2 border-white ring-2 ring-[#EAF8F2]" />
         </button>
 
-        <div className="text-center px-12">
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 leading-tight tracking-tight">
+        <div className="text-center px-8 pt-1">
+          <h1 className="text-lg sm:text-2xl font-black text-slate-900 leading-snug tracking-tight">
             Hallo, {fullName}!
           </h1>
-          <p className="text-[11px] font-light text-slate-500 tracking-wide mt-0.5 tabular-nums">
+          <p className="text-[11px] font-light text-slate-500 tracking-wide mt-1 tabular-nums">
             Today {actualDateNum} {actualMonthName} {actualYear} • {digitalClock}
           </p>
         </div>
@@ -241,7 +241,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <button
           type="button"
           onClick={() => alert(`Notifikasi: Ada ${displayedAgendas.length} agenda terjadwal untuk tanggal ${selectedDate}.`)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all flex-shrink-0 cursor-pointer group"
+          className="absolute -right-1 top-0 w-10 h-10 rounded-full iphone-glass-icon-btn flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all flex-shrink-0 cursor-pointer group"
           title="Notifikasi Agenda"
         >
           <Bell className="w-5 h-5 stroke-[2.2] text-black group-hover:scale-110 transition-transform" />
