@@ -255,13 +255,13 @@
     inset 0 -0.5px 0.5px 0 rgba(255, 255, 255, 0.25),
     inset 0.5px 0 0.5px 0 rgba(0, 0, 0, 0.12),
     inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.12);
-  /* 60fps Hardware Acceleration & Compositor Promotion */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
+  /* 60fps Hardware Acceleration & Compositor Isolation (Zero Glitch on Transform) */
+  isolation: isolate;
+  contain: paint;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  will-change: transform, opacity;
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out;
 }
 
 /* Authentic Apple Liquid Glass Mini Dock (for Top Navbar and Floating Action Bars) */
@@ -285,13 +285,13 @@
     inset 0 -0.5px 0.5px 0 rgba(255, 255, 255, 0.30),
     inset 0.5px 0 0.5px 0 rgba(0, 0, 0, 0.10),
     inset -0.5px 0 0.5px 0 rgba(0, 0, 0, 0.10);
-  /* 60fps Hardware Acceleration & Compositor Promotion */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
+  /* 60fps Hardware Acceleration & Compositor Isolation (Zero Glitch on Transform) */
+  isolation: isolate;
+  contain: paint;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  will-change: transform, opacity;
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out;
 }
 
 /* Authentic Apple Liquid Glass Top Navbar Header */
@@ -381,20 +381,22 @@
   background: #CBD5E1;
 }
 
-/* Running Text Marquee for AI Attention Banner (Single Repeat Running from Right to Left) */
+/* Running Text Marquee for AI Attention Banner (Seamless Continuous Loop Without Long Pause) */
 @keyframes fmcuMarquee {
   0% {
-    transform: translateX(100%);
+    transform: translate3d(0, 0, 0);
   }
   100% {
-    transform: translateX(-100%);
+    transform: translate3d(-50%, 0, 0);
   }
 }
 
 .animate-marquee {
   display: inline-flex;
   white-space: nowrap;
-  animation: fmcuMarquee 24s linear infinite;
+  width: max-content;
+  animation: fmcuMarquee 18s linear infinite;
+  will-change: transform;
 }
 
 .animate-marquee:hover {
@@ -548,4 +550,26 @@ input[type="time"]::-webkit-date-and-time-value {
   will-change: transform, opacity;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+}
+
+/* Mobile Date Input Symmetrical Alignment Reset */
+input[type="date"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  line-height: normal;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }

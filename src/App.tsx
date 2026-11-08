@@ -138,15 +138,6 @@ export const App: React.FC = () => {
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
-    // Jika hari ini Minggu (day === 0), otomatis aktif mulai dari hari Senin besok sesuai instruksi operasional
-    if (now.getDay() === 0) {
-      const tomorrow = new Date(now);
-      tomorrow.setDate(now.getDate() + 1);
-      const year = tomorrow.getFullYear();
-      const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
-      const day = String(tomorrow.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    }
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');

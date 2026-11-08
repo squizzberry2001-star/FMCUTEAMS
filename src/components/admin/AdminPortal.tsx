@@ -1453,8 +1453,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <option value="ALL">
                     Semua Karyawan ({users.filter((u) => !u.isAdmin).length})
                   </option>
-                  {users
+                  {[...users]
                     .filter((u) => !u.isAdmin)
+                    .sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }))
                     .map((u) => (
                       <option key={u.id || u.name} value={u.name}>
                         {u.name}
@@ -1855,8 +1856,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {users
+                {[...users]
                   .filter((u) => !u.isAdmin)
+                  .sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }))
                   .map((u, idx) => {
                     const userAgendasCount = agendas.filter((a) => a.pic === u.name).length;
                     const ownedCount = getStoresWithOwnership(u.name).filter(
@@ -1979,8 +1981,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     onChange={(e) => setAgendaPic(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-[#F3F5F8] rounded-2xl text-xs font-bold text-slate-800 outline-none"
                   >
-                    {users
+                    {[...users]
                       .filter((u) => !u.isAdmin)
+                      .sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }))
                       .map((u) => (
                         <option key={u.id || u.name} value={u.name}>
                           {u.name}

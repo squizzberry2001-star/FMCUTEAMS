@@ -13,6 +13,19 @@ export type ScheduleCategory =
   | 'CUTI'
   | 'OFF';
 
+export const SCHEDULE_CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'ALL', label: 'Semua Kategori' },
+  { value: 'VISIT', label: 'Visit Store' },
+  { value: 'NSO', label: 'NSO' },
+  { value: 'MEETING', label: 'Meeting' },
+  { value: 'AUDIT', label: 'Audit' },
+  { value: 'TRAINING', label: 'Training' },
+  { value: 'WORK_PLAN', label: 'Work Plan' },
+  { value: 'OPERATION', label: 'Operation' },
+  { value: 'CUTI', label: 'Cuti' },
+  { value: 'OFF', label: 'Off / Libur' },
+];
+
 export interface ActualAttendanceSilentAudit {
   inLat?: number;
   inLng?: number;

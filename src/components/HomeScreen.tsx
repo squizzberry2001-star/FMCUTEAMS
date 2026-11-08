@@ -5,8 +5,9 @@ import {
   Search,
   X,
   Users,
+  Tag,
 } from 'lucide-react';
-import { ScheduleAgenda, User } from '../types';
+import { ScheduleAgenda, User, SCHEDULE_CATEGORY_OPTIONS } from '../types';
 import { CalendarStrip, CalendarFocusTrigger } from './CalendarStrip';
 import { ScheduleCard } from './ScheduleCard';
 import { BottomNavbar, NavTabType } from './BottomNavbar';
@@ -52,6 +53,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [selectedPeriod, setSelectedPeriod] = useState<'Today' | 'Week' | 'AllTeam'>('Today');
   const [nameFilter, setNameFilter] = useState<string>('');
   const [selectedPersonDropdown, setSelectedPersonDropdown] = useState<string>('ALL');
+  const [selectedCategoryDropdown, setSelectedCategoryDropdown] = useState<string>('ALL');
   const [calendarFocus, setCalendarFocus] = useState<CalendarFocusTrigger>({
     mode: 'today',
     ts: Date.now(),
@@ -196,8 +198,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       // 'AllTeam' -> Menampilkan jadwal seluruh tim dalam 1 Minggu Penuh + Filter by Nama
       if (item.date < teamWeekStartStr || item.date > teamWeekEndStr) return false;
 
-      if (selectedPersonDropdown !== 'ALL') {
+      if (selectedPersonDropdown !== 'ALL' && selectedPeriod === 'AllTeam') {
         if (!isSamePersonName(item.pic, selectedPersonDropdown) && item.pic !== selectedPersonDropdown) {
+          return false;
+        }
+      }
+      if (selectedCategoryDropdown !== 'ALL') {
+        if (item.category !== selectedCategoryDropdown) {
           return false;
         }
       }
@@ -231,6 +238,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     teamWeekEndStr,
     nameFilter,
     selectedPersonDropdown,
+    selectedCategoryDropdown,
   ]);
 
   // Pengelompokan per Nama Tim (A-Z) untuk tab Semua Tim (1 Minggu Penuh):
@@ -434,38 +442,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </span>
           </div>
 
-          {/* Fitur Filter by Nama pada tab Semua Tim */}
-          {selectedPeriod === 'AllTeam' && (
-            <div className="flex items-center gap-2 mt-2.5">
-              <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={nameFilter}
-                  onChange={(e) => setNameFilter(e.target.value)}
-                  placeholder="Filter nama tim atau agenda..."
-                  className="w-full bg-white/90 border border-slate-200/80 rounded-xl pl-8 pr-7 py-1.5 text-[11px] font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-teal-500 transition-all"
-                />
-                {nameFilter && (
-                  <button
-                    type="button"
-                    onClick={() => setNameFilter('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+          {/* Fitur Filter (Search + Dropdown Kategori + Dropdown Nama Tim) */}
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
+            <div className="relative flex-1 min-w-[130px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+                placeholder={selectedPeriod === 'AllTeam' ? 'Filter nama / agenda...' : 'Cari judul agenda / toko...'}
+                className="w-full bg-white/90 border border-slate-200/80 rounded-xl pl-8 pr-7 py-1.5 text-[11px] font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-teal-500 transition-all"
+              />
+              {nameFilter && (
+                <button
+                  type="button"
+                  onClick={() => setNameFilter('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
+            {selectedPeriod === 'AllTeam' && (
               <div className="relative shrink-0">
                 <Users className="w-3.5 h-3.5 text-teal-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <select
                   value={selectedPersonDropdown}
                   onChange={(e) => setSelectedPersonDropdown(e.target.value)}
-                  className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[145px] truncate"
+                  className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[135px] truncate"
                   title="Filter berdasarkan Nama Tim (A-Z)"
                 >
-                  <option value="ALL">Semua Nama (A-Z)</option>
+                  <option value="ALL">Semua Nama</option>
                   {allTeamNamesAZ.map((personName) => (
                     <option key={personName} value={personName}>
                       {personName}
@@ -473,8 +481,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   ))}
                 </select>
               </div>
+            )}
+
+            <div className="relative shrink-0">
+              <Tag className="w-3.5 h-3.5 text-teal-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                value={selectedCategoryDropdown}
+                onChange={(e) => setSelectedCategoryDropdown(e.target.value)}
+                className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[135px] truncate"
+                title="Filter berdasarkan Kategori Agenda"
+              >
+                {SCHEDULE_CATEGORY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
+          </div>
         </div>
       </div>
 

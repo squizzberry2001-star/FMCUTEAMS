@@ -6,8 +6,9 @@ import {
   Search,
   X,
   Users,
+  Tag,
 } from 'lucide-react';
-import { ScheduleAgenda, User } from '../types';
+import { ScheduleAgenda, User, SCHEDULE_CATEGORY_OPTIONS } from '../types';
 import { DeveloperFooter } from './DeveloperFooter';
 import { isSamePersonName } from '../data/masterStoresData';
 import { getMondayOfWeek } from '../services/scheduleExcelService';
@@ -42,6 +43,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
   const [timelineTab, setTimelineTab] = useState<'selected' | 'allTeam' | 'fullWeek'>('selected');
   const [nameFilter, setNameFilter] = useState<string>('');
   const [selectedPersonDropdown, setSelectedPersonDropdown] = useState<string>('ALL');
+  const [selectedCategoryDropdown, setSelectedCategoryDropdown] = useState<string>('ALL');
 
   const fullName = user?.name || '';
   const year = currentDate.getFullYear();
@@ -190,6 +192,11 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
             return false;
           }
         }
+        if (selectedCategoryDropdown !== 'ALL') {
+          if (item.category !== selectedCategoryDropdown) {
+            return false;
+          }
+        }
         if (q) {
           const matchPic = (item.pic || '').toLowerCase().includes(q);
           const matchTitle = (item.title || '').toLowerCase().includes(q);
@@ -204,7 +211,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
           (a.date || '').localeCompare(b.date || '') ||
           (a.time || '').localeCompare(b.time || '')
       );
-  }, [timelineTab, fullWeekAgendas, allTeamAgendasOnDate, mySelectedDayAgendas, nameFilter, selectedPersonDropdown]);
+  }, [timelineTab, fullWeekAgendas, allTeamAgendasOnDate, mySelectedDayAgendas, nameFilter, selectedPersonDropdown, selectedCategoryDropdown]);
 
   // Pengelompokan per Nama Tim (A-Z) khusus untuk tampilan 1 Minggu Penuh:
   // Visual Nama di atas, lalu di bawahnya semua agendanya dalam 1 minggu berurutan sampai bawah
@@ -378,9 +385,9 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         </div>
       )}
 
-      {/* Fitur Filter by Nama (Minimalist Search + Pilihan Nama A-Z) */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="relative flex-1">
+      {/* Fitur Filter (Search + Pilihan Nama A-Z + Pilihan Kategori Agenda) */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="relative flex-1 min-w-[130px]">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
@@ -405,13 +412,29 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
           <select
             value={selectedPersonDropdown}
             onChange={(e) => setSelectedPersonDropdown(e.target.value)}
-            className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[145px] truncate"
+            className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[130px] truncate"
             title="Filter berdasarkan Nama Tim (A-Z)"
           >
-            <option value="ALL">Semua Nama (A-Z)</option>
+            <option value="ALL">Semua Nama</option>
             {allTeamNamesAZ.map((personName) => (
               <option key={personName} value={personName}>
                 {personName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="relative shrink-0">
+          <Tag className="w-3.5 h-3.5 text-teal-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <select
+            value={selectedCategoryDropdown}
+            onChange={(e) => setSelectedCategoryDropdown(e.target.value)}
+            className="bg-white/90 border border-slate-200/80 rounded-xl pl-7 pr-6 py-1.5 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer max-w-[130px] truncate"
+            title="Filter berdasarkan Kategori Agenda"
+          >
+            {SCHEDULE_CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>

@@ -195,38 +195,54 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { days, isEightPillsActualWeek } = useMemo(() => getScrollableCalendarDays(), []);
 
-  // Helper to scroll container so Actual Week (or Actual Date) is in focus
-  const focusOnActualWeek = (smooth: boolean) => {
+  // Helper to scroll container so Actual Date (or selected pill) is centered in focus
+  const focusOnDatePill = (smooth: boolean, preferSelected: boolean = true) => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const targetEl = container.querySelector('[data-actual-week-start="true"]') as HTMLElement | null;
+    let targetEl: HTMLElement | null = null;
+    if (preferSelected && selectedDate) {
+      targetEl = container.querySelector(`[data-date="${selectedDate}"]`) as HTMLElement | null;
+    }
+    if (!targetEl) {
+      targetEl = container.querySelector('[data-splash-target="actual-date-pill"]') as HTMLElement | null;
+    }
+    if (!targetEl) {
+      targetEl = container.querySelector('[data-actual-week-start="true"]') as HTMLElement | null;
+    }
+
     if (targetEl) {
-      const targetLeft = Math.max(0, targetEl.offsetLeft - 2);
+      const targetLeft = targetEl.offsetLeft - (container.clientWidth - targetEl.clientWidth) / 2;
+      const scrollPos = Math.max(0, targetLeft);
       if (smooth) {
-        container.scrollTo({ left: targetLeft, behavior: 'smooth' });
+        container.scrollTo({ left: scrollPos, behavior: 'smooth' });
       } else {
-        container.scrollLeft = targetLeft;
+        container.scrollLeft = scrollPos;
       }
     }
   };
 
-  // 1. On initial mount: immediately position scroll at Actual Running Week
+  // 1. On initial mount: immediately position scroll centered at selected / actual date pill
   useEffect(() => {
-    focusOnActualWeek(false);
-    const rafId = window.requestAnimationFrame(() => focusOnActualWeek(false));
-    const timerId = window.setTimeout(() => focusOnActualWeek(false), 80);
+    focusOnDatePill(false);
+    const rafId = window.requestAnimationFrame(() => focusOnDatePill(false));
+    const timerId = window.setTimeout(() => focusOnDatePill(false), 80);
     return () => {
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timerId);
     };
   }, []);
 
-  // 2. When user clicks "Hari Ini" or "Minggu Ini": smooth scroll back to Actual Week / Actual Date
+  // 2. When user clicks "Hari Ini" or "Minggu Ini": smooth scroll back to Actual Date / Week
   useEffect(() => {
     if (!focusTrigger) return;
-    focusOnActualWeek(true);
+    focusOnDatePill(true, focusTrigger.mode === 'today');
   }, [focusTrigger]);
+
+  // 3. When selectedDate changes: ensure the newly selected date pill is smoothly centered in focus
+  useEffect(() => {
+    focusOnDatePill(true, true);
+  }, [selectedDate]);
 
   return (
     <div

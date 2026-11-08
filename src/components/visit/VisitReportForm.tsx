@@ -350,10 +350,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       qscSheetBottom: '',
       gasSyncStatus: 'idle',
       crews: [
-        { id: 'c-1', role: 'Store Head', name: resolvedStoreHead, jobLevel: '1A' },
-        { id: 'c-2', role: 'Shift Leader', name: '', jobLevel: 'NS3' },
-        { id: 'c-3', role: 'Crew Store 1', name: '', jobLevel: 'MG1' },
-        { id: 'c-4', role: 'Crew Store 2', name: '', jobLevel: 'MG1' },
+        { id: 'c-1', role: 'Store Head', name: resolvedStoreHead, jobLevel: '' },
+        { id: 'c-2', role: 'Shift Leader', name: '', jobLevel: '' },
+        { id: 'c-3', role: 'Crew Store 1', name: '', jobLevel: '' },
+        { id: 'c-4', role: 'Crew Store 2', name: '', jobLevel: '' },
       ],
       enableQsc: true,
       enableOpi: true,
@@ -730,8 +730,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     };
   }, [showPreview]);
 
-  // Scroll Detection for Smooth Floating Action Buttons (Damped Thresholds to Prevent Jitter)
+  // Scroll Detection for Smooth Floating Action Buttons & Top Navbar Auto-Hide
   const [isScrolled, setIsScrolled] = useState(false);
+  const [showTopNavbar, setShowTopNavbar] = useState(true);
   const formScrollContainerRef = useRef<HTMLDivElement>(null);
   const lastScrollYRef = useRef(0);
   const scrollDeltaAccRef = useRef(0);
@@ -750,6 +751,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleResetScale = () => {
     setIsScrolled(false);
+    setShowTopNavbar(true);
     manualExpandedRef.current = true;
     manualExpandedScrollTopRef.current = getScrollTop();
   };
@@ -766,6 +768,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
           // 1. Di paling atas halaman (<= 25px): reset
           if (currentY <= 25) {
+            setShowTopNavbar(true);
             setIsScrolled(false);
             scrollDeltaAccRef.current = 0;
             manualExpandedRef.current = false;
@@ -784,15 +787,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           if (manualExpandedRef.current) {
             if (currentY > manualExpandedScrollTopRef.current + 16 || delta > 6) {
               manualExpandedRef.current = false;
+              setShowTopNavbar(false);
               setIsScrolled((prev) => (prev ? prev : true));
             }
           }
-          // 4. Scroll ke BAWAH: dengan niat jelas (akumulasi > 35px dan posisi > 60px)
+          // 4. Scroll ke BAWAH: sembunyikan top navbar & action buttons
           else if (scrollDeltaAccRef.current > 35 && currentY > 60) {
+            setShowTopNavbar(false);
             setIsScrolled((prev) => (prev ? prev : true));
           }
-          // 5. Scroll ke ATAS: akumulasi < -16px -> Langsung munculkan action buttons
+          // 5. Scroll ke ATAS: tampilkan kembali top navbar & action buttons
           else if (scrollDeltaAccRef.current < -16) {
+            setShowTopNavbar(true);
             setIsScrolled((prev) => (!prev ? prev : false));
           }
 
@@ -1220,7 +1226,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       id: `c-${Date.now()}`,
       role: `Crew Store ${nextNum}`,
       name: '',
-      jobLevel: '1A',
+      jobLevel: '',
     };
     setFormData((prev) => ({ ...prev, crews: [...prev.crews, newCrew] }));
   };
@@ -2123,8 +2129,14 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {/* Top Navbar: Persistent Floating Apple Liquid Glass Header (Fluid 60fps GPU Composited) */}
-      <header className="fixed top-0 left-0 right-0 z-40 bg-transparent pointer-events-none select-none">
+      {/* Top Navbar: Floating Apple Liquid Glass Header (Auto-Hide on Scroll Down, Fluid 60fps GPU Composited) */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 bg-transparent pointer-events-none select-none transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+          showTopNavbar
+            ? 'translate-y-0 opacity-100'
+            : '-translate-y-full opacity-0 pointer-events-none'
+        }`}
+      >
         <div className="px-4 sm:px-6 pt-[max(0.6rem,env(safe-area-inset-top,12px))] pb-2 max-w-6xl mx-auto w-full flex items-center justify-between select-none">
           {/* Tombol Back: Authentic Floating Liquid Glass Round Button */}
           <button
@@ -2353,17 +2365,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowStorePickerBar((v) => !v)}
-                className="px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[11px] font-extrabold transition flex items-center gap-1.5 cursor-pointer"
-              >
-                <Store className="w-3.5 h-3.5 text-teal-600" />
-                <span>{showStorePickerBar ? 'Tutup Pemilih Toko' : 'Pilih dari 610 Master Toko'}</span>
-              </button>
+              {Boolean(user?.isAdmin) && (
+                <button
+                  type="button"
+                  onClick={() => setShowStorePickerBar((v) => !v)}
+                  className="px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[11px] font-extrabold transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Store className="w-3.5 h-3.5 text-teal-600" />
+                  <span>{showStorePickerBar ? 'Tutup Pemilih Toko' : 'Pilih dari 610 Master Toko'}</span>
+                </button>
+              )}
             </div>
 
-            {showStorePickerBar && (
+            {Boolean(user?.isAdmin) && showStorePickerBar && (
               <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-2.5 animate-in fade-in">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[11px] font-black text-emerald-900 uppercase">
@@ -2501,10 +2515,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     type="date"
                     value={formData.visitDate}
                     onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })}
-                    className="block w-full h-11 min-w-0 max-w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 pr-10 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition appearance-none leading-normal text-left cursor-pointer"
+                    style={{ minHeight: '44px' }}
+                    className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl pl-3.5 pr-10 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition text-left cursor-pointer flex items-center [color-scheme:light]"
                   />
-                  <div className="absolute right-3.5 pointer-events-none text-slate-400">
-                    <Calendar className="w-4 h-4" />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 flex items-center justify-center">
+                    <Calendar className="w-4 h-4 text-slate-400" />
                   </div>
                 </div>
               </div>
@@ -2655,6 +2670,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                               className="w-full h-10 bg-teal-50 border border-teal-200 rounded-xl px-2.5 text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 outline-none cursor-pointer"
                               title="Pilih Job Level"
                             >
+                              <option value="">-- Level --</option>
                               {['1A', 'NS3', 'NS2', 'NS1', 'MG3', 'MG2', 'MG1', 'OJT'].map(
                                 (lvl) => (
                                   <option key={lvl} value={lvl}>
@@ -2885,6 +2901,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               <div className="flex-1 overflow-hidden relative">
                 <div className="animate-marquee font-semibold text-[11px] text-amber-300">
                   <span className="mx-4">
+                    ⚠️ Hasil analisa AI dapat membuat kesalahan. Periksa kembali jawaban di setiap kolom temuan sebelum disimpan. Pastikan setiap tindakan perbaikan (CA) dan deadline telah sesuai kesepakatan bersama tim toko.
+                  </span>
+                  <span className="mx-4" aria-hidden="true">
                     ⚠️ Hasil analisa AI dapat membuat kesalahan. Periksa kembali jawaban di setiap kolom temuan sebelum disimpan. Pastikan setiap tindakan perbaikan (CA) dan deadline telah sesuai kesepakatan bersama tim toko.
                   </span>
                 </div>
@@ -3698,10 +3717,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           ===================================================================== */}
       {activeSection === 2 && isCurrentObsSubTabEnabled && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none origin-bottom-right transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
             isScrolled
-              ? 'scale-90 opacity-0 pointer-events-none translate-y-8'
-              : 'scale-100 opacity-100 pointer-events-auto translate-y-0'
+              ? 'translate-y-28 pointer-events-none'
+              : 'translate-y-0 pointer-events-auto'
           }`}
         >
           {/* Quick Prev / Next Card Navigation Pill with Liquid Glass */}
@@ -3745,10 +3764,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {activeSection === 3 && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none origin-bottom-right transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
             isScrolled
-              ? 'scale-90 opacity-0 pointer-events-none translate-y-8'
-              : 'scale-100 opacity-100 pointer-events-auto translate-y-0'
+              ? 'translate-y-28 pointer-events-none'
+              : 'translate-y-0 pointer-events-auto'
           }`}
         >
           {/* Button Icon Gallery with Liquid Glass */}

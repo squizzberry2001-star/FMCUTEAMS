@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Eye,
   EyeOff,
@@ -37,8 +37,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
   onReplaySplash,
 }) => {
-  // Staff users list (36 names from Excel)
-  const staffUsers = users.filter((u) => !u.isAdmin);
+  // Staff users list (36 names from Excel) diurutkan secara abjad A-Z
+  const staffUsers = useMemo(() => {
+    return [...users]
+      .filter((u) => !u.isAdmin)
+      .sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }));
+  }, [users]);
 
   // Login Mode: DEFAULT is 'member' (Anggota), changes to 'admin' when admin button clicked
   const [loginMode, setLoginMode] = useState<'member' | 'admin'>('member');
