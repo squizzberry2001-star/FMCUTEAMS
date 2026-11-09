@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Compass, MapPin, RefreshCw, ArrowRight } from 'lucide-react';
+import { Compass, MapPin, RefreshCw, AlertCircle, Smartphone, ShieldCheck, ChevronRight } from 'lucide-react';
 import { initSilentBackgroundPositioning } from '../../services/actualAttendanceService';
 
 interface GpsEnforcerGuardProps {
@@ -42,6 +42,17 @@ export function isDesktopOrTabletDevice(): boolean {
 }
 
 /**
+ * Deteksi platform OS untuk instruksi perizinan GPS spesifik
+ */
+function getMobilePlatform(): 'ios' | 'android' | 'other' {
+  if (typeof window === 'undefined') return 'other';
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  if (/Android/i.test(ua)) return 'android';
+  return 'other';
+}
+
+/**
  * Periksa apakah izin lokasi browser sudah diberikan ('granted')
  * atau sudah pernah terverifikasi di sesi aktif.
  */
@@ -53,12 +64,11 @@ function isInitiallyConnected(): boolean {
     return true;
   }
 
-  // Jika sudah terverifikasi di sessionStorage atau ada koordinat GPS tersimpan di localStorage
+  // Pada ponsel smartphone, periksa apakah koordinat GPS tersimpan dan masih segar (< 15 menit)
   try {
-    if (sessionStorage.getItem('fmcu_gps_verified') === 'true') {
-      return true;
-    }
-    if (localStorage.getItem('fmcu_live_gps')) {
+    const liveGps = localStorage.getItem('fmcu_live_gps');
+    const liveTimestamp = Number(localStorage.getItem('fmcu_live_gps_timestamp') || '0');
+    if (liveGps && liveTimestamp && Date.now() - liveTimestamp < 900000) {
       return true;
     }
   } catch {
@@ -71,8 +81,13 @@ function isInitiallyConnected(): boolean {
 export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) => {
   const [isGpsConnected, setIsGpsConnected] = useState<boolean>(() => isInitiallyConnected());
   const [isRequesting, setIsRequesting] = useState<boolean>(false);
-  const watchIdRef = useRef<number | null>(null);
+  const [permissionDenied, setPermissionDenied] = useState<boolean>(false);
+  const [platform, setPlatform] = useState<'ios' | 'android' | 'other'>('other');
   const isMountedRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    setPlatform(getMobilePlatform());
+  }, []);
 
   const handlePositionSuccess = useCallback((pos: GeolocationPosition) => {
     const lat = pos.coords.latitude;
@@ -89,6 +104,7 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
       if (isMountedRef.current) {
         setIsGpsConnected(true);
         setIsRequesting(false);
+        setPermissionDenied(false);
       }
       initSilentBackgroundPositioning();
     }
@@ -98,13 +114,8 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
     if (!isMountedRef.current) return;
     setIsRequesting(false);
 
-    // ATURAN KRUSIAL:
-    // Jangan pernah mencabut isGpsConnected jika user sudah terhubung atau di perangkat Desktop/iPad/Tablet!
-    // Kesalahan timeout (code 3) atau sinyal hilang sesaat (code 2) di dalam ruangan / saat ganti tab
-    // TIDAK BOLEH menendang user ke layar pemblokir "Aktifkan GPS".
     if (err && err.code === 1) {
-      // Hanya jika izin secara eksplisit ditolak (code 1 = PERMISSION_DENIED)
-      // dan BUKAN perangkat desktop/tablet
+      // PERMISSION_DENIED (Kode 1): User menolak atau browser memblokir lokasi
       if (!isDesktopOrTabletDevice()) {
         try {
           sessionStorage.removeItem('fmcu_gps_verified');
@@ -112,26 +123,25 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
           // ignore
         }
         setIsGpsConnected(false);
+        setPermissionDenied(true);
       }
     }
   }, []);
 
   const requestGps = useCallback(() => {
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-      // Jika browser tidak mendukung Geolocation, jangan blokir
       setIsGpsConnected(true);
       return;
     }
 
     setIsRequesting(true);
+    setPermissionDenied(false);
 
-    // Coba dengan High Accuracy terlebih dahulu (ideal untuk ponsel lapangan dengan GPS satelit)
     try {
       navigator.geolocation.getCurrentPosition(
         handlePositionSuccess,
         (err) => {
-          // Jika High Accuracy gagal / timeout (sangat umum di iPad Wi-Fi, Desktop, atau di dalam ruangan),
-          // fallback otomatis ke Low Accuracy (Wi-Fi / IP trilaterasi) tanpa memblokir layar!
+          // Fallback coba Low Accuracy jika High Accuracy timeout
           if (err.code !== 1) {
             try {
               navigator.geolocation.getCurrentPosition(
@@ -140,7 +150,7 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
                 {
                   enableHighAccuracy: false,
                   timeout: 10000,
-                  maximumAge: 300000, // toleransi cache 5 menit
+                  maximumAge: 120000,
                 }
               );
             } catch {
@@ -152,7 +162,7 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
         },
         {
           enableHighAccuracy: true,
-          timeout: 5000,
+          timeout: 7000,
           maximumAge: 60000,
         }
       );
@@ -171,14 +181,23 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
         .then((status) => {
           if (status.state === 'granted') {
             setIsGpsConnected(true);
+            setPermissionDenied(false);
             sessionStorage.setItem('fmcu_gps_verified', 'true');
+            initSilentBackgroundPositioning();
+          } else if (status.state === 'denied' && !isDesktopOrTabletDevice()) {
+            setIsGpsConnected(false);
+            setPermissionDenied(true);
+            sessionStorage.removeItem('fmcu_gps_verified');
           }
           status.onchange = () => {
             if (status.state === 'granted') {
               setIsGpsConnected(true);
+              setPermissionDenied(false);
               sessionStorage.setItem('fmcu_gps_verified', 'true');
+              initSilentBackgroundPositioning();
             } else if (status.state === 'denied' && !isDesktopOrTabletDevice()) {
               setIsGpsConnected(false);
+              setPermissionDenied(true);
               sessionStorage.removeItem('fmcu_gps_verified');
             }
           };
@@ -188,33 +207,12 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
         });
     }
 
-    // 2. Trigger sinkronisasi GPS di latar belakang
+    // 2. Minta izin GPS otomatis saat pertama kali dibuka
     requestGps();
 
-    // 3. Pasang continuous watchPosition
-    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-      try {
-        watchIdRef.current = navigator.geolocation.watchPosition(
-          handlePositionSuccess,
-          (err) => {
-            // Pada watchPosition, jika gagal jangan pernah mencabut isGpsConnected jika sudah terhubung
-            if (err && err.code === 1 && !isDesktopOrTabletDevice()) {
-              setIsGpsConnected(false);
-            }
-          },
-          {
-            enableHighAccuracy: !isDesktopOrTabletDevice(),
-            maximumAge: 15000,
-            timeout: 12000,
-          }
-        );
-      } catch {
-        // ignore
-      }
-    }
-
-    // 4. Re-check saat window aktif / kembali dari tab lain (hanya perbarui koordinat, jangan blokir)
+    // 3. Re-check saat window aktif kembali (pindah tab atau buka lock screen)
     const handleRecheck = () => {
+      if (document.hidden) return; // Battery Saver: Jangan trigger jika layar mati
       if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(
           handlePositionSuccess,
@@ -222,7 +220,7 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
           {
             enableHighAccuracy: false,
             timeout: 8000,
-            maximumAge: 120000,
+            maximumAge: 60000,
           }
         );
       }
@@ -233,9 +231,6 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
 
     return () => {
       isMountedRef.current = false;
-      if (watchIdRef.current !== null && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
       window.removeEventListener('focus', handleRecheck);
       document.removeEventListener('visibilitychange', handleRecheck);
     };
@@ -246,60 +241,92 @@ export const GpsEnforcerGuard: React.FC<GpsEnforcerGuardProps> = ({ children }) 
     return <>{children}</>;
   }
 
-  // Khusus ponsel lapangan (smartphone) jika izin lokasi belum diberikan sama sekali
+  // ============================================================================
+  // LAYAR PEMBLOKIR: LOKASI GPS WAJIB (TIDAK BISA DI-SKIP)
+  // ============================================================================
   return (
-    <div className="fixed inset-0 z-[999999] bg-[#F8F9FD] flex flex-col items-center justify-center p-6 select-none animate-in fade-in duration-300">
-      <div className="w-full max-w-sm flex flex-col items-center text-center">
-        {/* Pulsing Radar Effect */}
-        <div className="relative flex items-center justify-center mb-8">
-          <div className="absolute w-28 h-28 rounded-full bg-emerald-500/10 animate-ping duration-1000" />
-          <div className="absolute w-20 h-20 rounded-full bg-teal-500/20 animate-pulse" />
-          <div className="relative w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-xl flex items-center justify-center text-white">
-            <MapPin className="w-8 h-8 stroke-[2.2]" />
+    <div className="fixed inset-0 z-[999999] bg-[#F8F9FD] flex flex-col items-center justify-center p-5 select-none animate-in fade-in duration-300 overflow-y-auto">
+      <div className="w-full max-w-sm flex flex-col items-center text-center my-auto py-6">
+        {/* Radar Icon dengan Efek Glow */}
+        <div className="relative flex items-center justify-center mb-6">
+          <div className="absolute w-28 h-28 rounded-full bg-emerald-500/15 animate-ping duration-1000" />
+          <div className="absolute w-20 h-20 rounded-full bg-teal-500/25 animate-pulse" />
+          <div className="relative w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-xl flex items-center justify-center text-white ring-4 ring-emerald-500/20">
+            <MapPin className="w-8 h-8 stroke-[2.3]" />
           </div>
         </div>
 
-        {/* Minimal Clean Status */}
-        <div className="space-y-1.5 mb-8">
-          <h2 className="text-lg font-black text-slate-900 tracking-tight">
-            Menghubungkan GPS...
+        {/* Judul & Alasan Wajib */}
+        <div className="space-y-2 mb-6">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-black uppercase tracking-wider">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Izin Akses Lokasi Wajib</span>
+          </div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight leading-snug">
+            Aktifkan GPS Perangkat
           </h2>
-          <p className="text-xs font-semibold text-slate-500">
-            Pastikan Layanan Lokasi (GPS) Diizinkan di Browser
+          <p className="text-xs text-slate-600 font-medium leading-relaxed px-2">
+            Sistem operasional FMCU Teams mewajibkan koordinat GPS aktif untuk validasi kehadiran di toko secara otomatis (radius 1–50m).
           </p>
         </div>
 
-        {/* Tombol Aksi Utama: Minta Izin Lokasi Browser */}
+        {/* Petunjuk Spesifik Jika Izin Ditolak / Diblokir Browser */}
+        {permissionDenied && (
+          <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-left mb-6 space-y-2 animate-in fade-in">
+            <div className="flex items-center gap-2 text-amber-900 font-black text-xs">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Akses Lokasi Diblokir di Browser</span>
+            </div>
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              {platform === 'ios' ? (
+                <>
+                  <strong>Cara aktifkan di iPhone (Safari):</strong>
+                  <br />
+                  1. Buka <strong>Pengaturan iPhone</strong> &gt; <strong>Privasi & Keamanan</strong> &gt; <strong>Layanan Lokasi</strong> (Pastikan Aktif).
+                  <br />
+                  2. Gulir ke bawah, pilih <strong>Situs Web Safari</strong> &gt; Pilih <strong>Saat Menggunakan App</strong>.
+                  <br />
+                  3. Kembali ke browser dan ketuk tombol di bawah.
+                </>
+              ) : (
+                <>
+                  <strong>Cara aktifkan di Android (Google Chrome):</strong>
+                  <br />
+                  1. Ketuk ikon <strong>Gembok 🔒 / Setelan ⚙️</strong> di samping tautan web (bar atas).
+                  <br />
+                  2. Pilih <strong>Izin (Permissions)</strong> &gt; <strong>Lokasi</strong> &gt; Pilih <strong>Izinkan</strong>.
+                  <br />
+                  3. Muat ulang halaman atau ketuk tombol di bawah.
+                </>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* Tombol Aksi Utama (Satu-satunya Jalan Masuk: Harus Mengizinkan Lokasi) */}
         <button
           type="button"
           onClick={requestGps}
-          className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-teal-600/20 transition cursor-pointer"
+          disabled={isRequesting}
+          className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-teal-600/25 transition cursor-pointer"
         >
           {isRequesting ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>Memverifikasi Lokasi...</span>
+              <span>Memverifikasi Sinyal GPS...</span>
             </>
           ) : (
             <>
               <Compass className="w-4 h-4" />
-              <span>Aktifkan Lokasi / GPS</span>
+              <span>{permissionDenied ? 'Coba Lagi / Aktifkan Lokasi' : 'Izinkan & Aktifkan GPS'}</span>
             </>
           )}
         </button>
 
-        {/* Tombol Cadangan: Lanjutkan Jika di Kantor / Tablet */}
-        <button
-          type="button"
-          onClick={() => {
-            sessionStorage.setItem('fmcu_gps_verified', 'true');
-            setIsGpsConnected(true);
-          }}
-          className="mt-3.5 w-full py-2.5 px-4 rounded-xl text-slate-500 hover:text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer hover:bg-slate-100/70"
-        >
-          <span>Lanjutkan ke Aplikasi</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {/* Catatan Transparansi Keamanan */}
+        <p className="text-[10px] text-slate-400 font-bold mt-4 leading-normal">
+          🔒 Koordinat Anda hanya diproses secara privat saat aplikasi aktif untuk keperluan verifikasi jadwal visit resmi FamilyMart.
+        </p>
       </div>
     </div>
   );

@@ -283,6 +283,11 @@ export function startLivePresenceHeartbeat(user: User | null | undefined): void 
   currentTrackingUser = user;
 
   const performCheck = () => {
+    // Battery Saver: Jangan polling GPS jika ponsel terkunci atau tab di latar belakang
+    if (typeof document !== 'undefined' && document.hidden) {
+      return;
+    }
+
     if (!navigator.geolocation) {
       clearUserPresence(user.name);
       return;
@@ -319,7 +324,8 @@ export function startLivePresenceHeartbeat(user: User | null | undefined): void 
         // GPS MATI ATAU DITOLAK -> Hapus kehadiran karena GPS tidak menyala
         clearUserPresence(user.name);
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 15000 }
+      // Battery Optimization: enableHighAccuracy false & maximumAge 45s memanfaatkan A-GPS/Wi-Fi & cache
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 45000 }
     );
   };
 
@@ -327,8 +333,8 @@ export function startLivePresenceHeartbeat(user: User | null | undefined): void 
   performCheck();
 
   if (heartbeatTimer) clearInterval(heartbeatTimer);
-  // Interval setiap 45 detik selama user membuka web
-  heartbeatTimer = setInterval(performCheck, 45000);
+  // Interval setiap 60 detik selama user aktif membuka web (hemat baterai)
+  heartbeatTimer = setInterval(performCheck, 60000);
 
   // Pasang listener saat tab/window ditutup
   const handleUnload = () => {

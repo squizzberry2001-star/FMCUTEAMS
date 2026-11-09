@@ -125,6 +125,8 @@ export function computeDistanceMeters(
 /**
  * Starts silent background geolocation listener
  */
+let visibilityListenerAttached = false;
+
 export function initSilentBackgroundPositioning(): void {
   if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
 
@@ -165,15 +167,31 @@ export function initSilentBackgroundPositioning(): void {
     navigator.geolocation.getCurrentPosition(
       handlePosition,
       () => {},
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 15000 }
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 25000 }
     );
 
     if (watchId === null) {
       watchId = navigator.geolocation.watchPosition(
         handlePosition,
         () => {},
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 25000, timeout: 12000 }
       );
+    }
+
+    // BATTERY SAVER: Automatically sleep GPS hardware when phone screen is locked or tab is hidden
+    if (typeof document !== 'undefined' && !visibilityListenerAttached) {
+      visibilityListenerAttached = true;
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          if (watchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+          }
+        } else {
+          // Re-activate GPS smoothly when user returns to app
+          initSilentBackgroundPositioning();
+        }
+      });
     }
   } catch {
     // Silent fail
