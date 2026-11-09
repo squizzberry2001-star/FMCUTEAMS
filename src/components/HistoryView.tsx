@@ -931,7 +931,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       )}
 
       {/* Minimalist Page Footer */}
-      <DeveloperFooter />
+      <DeveloperFooter className="mt-auto pt-16 pb-8 text-center" />
 
       {/* ============================================================
           FLOATING APPLE LIQUID GLASS BOTTOM NAVBAR IN HALAMAN COVERAGE

@@ -3730,7 +3730,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         )}
 
         {/* Minimalist Page Footer */}
-        <DeveloperFooter className="pt-8 pb-6 text-center" />
+        <DeveloperFooter className="mt-auto pt-16 pb-8 text-center" />
       </div>
 
       {/* =====================================================================

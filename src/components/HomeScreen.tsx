@@ -601,7 +601,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Minimalist Page Footer */}
-      <DeveloperFooter />
+      <DeveloperFooter className="mt-auto pt-16 pb-8 text-center" />
 
       {/* Navbar */}
       <BottomNavbar

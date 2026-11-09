@@ -1062,7 +1062,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* =====================================================================
           2. MAIN CORPORATE WORKSPACE CANVAS
           ===================================================================== */}
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-8 pt-6 pb-12">
+      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-8 pt-6 pb-12 flex flex-col justify-between">
         {/* TAB 1: EXECUTIVE & ADMIN DASHBOARD (LORDBANK BENTO DESIGN) */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
@@ -1974,7 +1974,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
 
-        <DeveloperFooter className="pt-8 pb-4 text-center" />
+        <DeveloperFooter className="mt-auto pt-16 pb-6 sm:pt-24 sm:pb-8 text-center" />
       </main>
 
       {/* =====================================================================

@@ -861,7 +861,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
       </div>
 
       {/* Minimalist Page Footer */}
-      <DeveloperFooter />
+      <DeveloperFooter className="mt-auto pt-16 pb-8 text-center" />
     </div>
   );
 };

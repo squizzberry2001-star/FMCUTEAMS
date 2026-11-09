@@ -16,7 +16,7 @@ interface DeveloperFooterProps {
 }
 
 export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
-  className = 'mt-auto pt-8 pb-4 text-center',
+  className = 'mt-auto pt-12 pb-6 sm:pt-16 sm:pb-8 text-center',
 }) => {
   const [open, setOpen] = useState(false);
 
@@ -133,15 +133,15 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-3 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200/90 flex items-center justify-between text-amber-900 hover:brightness-95 transition-all group cursor-pointer shadow-2xs"
-                title="Trakteer Hai BESTIE! (@HEHBESTIE) di Trakteer - Trakteer.id"
+                title="Treat me to a coffee (@HEHBESTIE) di Trakteer - Trakteer.id"
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
                     <Coffee className="w-3.5 h-3.5" />
                   </div>
                   <div>
-                    <span className="block text-[10.5px] font-black uppercase tracking-wider text-amber-900">
-                      TRAKTEER COFFEE
+                    <span className="block text-[10.5px] font-black text-amber-900">
+                      Treat me to a coffee
                     </span>
                     <span className="block text-[9.5px] text-amber-700 font-medium">
                       Trakteer Hai BESTIE! (@HEHBESTIE)
@@ -178,7 +178,7 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
 
   return (
     <>
-      <footer className={className}>
+      <footer className={`w-full select-none ${className}`}>
         <div className="inline-flex items-center justify-center gap-2.5 flex-wrap">
           <button
             type="button"
@@ -195,16 +195,16 @@ export const DeveloperFooter: React.FC<DeveloperFooterProps> = ({
           {/* Garis Pembatas */}
           <span className="h-3.5 w-px bg-slate-300/80 block shrink-0" />
 
-          {/* Button Trakteer Coffee (Tanpa Background) */}
+          {/* Button Treat me to a coffee */}
           <a
             href="https://trakteer.id/HEHBESTIE/tip"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-amber-600 hover:text-amber-700 tracking-wider transition-colors cursor-pointer py-1 px-1.5 uppercase"
-            title="Trakteer Hai BESTIE! (@HEHBESTIE) di Trakteer - Trakteer.id"
+            className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-amber-600 hover:text-amber-700 tracking-wide transition-colors cursor-pointer py-1 px-1.5"
+            title="Treat me to a coffee (@HEHBESTIE) di Trakteer - Trakteer.id"
           >
             <Coffee className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>TRAKTEER COFFEE</span>
+            <span>Treat me to a coffee</span>
           </a>
         </div>
       </footer>

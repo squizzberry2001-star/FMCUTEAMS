@@ -536,7 +536,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </div>
 
       {/* Minimalist Page Footer */}
-      <DeveloperFooter className="mt-8 text-center" />
+      <DeveloperFooter className="mt-auto pt-16 pb-8 text-center" />
     </div>
   );
 };
