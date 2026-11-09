@@ -29,25 +29,61 @@ export const getDeletedStoryIds = (): Set<string> => {
   return new Set();
 };
 
-export const recordDeletedStoryId = (storyId: string): void => {
-  if (typeof window === 'undefined' || !storyId) return;
+export const removeStoriesFromIdb = async (storyIds: string[]): Promise<void> => {
+  if (!Array.isArray(storyIds) || storyIds.length === 0) return;
+  try {
+    const idSet = new Set(storyIds);
+    const existing = await loadStoriesFromIdb();
+    if (existing && Array.isArray(existing)) {
+      const filtered = existing.filter((s) => s && !idSet.has(s.id));
+      await saveStoriesToIdb(filtered);
+    }
+  } catch (e) {
+    console.warn('removeStoriesFromIdb error:', e);
+  }
+};
+
+export const purgeDeletedStoryIds = (storyIds: string[]): void => {
+  if (typeof window === 'undefined' || !Array.isArray(storyIds) || storyIds.length === 0) return;
   try {
     const current = getDeletedStoryIds();
-    current.add(storyId);
-    localStorage.setItem(DELETED_STORIES_STORAGE_KEY, JSON.stringify(Array.from(current)));
-
-    // Clean from local stories storage
-    const rawStories = localStorage.getItem('fmcu_employee_stories_v2');
-    if (rawStories) {
-      const parsed: StorySlide[] = JSON.parse(rawStories);
-      if (Array.isArray(parsed)) {
-        const cleaned = parsed.filter((s) => s.id !== storyId);
-        localStorage.setItem('fmcu_employee_stories_v2', JSON.stringify(cleaned));
+    let hasNew = false;
+    storyIds.forEach((id) => {
+      if (id && typeof id === 'string' && !current.has(id)) {
+        current.add(id);
+        hasNew = true;
       }
+    });
+
+    if (hasNew) {
+      localStorage.setItem(DELETED_STORIES_STORAGE_KEY, JSON.stringify(Array.from(current).slice(-500)));
+
+      // Clean immediately from local stories storage
+      const rawStories = localStorage.getItem('fmcu_employee_stories_v2');
+      if (rawStories) {
+        const parsed: StorySlide[] = JSON.parse(rawStories);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((s) => s && !current.has(s.id));
+          localStorage.setItem('fmcu_employee_stories_v2', JSON.stringify(cleaned));
+        }
+      }
+
+      // Clean from IndexedDB in background
+      removeStoriesFromIdb(Array.from(current)).catch(() => {});
+
+      // Dispatch local events so UI updates instantly (0ms)
+      storyIds.forEach((id) => {
+        window.dispatchEvent(new CustomEvent('fmcu:story:deleted', { detail: { storyId: id } }));
+      });
     }
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn('purgeDeletedStoryIds error:', e);
   }
+};
+
+export const recordDeletedStoryId = (storyId: string): void => {
+  if (typeof window === 'undefined' || !storyId) return;
+  purgeDeletedStoryIds([storyId]);
 };
 
 export const isStoryDeleted = (storyId: string): boolean => {
@@ -56,15 +92,7 @@ export const isStoryDeleted = (storyId: string): boolean => {
 };
 
 export const removeStoryFromIdb = async (storyId: string): Promise<void> => {
-  try {
-    const existing = await loadStoriesFromIdb();
-    if (existing && Array.isArray(existing)) {
-      const filtered = existing.filter((s) => s.id !== storyId);
-      await saveStoriesToIdb(filtered);
-    }
-  } catch (e) {
-    console.warn('removeStoryFromIdb error:', e);
-  }
+  return removeStoriesFromIdb([storyId]);
 };
 
 export const getGasWebAppUrl = (): string => {
@@ -184,7 +212,7 @@ export const uploadStoryToGasGDrive = async (
   (async () => {
     try {
       const existing = (await fetchActiveStoriesFromGasGDrive()) || [];
-      const updated = [slide, ...existing.filter((s) => s.id !== slide.id)];
+      const updated = [slide, ...existing.filter((s) => s && s.id !== slide.id && !isStoryDeleted(s.id))];
       await fetch(GAS_VAULT_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -193,6 +221,7 @@ export const uploadStoryToGasGDrive = async (
           collection: 'stories',
           data: updated,
         }),
+        keepalive: true,
       });
     } catch {
       // ignore
@@ -258,76 +287,56 @@ export const fetchActiveStoriesFromGasGDrive = async (): Promise<StorySlide[] | 
 
   const nowMs = Date.now();
   const storyMap = new Map<string, StorySlide>();
+  let fetchSucceeded = false;
 
-  // 0. Sync tombstones (deleted stories) from Cloud Vault
   try {
-    const delRes = await fetch(GAS_VAULT_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'db_get_collection', collection: 'deleted_stories' }),
-    });
-    if (delRes.ok) {
-      const delJson = await delRes.json();
-      if (delJson && delJson.status === 'SUCCESS' && Array.isArray(delJson.data)) {
-        delJson.data.forEach((item: any) => {
-          if (item && item.id) recordDeletedStoryId(String(item.id));
-        });
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  // 1. Query Edge Cloud Vault (Fast ~2s)
-  const vaultPromise = (async () => {
-    try {
-      const res = await fetch(GAS_VAULT_API_URL, {
+    // 1. Parallel query for tombstones and stories from Cloud Vault
+    const [tombstoneRes, vaultRes] = await Promise.allSettled([
+      fetch(GAS_VAULT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'db_get_collection', collection: 'deleted_stories' }),
+      }).then(async (r) => (r.ok ? r.json() : null)),
+      fetch(GAS_VAULT_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'db_get_collection', collection: 'stories' }),
-      });
-      if (!res.ok) return;
-      const json = await res.json();
+      }).then(async (r) => (r.ok ? r.json() : null)),
+    ]);
+
+    // Process tombstones first
+    if (tombstoneRes.status === 'fulfilled' && tombstoneRes.value) {
+      const delJson = tombstoneRes.value;
+      if (delJson && delJson.status === 'SUCCESS' && Array.isArray(delJson.data)) {
+        const deletedIds = delJson.data.map((item: any) => String(item?.id || item)).filter(Boolean);
+        if (deletedIds.length > 0) {
+          purgeDeletedStoryIds(deletedIds);
+        }
+      }
+    }
+
+    // Process stories
+    if (vaultRes.status === 'fulfilled' && vaultRes.value) {
+      const json = vaultRes.value;
       if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
+        fetchSucceeded = true;
         json.data.forEach((s: StorySlide) => {
           if (s && s.id && !isStoryDeleted(s.id) && (s.expiresAtMs ? s.expiresAtMs > nowMs : true)) {
             storyMap.set(s.id, s);
           }
         });
       }
-    } catch {
-      // ignore
     }
-  })();
+  } catch (e) {
+    console.warn('fetchActiveStoriesFromGasGDrive error:', e);
+  }
 
-  // 2. Query Primary GDrive Folder Backend
-  const primaryPromise = (async () => {
-    try {
-      const sep = DEFAULT_GAS_GDRIVE_URL.includes('?') ? '&' : '?';
-      const res = await fetch(
-        `${DEFAULT_GAS_GDRIVE_URL}${sep}action=getActiveStories&folderId=${encodeURIComponent(
-          FMCU_GDRIVE_FOLDER_ID
-        )}&t=${nowMs}`,
-        { method: 'GET' }
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data && data.ok && Array.isArray(data.stories)) {
-        data.stories.forEach((s: StorySlide) => {
-          if (s && s.id && !isStoryDeleted(s.id) && (s.expiresAtMs ? s.expiresAtMs > nowMs : true)) {
-            storyMap.set(s.id, s);
-          }
-        });
-      }
-    } catch {
-      // ignore
-    }
-  })();
-
-  await Promise.allSettled([vaultPromise, primaryPromise]);
+  if (!fetchSucceeded) {
+    return null; // Network or server error, preserve local cache
+  }
 
   const list = Array.from(storyMap.values()).sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
-  return list.length > 0 ? list : null;
+  return list; // ALWAYS returns StorySlide[] (even if empty []), indicating successful sync
 };
 
 /**
@@ -372,6 +381,7 @@ export const syncStoryReactionToGasGDrive = async (params: {
           collection: 'stories',
           data: updated,
         }),
+        keepalive: true,
       });
     } catch {
       // ignore
@@ -389,6 +399,7 @@ export const syncStoryReactionToGasGDrive = async (params: {
         folderId: FMCU_GDRIVE_FOLDER_ID,
         ...params,
       }),
+      keepalive: true,
     });
   } catch {
     // Ignore background sync error
@@ -415,6 +426,7 @@ export const syncStoryViewToGasGDrive = async (params: {
         folderId: FMCU_GDRIVE_FOLDER_ID,
         ...params,
       }),
+      keepalive: true,
     });
   } catch {
     // Ignore background sync error
@@ -428,11 +440,10 @@ export const syncStoryViewToGasGDrive = async (params: {
 export const deleteStoryFromGasGDrive = async (storyId: string): Promise<void> => {
   if (!storyId) return;
 
-  // 1. Immediately record in local tombstone and clean local caches
-  recordDeletedStoryId(storyId);
-  await removeStoryFromIdb(storyId);
+  // 1. Immediately record in local tombstone, purge local storage & IndexedDB (0ms local sync)
+  purgeDeletedStoryIds([storyId]);
 
-  // 2. Broadcast to other open tabs and components immediately
+  // 2. Broadcast to other open tabs and components immediately (0ms)
   try {
     if (typeof BroadcastChannel !== 'undefined') {
       const channel = new BroadcastChannel('fmcu_story_reaction_channel');
@@ -446,36 +457,45 @@ export const deleteStoryFromGasGDrive = async (storyId: string): Promise<void> =
     // ignore
   }
 
-  // 3. Purge from Edge Cloud Vault ('stories' collection) & record in 'deleted_stories' tombstone collection
-  try {
-    const res = await fetch(GAS_VAULT_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'db_get_collection', collection: 'stories' }),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
-        const updatedStories = json.data.filter((s: any) => s && s.id !== storyId);
-        await fetch(GAS_VAULT_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'db_save_collection',
-            collection: 'stories',
-            data: updatedStories,
-          }),
-        });
-      }
-    }
-
-    // Record in cloud vault tombstone (keep recent 200 tombstones)
-    let existingTombstones: any[] = [];
+  // 3. Fast Parallel Cloud Purge with keepalive: true
+  // Even if user refreshes page or closes tab immediately, keepalive guarantees requests finish!
+  const purgeVaultPromise = (async () => {
     try {
+      const res = await fetch(GAS_VAULT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'db_get_collection', collection: 'stories' }),
+        keepalive: true,
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
+          const updatedStories = json.data.filter((s: any) => s && s.id !== storyId);
+          await fetch(GAS_VAULT_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'db_save_collection',
+              collection: 'stories',
+              data: updatedStories,
+            }),
+            keepalive: true,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Vault story collection delete error:', e);
+    }
+  })();
+
+  const tombstonePromise = (async () => {
+    try {
+      let existingTombstones: any[] = [];
       const delGetRes = await fetch(GAS_VAULT_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'db_get_collection', collection: 'deleted_stories' }),
+        keepalive: true,
       });
       if (delGetRes.ok) {
         const delJson = await delGetRes.json();
@@ -483,46 +503,48 @@ export const deleteStoryFromGasGDrive = async (storyId: string): Promise<void> =
           existingTombstones = delJson.data;
         }
       }
-    } catch {
-      // fallback
+
+      const updatedTombstones = [
+        ...existingTombstones.filter((t: any) => t && t.id !== storyId),
+        { id: storyId, deletedAtMs: Date.now() },
+      ].slice(-300);
+
+      await fetch(GAS_VAULT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'db_save_collection',
+          collection: 'deleted_stories',
+          data: updatedTombstones,
+        }),
+        keepalive: true,
+      });
+    } catch (e) {
+      console.warn('Vault tombstone error:', e);
     }
+  })();
 
-    const updatedTombstones = [
-      ...existingTombstones.filter((t: any) => t && t.id !== storyId),
-      { id: storyId, deletedAtMs: Date.now() },
-    ].slice(-200);
+  const driveTrashPromise = (async () => {
+    try {
+      const gasUrl = DEFAULT_GAS_GDRIVE_URL;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      await fetch(gasUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'deleteStory',
+          folderId: FMCU_GDRIVE_FOLDER_ID,
+          storyId,
+        }),
+        keepalive: true,
+      });
+    } catch {
+      // Ignore background sync error
+    }
+  })();
 
-    await fetch(GAS_VAULT_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'db_save_collection',
-        collection: 'deleted_stories',
-        data: updatedTombstones,
-      }),
-    });
-  } catch (e) {
-    console.warn('Cloud vault story delete error:', e);
-  }
-
-  // 4. Concurrently notify GAS WebApp to trash the Drive file
-  const gasUrl = DEFAULT_GAS_GDRIVE_URL;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-
-  try {
-    await fetch(gasUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'deleteStory',
-        folderId: FMCU_GDRIVE_FOLDER_ID,
-        storyId,
-      }),
-    });
-  } catch {
-    // Ignore background sync error
-  }
+  await Promise.allSettled([purgeVaultPromise, tombstonePromise, driveTrashPromise]);
 };
 
 export const FMCU_GDRIVE_PROFILE_SUBFOLDER = 'FMCU_FOTO_PROFIL_USER';

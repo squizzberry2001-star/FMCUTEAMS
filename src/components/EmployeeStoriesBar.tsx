@@ -266,86 +266,99 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }
   }, [userViewedStorageKey]);
 
-  // Load high-res stories from IndexedDB & Google Drive GAS on mount + periodic 24h prune
+  // Load stories from IndexedDB on initial mount, and maintain continuous high-frequency realtime sync
   useEffect(() => {
     let mounted = true;
+    let pollTimeout: any = null;
+    let isSyncing = false;
 
-    const loadAndSync = async () => {
-      const nowMs = Date.now();
-      const idbStories = await loadStoriesFromIdb();
+    // Load from local IndexedDB cache once on cold start
+    loadStoriesFromIdb().then((idbStories) => {
       if (mounted && idbStories && idbStories.length > 0) {
+        const nowMs = Date.now();
         const validIdb = idbStories.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id));
         setStories((prev) => {
-          const map = new Map<string, StorySlide>();
-          prev.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id)).forEach((s) => map.set(s.id, s));
-          validIdb.forEach((item) => {
-            const existing = map.get(item.id);
-            if (existing) {
-              map.set(item.id, {
-                ...item,
-                ...existing,
-                reactions: mergeStoryReactions(existing.reactions, item.reactions),
-                views: Array.from(new Set([...(existing.views || []), ...(item.views || [])])),
-              });
-            } else {
-              map.set(item.id, item);
-            }
-          });
-          return Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs);
+          if (prev.length > 0) return prev;
+          return validIdb;
         });
       }
+    });
 
-      const remoteStories = await fetchActiveStoriesFromGasGDrive();
-      if (mounted && remoteStories) {
-        const validRemote = remoteStories.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id));
-        setStories((prev) => {
+    const loadAndSync = async () => {
+      if (isSyncing || !navigator.onLine) return;
+      isSyncing = true;
+      try {
+        const nowMs = Date.now();
+        const remoteStories = await fetchActiveStoriesFromGasGDrive();
+        if (!mounted) return;
+
+        if (remoteStories !== null) {
+          const validRemote = remoteStories.filter(
+            (s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id)
+          );
           const remoteIds = new Set(validRemote.map((r) => r.id));
-          const map = new Map<string, StorySlide>();
 
-          // Keep local stories from prev ONLY IF they are in validRemote OR created less than 20s ago (in-flight upload)
-          prev.forEach((s) => {
-            const isFreshLocal = nowMs - (s.createdAtMs || 0) < 20000;
-            if (!isStoryDeleted(s.id) && isStoryActive24h(s, nowMs) && (remoteIds.has(s.id) || isFreshLocal)) {
-              map.set(s.id, s);
-            }
-          });
+          setStories((prev) => {
+            const map = new Map<string, StorySlide>();
 
-          validRemote.forEach((item) => {
-            const existing = map.get(item.id);
-            if (existing) {
-              map.set(item.id, {
-                ...item,
-                ...existing,
-                reactions: mergeStoryReactions(existing.reactions, item.reactions),
-                views: Array.from(new Set([...(existing.views || []), ...(item.views || [])])),
-              });
-            } else {
-              map.set(item.id, item);
-            }
+            // Keep local stories ONLY IF they exist in remote OR are in-flight upload by current user (< 15s)
+            prev.forEach((s) => {
+              const isMyFreshLocal =
+                (s.userId === currentUserId || s.userName.toLowerCase() === currentUserName.toLowerCase()) &&
+                nowMs - (s.createdAtMs || 0) < 15000;
+              if (!isStoryDeleted(s.id) && isStoryActive24h(s, nowMs) && (remoteIds.has(s.id) || isMyFreshLocal)) {
+                map.set(s.id, s);
+              }
+            });
+
+            validRemote.forEach((item) => {
+              const existing = map.get(item.id);
+              if (existing) {
+                map.set(item.id, {
+                  ...item,
+                  ...existing,
+                  reactions: mergeStoryReactions(existing.reactions, item.reactions),
+                  views: Array.from(new Set([...(existing.views || []), ...(item.views || [])])),
+                });
+              } else {
+                map.set(item.id, item);
+              }
+            });
+
+            const nextStories = Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs);
+            // Save clean list to local caches immediately
+            saveStoriesToIdb(nextStories);
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(nextStories));
+            } catch {}
+            return nextStories;
           });
-          return Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs);
-        });
+        }
+      } catch (e) {
+        console.warn('Stories realtime sync warning:', e);
+      } finally {
+        isSyncing = false;
       }
     };
 
-    loadAndSync();
+    // Adaptive non-overlapping real-time polling loop (social-media grade)
+    const scheduleNextPoll = (delayMs: number = 2000) => {
+      if (!mounted) return;
+      clearTimeout(pollTimeout);
+      pollTimeout = setTimeout(async () => {
+        if (typeof document !== 'undefined' && !document.hidden && navigator.onLine) {
+          await loadAndSync();
+        }
+        scheduleNextPoll(2000);
+      }, delayMs);
+    };
 
-    // 1. Ultra-fast background interval (2.5 seconds) for seamless real-time cross-device updates
-    const timer = setInterval(() => {
-      if (typeof document !== 'undefined' && !document.hidden) {
-        const nowMs = Date.now();
-        setStories((prev) => {
-          const active = prev.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id));
-          return active.length === prev.length ? prev : active;
-        });
-        loadAndSync();
-      }
-    }, 2500);
+    loadAndSync().finally(() => scheduleNextPoll(2000));
 
-    // 2. Immediate sync on tab focus, online, and visibility change
+    // Immediate sync on tab focus, network recovery, or visibility change
     const handleImmediateSync = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
-        loadAndSync();
+        scheduleNextPoll(0);
       }
     };
 
@@ -355,12 +368,12 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
     return () => {
       mounted = false;
-      clearInterval(timer);
+      clearTimeout(pollTimeout);
       window.removeEventListener('focus', handleImmediateSync);
       window.removeEventListener('online', handleImmediateSync);
       document.removeEventListener('visibilitychange', handleImmediateSync);
     };
-  }, []);
+  }, [currentUserId, currentUserName]);
 
   // Real-time local BroadcastChannel + Storage Event for instant story sync (0ms)
   useEffect(() => {
@@ -879,6 +892,17 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     setCardFlipState({ dir: null, key: 0 });
   };
 
+  // Auto-close or clamp index gracefully if active story is remotely deleted while viewer is open
+  useEffect(() => {
+    if (activeViewerGroupIdx !== null) {
+      if (currentViewerSlides.length === 0) {
+        closeViewer();
+      } else if (activeSlideIdx >= currentViewerSlides.length) {
+        setActiveSlideIdx(Math.max(0, currentViewerSlides.length - 1));
+      }
+    }
+  }, [activeViewerGroupIdx, currentViewerSlides.length, activeSlideIdx]);
+
   const handleNextSlide = (isFromAutoTimer: boolean = false) => {
     if (activeViewerGroupIdx === null) return;
     const now = Date.now();
@@ -1220,10 +1244,24 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   };
 
   const handleDeleteOwnStory = (storyId: string) => {
+    // 1. Immediately record in local tombstone & purge IndexedDB (0ms)
     recordDeletedStoryId(storyId);
     removeStoryFromIdb(storyId);
     setStories((prev) => prev.filter((s) => s.id !== storyId));
 
+    // 2. Synchronously write clean state to localStorage so instant refresh never resurrects it
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((s: StorySlide) => s && s.id !== storyId);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+        }
+      }
+    } catch {}
+
+    // 3. Local BroadcastChannel and window event for 0ms cross-tab sync
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         const channel = new BroadcastChannel('fmcu_story_reaction_channel');
@@ -1237,7 +1275,9 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       // ignore
     }
 
+    // 4. Fast parallel cloud purge (keepalive: true ensures it completes even if page reloads)
     deleteStoryFromGasGDrive(storyId);
+
     if (currentViewerSlides.length <= 1) {
       closeViewer();
     } else {
