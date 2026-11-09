@@ -530,6 +530,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     // Admin direct route from User GPS Pinpoint to Today's Target Store
     if (isAdmin && showRouteLine && showUserPinpoints && shouldDrawRoute) {
       adminUserPinpoints.forEach((up) => {
+        if (!up.hasStoreVisitToday || !up.targetStoreCode) return;
         const targetStore = todayVisitPoints.find((s) => s.code === up.targetStoreCode);
         if (targetStore && up.distanceToStoreMeters < 50000) {
           L.polyline(
@@ -630,6 +631,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         }).addTo(vectorGroup);
 
         uCircle.on('click', () => {
+          const hasStore = Boolean(up.hasStoreVisitToday && up.targetStoreCode);
           L.popup({ closeButton: true, autoPan: true })
             .setLatLng([up.lat, up.lng])
             .setContent(
@@ -641,12 +643,21 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 <div style="font-size:13px;font-weight:900;color:#0F172A;margin-top:2px;">${up.userName}</div>
                 <div style="font-size:10px;color:#64748B;margin-bottom:6px;">${up.role}</div>
                 <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:6px;font-size:10.5px;line-height:1.45;">
-                  <div><strong>Tujuan:</strong> ${up.targetStoreName} (#${up.targetStoreCode})</div>
-                  <div><strong>Jarak Aktual:</strong> ${
-                    up.distanceToStoreMeters >= 1000
-                      ? (up.distanceToStoreMeters / 1000).toFixed(1) + ' km'
-                      : up.distanceToStoreMeters + ' m'
-                  } (${up.isInsideRadius ? '✅ Dalam Radius' : '🚗 Menuju Lokasi'})</div>
+                  ${
+                    hasStore
+                      ? `<div><strong>Tujuan Toko:</strong> ${up.targetStoreName} (#${up.targetStoreCode})</div>
+                         <div><strong>Jarak Aktual:</strong> ${
+                           up.distanceToStoreMeters >= 1000
+                             ? (up.distanceToStoreMeters / 1000).toFixed(1) + ' km'
+                             : up.distanceToStoreMeters + ' m'
+                         } (${up.isInsideRadius ? '✅ Dalam Radius' : '🚗 Menuju Lokasi'})</div>`
+                      : `<div><strong>Agenda Hari Ini:</strong> ${up.todayAgendaTitle || up.targetStoreName}</div>
+                         <div><strong>Status:</strong> ${
+                           up.todayAgendaCategory === 'OFF'
+                             ? '🏖️ Libur (OFF)'
+                             : '📍 Standby / Non-Store Visit'
+                         }</div>`
+                  }
                   <div><strong>Sumber GPS:</strong> Web Aktif • GPS Menyala (Realtime)</div>
                   ${up.capturedAt ? `<div><strong>Waktu:</strong> ${up.capturedAt}</div>` : ''}
                   <div style="font-size:9.5px;color:#64748B;margin-top:2px;"><strong>Koordinat:</strong> ${up.lat.toFixed(5)}°, ${up.lng.toFixed(5)}°</div>

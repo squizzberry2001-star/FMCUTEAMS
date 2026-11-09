@@ -11,12 +11,11 @@ import {
   Download,
   Plus,
   FileSpreadsheet,
-  CheckCircle2,
-  Circle,
   Edit3,
   Trash2,
   Lock,
   Shield,
+  MapPin,
 } from 'lucide-react';
 import { ScheduleAgenda, User, SCHEDULE_CATEGORY_OPTIONS } from '../types';
 import { DeveloperFooter } from './DeveloperFooter';
@@ -525,115 +524,118 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Timeline & Agenda List Card */}
-        <div className="w-full md:flex-1 min-w-0 bg-white rounded-3xl p-4 sm:p-5 shadow-soft-card border border-slate-100">
-          {/* Tab Filter: Tanggal Ini, Semua Tim, & 1 Minggu Penuh */}
-          <div className="flex items-center gap-1.5 mb-2.5 bg-slate-100/80 p-1 rounded-2xl">
-            <button
-              type="button"
-              onClick={() => setTimelineTab('selected')}
-              className={`flex-1 py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer truncate ${
-                timelineTab === 'selected' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'
-              }`}
-            >
-              Tanggal Ini ({mySelectedDayAgendas.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimelineTab('allTeam')}
-              className={`flex-1 py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer truncate ${
-                timelineTab === 'allTeam' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'
-              }`}
-            >
-              Semua Tim ({allTeamAgendasOnDate.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimelineTab('fullWeek')}
-              className={`flex-1 py-1.5 px-1 text-[11px] font-bold rounded-xl transition-all cursor-pointer truncate ${
-                timelineTab === 'fullWeek' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'
-              }`}
-            >
-              1 Minggu ({fullWeekAgendas.length})
-            </button>
-          </div>
-
-          {/* Info rentang tanggal saat tab 1 Minggu Penuh aktif */}
-          {timelineTab === 'fullWeek' && (
-            <div className="flex items-center justify-between px-1.5 mb-2">
-              <span className="text-[10px] font-bold text-teal-700">
-                Jadwal 1 Minggu Penuh: {formatShortDayDate(weekStartStr)} – {formatShortDayDate(weekEndStr)}
-              </span>
-              <span className="text-[10px] font-light text-slate-500">
-                {groupedFullWeekByPerson.length} personel
-              </span>
+        {/* Right Column: Timeline & Agenda List (Lega, Tanpa Container Background yang Sempit) */}
+        <div className="w-full md:flex-1 min-w-0 space-y-3.5">
+          {/* Header Controls: Tab Filter (Tanggal Ini, Semua Tim, 1 Minggu) & Search Filter */}
+          <div className="bg-white rounded-3xl p-3.5 sm:p-4 shadow-soft-card border border-slate-100">
+            {/* Tab Filter: Tanggal Ini, Semua Tim, & 1 Minggu Penuh */}
+            <div className="flex items-center gap-1.5 mb-2.5 bg-slate-100/90 p-1 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setTimelineTab('selected')}
+                className={`flex-1 py-2 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer truncate ${
+                  timelineTab === 'selected' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                Tanggal Ini ({mySelectedDayAgendas.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimelineTab('allTeam')}
+                className={`flex-1 py-2 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer truncate ${
+                  timelineTab === 'allTeam' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                Semua Tim ({allTeamAgendasOnDate.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimelineTab('fullWeek')}
+                className={`flex-1 py-2 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer truncate ${
+                  timelineTab === 'fullWeek' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                1 Minggu ({fullWeekAgendas.length})
+              </button>
             </div>
-          )}
 
-          {/* Fitur Filter (Search + Dropdown Kategori Sejajar + Dropdown Nama Tim) */}
-          <div className="flex items-center gap-2 mb-3">
-            <div className="relative flex-1 min-w-0">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={nameFilter}
-                onChange={(e) => setNameFilter(e.target.value)}
-                placeholder="Cari agenda atau nama..."
-                className="w-full bg-white/95 border border-slate-200/90 rounded-xl pl-8 pr-7 py-1.5 text-[11px] font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-teal-500 shadow-2xs transition-all"
-              />
-              {nameFilter && (
-                <button
-                  type="button"
-                  onClick={() => setNameFilter('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+            {/* Info rentang tanggal saat tab 1 Minggu Penuh aktif */}
+            {timelineTab === 'fullWeek' && (
+              <div className="flex items-center justify-between px-1.5 mb-2">
+                <span className="text-[10.5px] font-bold text-teal-700">
+                  Jadwal 1 Minggu Penuh: {formatShortDayDate(weekStartStr)} – {formatShortDayDate(weekEndStr)}
+                </span>
+                <span className="text-[10px] font-medium text-slate-500">
+                  {groupedFullWeekByPerson.length} personel
+                </span>
+              </div>
+            )}
+
+            {/* Fitur Filter (Search + Dropdown Kategori Sejajar + Dropdown Nama Tim) */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  placeholder="Cari agenda atau nama..."
+                  className="w-full bg-slate-50/80 border border-slate-200/90 rounded-xl pl-8 pr-7 py-2 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-teal-500 focus:bg-white shadow-2xs transition-all"
+                />
+                {nameFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setNameFilter('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Kategori */}
+              <div className="relative shrink-0 max-w-[130px] sm:max-w-[155px] md:max-w-[180px]">
+                <Tag className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={selectedCategoryDropdown}
+                  onChange={(e) => setSelectedCategoryDropdown(e.target.value)}
+                  className="w-full bg-slate-50/80 border border-slate-200/90 rounded-xl pl-6 pr-5 py-2 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 focus:bg-white cursor-pointer truncate shadow-2xs"
+                  title="Filter berdasarkan Kategori Agenda"
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+                  <option value="ALL" className="text-xs font-semibold text-slate-800 py-1">Semua Kategori</option>
+                  {SCHEDULE_CATEGORY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value} className="text-xs font-medium text-slate-800 py-1">
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Filter Kategori (Sejajar dengan Textbox Search) */}
-            <div className="relative shrink-0 max-w-[130px] sm:max-w-[155px] md:max-w-[180px]">
-              <Tag className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
-                value={selectedCategoryDropdown}
-                onChange={(e) => setSelectedCategoryDropdown(e.target.value)}
-                className="w-full bg-white/95 border border-slate-200/90 rounded-xl pl-6 pr-5 py-1.5 text-[10.5px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer truncate shadow-2xs"
-                title="Filter berdasarkan Kategori Agenda"
-              >
-                <option value="ALL" className="text-[10.5px] font-semibold text-slate-800 py-1">Semua Kategori</option>
-                {SCHEDULE_CATEGORY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="text-[10.5px] font-medium text-slate-800 py-1">
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filter Nama Tim */}
-            <div className="relative shrink-0 max-w-[115px] sm:max-w-[140px] md:max-w-[165px]">
-              <Users className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
-                value={selectedPersonDropdown}
-                onChange={(e) => setSelectedPersonDropdown(e.target.value)}
-                className="w-full bg-white/95 border border-slate-200/90 rounded-xl pl-6 pr-5 py-1.5 text-[10.5px] font-bold text-slate-700 outline-none focus:border-teal-500 cursor-pointer truncate shadow-2xs"
-                title="Filter berdasarkan Nama Tim (A-Z)"
-              >
-                <option value="ALL" className="text-[10.5px] font-semibold text-slate-800 py-1">Semua Nama</option>
-                {allTeamNamesAZ.map((personName) => (
-                  <option key={personName} value={personName} className="text-[10.5px] font-medium text-slate-800 py-1">
-                    {personName}
-                  </option>
-                ))}
-              </select>
+              {/* Filter Nama Tim */}
+              <div className="relative shrink-0 max-w-[115px] sm:max-w-[140px] md:max-w-[165px]">
+                <Users className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={selectedPersonDropdown}
+                  onChange={(e) => setSelectedPersonDropdown(e.target.value)}
+                  className="w-full bg-slate-50/80 border border-slate-200/90 rounded-xl pl-6 pr-5 py-2 text-[11px] font-bold text-slate-700 outline-none focus:border-teal-500 focus:bg-white cursor-pointer truncate shadow-2xs"
+                  title="Filter berdasarkan Nama Tim (A-Z)"
+                >
+                  <option value="ALL" className="text-xs font-semibold text-slate-800 py-1">Semua Nama</option>
+                  {allTeamNamesAZ.map((personName) => (
+                    <option key={personName} value={personName} className="text-xs font-medium text-slate-800 py-1">
+                      {personName}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
-          {/* Minimalist Agenda List (Clean Typography, WhatsApp Broadcast & Actions) */}
-          <div className="px-1">
+          {/* Minimalist Agenda List (Lega, Tanpa Circle Check, Judul Penuh Tanpa Terpotong) */}
+          <div>
             {displayedAgendas.length === 0 ? (
-              <div className="py-8 text-center">
-                <p className="text-slate-400 text-[11px] font-light">
+              <div className="py-10 text-center bg-white rounded-3xl p-6 border border-slate-100 shadow-soft-card">
+                <p className="text-slate-400 text-xs font-medium">
                   {timelineTab === 'fullWeek'
                     ? `Tidak ada jadwal yang cocok pada minggu ${formatShortDayDate(weekStartStr)} – ${formatShortDayDate(weekEndStr)}.`
                     : `Tidak ada jadwal yang cocok pada tanggal ${selectedDateStr}.`}
@@ -642,24 +644,35 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                   <button
                     type="button"
                     onClick={onOpenNewAgenda}
-                    className="mt-3 px-4 py-2 rounded-full bg-[#2BB3A0] hover:bg-[#259b8b] text-white text-[11px] font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                    className="mt-3.5 px-4 py-2 rounded-full bg-[#2BB3A0] hover:bg-[#259b8b] text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer inline-flex items-center gap-1.5"
                   >
-                    + Buat Agenda Tanggal Ini
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Buat Agenda Tanggal Ini</span>
                   </button>
                 )}
               </div>
             ) : timelineTab === 'fullWeek' ? (
-              /* Tampilan 1 Minggu Penuh: Visual Nama Kecil Bold, lalu di bawahnya semua agendanya */
-              <div className="divide-y divide-slate-200/70">
+              /* Tampilan 1 Minggu Penuh: Kartu per Personel yang rapi dan lega */
+              <div className="space-y-4">
                 {groupedFullWeekByPerson.map((group) => (
-                  <div key={group.picName} className="py-2.5 px-1">
-                    {/* Visual Nama Kecil Bold */}
-                    <p className="text-[11px] font-bold text-slate-900 leading-tight mb-1.5">
-                      {group.picName}
-                    </p>
+                  <div key={group.picName} className="bg-white rounded-3xl p-4 sm:p-5 shadow-soft-card border border-slate-100 space-y-3">
+                    {/* Header Personel */}
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#32C2AD] to-[#20A894] text-white font-black text-xs flex items-center justify-center uppercase shadow-2xs">
+                          {group.picName.substring(0, 2)}
+                        </div>
+                        <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-tight">
+                          {group.picName}
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200/60">
+                        {group.items.length} agenda
+                      </span>
+                    </div>
 
                     {/* Di bawahnya semua agendanya dalam satu minggu penuh */}
-                    <div className="space-y-1 pl-2 border-l border-slate-200/80">
+                    <div className="space-y-2">
                       {group.items.map((item) => (
                         <div
                           key={item.id}
@@ -667,55 +680,46 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                             if (onSelectAgenda) onSelectAgenda(item);
                             else if (onEditAgenda && !isReadOnly) onEditAgenda(item);
                           }}
-                          className="w-full text-left py-1.5 px-2 rounded-lg hover:bg-slate-100/70 active:bg-slate-100 transition-colors flex items-center justify-between gap-2 cursor-pointer group"
+                          className="w-full text-left p-3 sm:p-3.5 rounded-2xl bg-slate-50/70 hover:bg-slate-100/90 active:bg-slate-100 border border-slate-200/60 transition-all flex items-start justify-between gap-3 cursor-pointer group"
                         >
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            {onToggleComplete && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onToggleComplete(item.id, e);
-                                }}
-                                className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer shrink-0"
-                                title={item.completed ? 'Tandai Belum Selesai' : 'Tandai Selesai'}
-                              >
-                                {item.completed ? (
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                ) : (
-                                  <Circle className="w-3.5 h-3.5 text-slate-300 hover:text-emerald-500" />
-                                )}
-                              </button>
-                            )}
-                            <p
-                              className={`text-[11px] font-light leading-snug min-w-0 flex-1 truncate ${
-                                item.completed ? 'text-slate-400 line-through' : 'text-slate-600'
-                              }`}
-                            >
-                              <span className="font-normal text-slate-500">
-                                {formatShortDayDate(item.date)} •{' '}
+                          <div className="min-w-0 flex-1">
+                            {/* Tanggal & Waktu */}
+                            <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                              <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200/60">
+                                {formatShortDayDate(item.date)}
                               </span>
-                              <span>
-                                {item.title}
-                                {item.location &&
-                                item.location !== 'OFF / LIBUR' &&
-                                !item.title.toLowerCase().includes(item.location.toLowerCase())
-                                  ? ` — ${item.location}`
-                                  : ''}
+                              <span className="text-[10px] font-semibold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200/70 tabular-nums">
+                                {item.category === 'OFF' ? 'OFF' : `${item.time} WIB`}
                               </span>
-                            </p>
+                              {item.category && item.category !== 'OFF' && (
+                                <span className="text-[9.5px] font-bold text-teal-700 bg-white px-1.5 py-0.5 rounded border border-teal-100">
+                                  {item.category}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Judul Agenda Lengkap Tanpa Terpotong */}
+                            <h4 className="text-xs sm:text-[13px] font-bold text-slate-800 leading-snug break-words group-hover:text-teal-700 transition-colors">
+                              {item.title}
+                            </h4>
+
+                            {/* Lokasi Toko */}
+                            {item.location &&
+                            item.location !== 'OFF / LIBUR' &&
+                            !item.title.toLowerCase().includes(item.location.toLowerCase()) ? (
+                              <p className="text-[11px] text-slate-500 font-medium mt-1 flex items-center gap-1 break-words">
+                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{item.location}</span>
+                              </p>
+                            ) : null}
                           </div>
 
-                          <div className="flex items-center gap-1 shrink-0">
-                            <span className="text-[9.5px] font-semibold text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded shrink-0 tabular-nums">
-                              {item.category === 'OFF' ? 'OFF' : item.time}
-                            </span>
-
+                          <div className="flex items-center gap-1 shrink-0 pt-0.5">
                             {/* WhatsApp Broadcast */}
                             <button
                               type="button"
                               onClick={(e) => handleBroadcastAgendaWhatsApp(item, e)}
-                              className="p-1 rounded-md text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"
                               title="Kirim Jadwal via WhatsApp"
                             >
                               <Share2 className="w-3.5 h-3.5" />
@@ -729,7 +733,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                                   e.stopPropagation();
                                   onEditAgenda(item);
                                 }}
-                                className="p-1 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors cursor-pointer"
                                 title="Edit Agenda"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
@@ -744,7 +748,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                                   e.stopPropagation();
                                   onDeleteAgenda(item.id);
                                 }}
-                                className="p-1 rounded-md text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                                 title="Hapus Agenda"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -758,7 +762,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                 ))}
               </div>
             ) : (
-              <div className="divide-y divide-slate-200/60">
+              /* Tampilan Tanggal Ini / Semua Tim: Setiap agenda berupa kartu luas mandiri, tanpa container sempit */
+              <div className="space-y-2.5">
                 {displayedAgendas.map((item) => (
                   <div
                     key={item.id}
@@ -766,64 +771,50 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                       if (onSelectAgenda) onSelectAgenda(item);
                       else if (onEditAgenda && !isReadOnly) onEditAgenda(item);
                     }}
-                    className="w-full text-left py-2 px-1.5 hover:bg-slate-100/60 active:bg-slate-100 rounded-xl transition-colors flex items-center justify-between gap-2.5 cursor-pointer group"
+                    className="w-full text-left p-3.5 sm:p-4 bg-white rounded-2xl border border-slate-100 shadow-soft-card hover:shadow-soft-md hover:border-teal-200/60 active:scale-[0.99] transition-all flex items-start justify-between gap-3 cursor-pointer group"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {onToggleComplete && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleComplete(item.id, e);
-                          }}
-                          className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer shrink-0"
-                          title={item.completed ? 'Tandai Belum Selesai' : 'Tandai Selesai'}
-                        >
-                          {item.completed ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          ) : (
-                            <Circle className="w-3.5 h-3.5 text-slate-300 hover:text-emerald-500" />
-                          )}
-                        </button>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        {/* Nama Kecil Bold */}
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-[11px] font-bold text-slate-900 leading-tight truncate">
-                            {item.pic}
-                          </p>
-                          {item.category && item.category !== 'OFF' && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-50 text-teal-700 border border-teal-200/60">
-                              {item.category}
-                            </span>
-                          )}
-                        </div>
-                        {/* Di Bawahnya Agendanya Thin Kecil */}
-                        <p
-                          className={`text-[11px] font-light leading-snug mt-0.5 truncate ${
-                            item.completed ? 'text-slate-400 line-through' : 'text-slate-600'
-                          }`}
-                        >
-                          {item.title}
-                          {item.location &&
-                          item.location !== 'OFF / LIBUR' &&
-                          !item.title.toLowerCase().includes(item.location.toLowerCase())
-                            ? ` — ${item.location}`
-                            : ''}
-                        </p>
+                    <div className="min-w-0 flex-1">
+                      {/* Row 1: Nama PIC, Badge Kategori, Waktu */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                        <span className="text-xs font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/70">
+                          {item.pic}
+                        </span>
+                        {item.category && item.category !== 'OFF' ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200/60">
+                            {item.category}
+                          </span>
+                        ) : item.category === 'OFF' ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/60">
+                            OFF
+                          </span>
+                        ) : null}
+                        <span className="text-[10.5px] font-semibold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200/60 tabular-nums">
+                          {item.category === 'OFF' ? 'Libur' : `${item.time} WIB`}
+                        </span>
                       </div>
+
+                      {/* Row 2: Judul Agenda Lengkap (TIDAK TERPOTONG, lega dan nyaman dibaca) */}
+                      <h4 className="text-[13px] sm:text-sm font-bold text-slate-800 leading-snug break-words group-hover:text-teal-700 transition-colors">
+                        {item.title}
+                      </h4>
+
+                      {/* Row 3: Detail Lokasi Toko jika berbeda dari judul */}
+                      {item.location &&
+                      item.location !== 'OFF / LIBUR' &&
+                      !item.title.toLowerCase().includes(item.location.toLowerCase()) ? (
+                        <p className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1 break-words">
+                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{item.location}</span>
+                        </p>
+                      ) : null}
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[9.5px] font-semibold text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded shrink-0 tabular-nums">
-                        {item.category === 'OFF' ? 'OFF' : item.time}
-                      </span>
-
+                    <div className="flex items-center gap-1 shrink-0 pt-0.5">
                       {/* WhatsApp Broadcast */}
                       <button
                         type="button"
                         onClick={(e) => handleBroadcastAgendaWhatsApp(item, e)}
-                        className="p-1 rounded-md text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"
                         title="Kirim Jadwal via WhatsApp"
                       >
                         <Share2 className="w-3.5 h-3.5" />
@@ -837,7 +828,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                             e.stopPropagation();
                             onEditAgenda(item);
                           }}
-                          className="p-1 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
                           title="Edit Agenda"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -852,7 +843,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                             e.stopPropagation();
                             onDeleteAgenda(item.id);
                           }}
-                          className="p-1 rounded-md text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="Hapus Agenda"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
