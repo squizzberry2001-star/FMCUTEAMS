@@ -32,6 +32,7 @@ import {
   calculateHaversineKm,
   buildAdminUserPinpoints,
   isNonStoreAgenda,
+  getLocalDateYmd,
 } from '../utils/mapGeoUtils';
 import {
   UserLivePresence,
@@ -151,14 +152,8 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
   const allMasterStores = useMemo(() => getMasterStores(), []);
 
-  // Tanggal Hari Ini (Actual)
-  const todayYmd = useMemo(() => {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  }, []);
+  // Tanggal Hari Ini (Actual) - Menggunakan helper getLocalDateYmd anti-anomali timezone WIB (UTC+7)
+  const todayYmd = useMemo(() => getLocalDateYmd(), []);
 
   // ============================================================================
   // 1. RESOLVE SCHEDULED STORE POINTS: HANYA ACTUAL ATAU KEDEPAN SAJA (a.date >= todayYmd)
@@ -166,6 +161,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   // - Hapus semua dummy pinpoint yang tidak terjadwalkan.
   // - Hapus jadwal masa lalu (a.date < todayYmd) dari peta pemantauan aktif.
   // - Garis rute hanya dimunculkan khusus untuk hari actual jika ada visit.
+  // - Multi-jadwal pada toko yang sama diagregasi tanpa kehilangan data PIC.
   // ============================================================================
   const { todayVisitPoints, upcomingStorePoints, allScheduledStorePoints } = useMemo(() => {
     const relevantAgendas = agendas
@@ -203,23 +199,72 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
       const resolved = resolveAgendaGeoPoints(ag, allMasterStores);
       resolved.forEach((pt) => {
+        const scheduleEntry = {
+          id: ag.id,
+          pic: ag.pic,
+          title: ag.title,
+          date: ag.date,
+          time: ag.time || '08:30',
+          category: ag.category,
+        };
+
         if (isToday) {
           // Khusus hari actual, catat store visit yang terurut
-          if (isVisitLike && !seenTodayCodes.has(pt.code)) {
-            seenTodayCodes.add(pt.code);
-            todayPoints.push({
-              ...pt,
-              routeOrder: todayOrder++,
-            });
+          if (isVisitLike) {
+            const existing = todayPoints.find((p) => p.code === pt.code);
+            if (existing) {
+              if (!existing.schedules) {
+                existing.schedules = [
+                  {
+                    id: existing.agendaId,
+                    pic: existing.agendaPic,
+                    title: existing.agendaTitle,
+                    date: existing.agendaDate,
+                    time: existing.agendaTime,
+                    category: existing.agendaCategory,
+                  },
+                ];
+              }
+              if (!existing.schedules.some((s) => s.id === ag.id)) {
+                existing.schedules.push(scheduleEntry);
+              }
+            } else {
+              seenTodayCodes.add(pt.code);
+              todayPoints.push({
+                ...pt,
+                routeOrder: todayOrder++,
+                schedules: [scheduleEntry],
+              });
+            }
           }
         } else {
           // Jadwal kedepan (masa depan: a.date > todayYmd) - HANYA toko visit yang sah
-          if (isVisitLike && !seenUpcomingCodes.has(pt.code)) {
-            seenUpcomingCodes.add(pt.code);
-            upcomingPoints.push({
-              ...pt,
-              routeOrder: undefined, // Rute garis hanya untuk hari actual
-            });
+          if (isVisitLike) {
+            const existing = upcomingPoints.find((p) => p.code === pt.code);
+            if (existing) {
+              if (!existing.schedules) {
+                existing.schedules = [
+                  {
+                    id: existing.agendaId,
+                    pic: existing.agendaPic,
+                    title: existing.agendaTitle,
+                    date: existing.agendaDate,
+                    time: existing.agendaTime,
+                    category: existing.agendaCategory,
+                  },
+                ];
+              }
+              if (!existing.schedules.some((s) => s.id === ag.id)) {
+                existing.schedules.push(scheduleEntry);
+              }
+            } else {
+              seenUpcomingCodes.add(pt.code);
+              upcomingPoints.push({
+                ...pt,
+                routeOrder: undefined, // Rute garis hanya untuk hari actual
+                schedules: [scheduleEntry],
+              });
+            }
           }
         }
       });
@@ -286,11 +331,12 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   // ============================================================================
   const adminUserPinpoints = useMemo(() => {
     if (!isAdmin) return [];
-    const targetRef =
-      todayVisitPoints.length > 0 ? todayVisitPoints : allScheduledStorePoints;
+    // ATURAN MUTLAK:
+    // User pinpoint hanya boleh dipasangkan dengan target toko HARI INI (todayVisitPoints).
+    // Dilarang keras fallback ke jadwal masa depan mendatang (allScheduledStorePoints) untuk hari ini.
     const allPoints = buildAdminUserPinpoints(
       users,
-      targetRef,
+      todayVisitPoints,
       radiusMeters,
       agendas,
       currentUser,
@@ -298,21 +344,62 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     );
     if (selectedPicFilter === 'ALL') return allPoints;
     return allPoints.filter((u) => isSamePersonName(u.userName, selectedPicFilter));
-  }, [isAdmin, users, todayVisitPoints, allScheduledStorePoints, radiusMeters, selectedPicFilter, agendas, currentUser, livePresences]);
+  }, [isAdmin, users, todayVisitPoints, radiusMeters, selectedPicFilter, agendas, currentUser, livePresences]);
 
   // ============================================================================
-  // 4. TOTAL ROUTE DISTANCE (KHUSUS HARI ACTUAL JIKA ADA VISIT)
+  // 4. GROUPED ROUTE LINES PER PERSONEL (MENCEGAH ZIGZAG LINTAS ORANG / KOTA)
   // ============================================================================
-  const todayRouteKm = useMemo(() => {
-    if (todayVisitPoints.length < 2) return 0;
-    let total = 0;
-    for (let i = 0; i < todayVisitPoints.length - 1; i++) {
-      const a = todayVisitPoints[i];
-      const b = todayVisitPoints[i + 1];
-      total += calculateHaversineKm(a.lat, a.lng, b.lat, b.lng);
+  const routesByPic = useMemo(() => {
+    // Jika filter spesifik atau mode user biasa: semua todayVisitPoints milik 1 orang
+    if (!isAdmin || selectedPicFilter !== 'ALL') {
+      if (todayVisitPoints.length >= 2) {
+        return [
+          {
+            pic: selectedPicFilter !== 'ALL' ? selectedPicFilter : (currentUser?.name || 'User'),
+            points: todayVisitPoints,
+          },
+        ];
+      }
+      return [];
     }
-    return Number(total.toFixed(2));
-  }, [todayVisitPoints]);
+
+    // Jika Admin melihat "ALL", kelompokkan titik kunjungan hari ini per personel (PIC)
+    const map = new Map<string, StoreGeoPoint[]>();
+    todayVisitPoints.forEach((pt) => {
+      const pics =
+        pt.schedules && pt.schedules.length > 0
+          ? (pt.schedules.map((s) => s.pic).filter(Boolean) as string[])
+          : [pt.agendaPic].filter(Boolean) as string[];
+
+      pics.forEach((pic) => {
+        if (!map.has(pic)) map.set(pic, []);
+        const list = map.get(pic)!;
+        if (!list.some((existing) => existing.code === pt.code)) {
+          list.push(pt);
+        }
+      });
+    });
+
+    const result: { pic: string; points: StoreGeoPoint[] }[] = [];
+    map.forEach((points, pic) => {
+      if (points.length >= 2) {
+        result.push({ pic, points });
+      }
+    });
+    return result;
+  }, [isAdmin, selectedPicFilter, currentUser, todayVisitPoints]);
+
+  // Total Route Distance (Km) - Akurat menjumlahkan jarak rute sah per personel
+  const todayRouteKm = useMemo(() => {
+    if (routesByPic.length === 0) return 0;
+    let total = 0;
+    routesByPic.forEach((r) => {
+      for (let i = 0; i < r.points.length - 1; i++) {
+        total += calculateHaversineKm(r.points[i].lat, r.points[i].lng, r.points[i + 1].lat, r.points[i + 1].lng);
+      }
+    });
+    return Number(total.toFixed(1));
+  }, [routesByPic]);
 
   // Load Leaflet on mount
   useEffect(() => {
@@ -494,45 +581,49 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       });
     }
 
-    // B. ROUTE LINES: HANYA DIMUNCULKAN KHUSUS UNTUK HARI ACTUAL JIKA ADA VISIT (>= 2 TITIK)
+    // B. ROUTE LINES: HANYA DIMUNCULKAN KHUSUS UNTUK HARI ACTUAL JIKA ADA VISIT (>= 2 TITIK PER PERSONEL)
     const shouldDrawRoute =
       (!isAdmin || showRouteLine) &&
-      todayVisitPoints.length >= 2 &&
-      viewMode !== 'upcoming';
+      viewMode !== 'upcoming' &&
+      routesByPic.length > 0;
 
     if (shouldDrawRoute) {
-      const routeLatLngs: [number, number][] = todayVisitPoints.map((p) => [p.lat, p.lng]);
+      routesByPic.forEach((route) => {
+        const routeLatLngs: [number, number][] = route.points.map((p) => [p.lat, p.lng]);
 
-      // Outer glow line
-      L.polyline(routeLatLngs, {
-        renderer,
-        color: '#0F766E',
-        weight: 6,
-        opacity: 0.25,
-        lineCap: 'round',
-        lineJoin: 'round',
-        interactive: false,
-      }).addTo(vectorGroup);
+        // Outer glow line
+        L.polyline(routeLatLngs, {
+          renderer,
+          color: '#0F766E',
+          weight: 5.5,
+          opacity: 0.28,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false,
+        }).addTo(vectorGroup);
 
-      // Inner dashed primary route line
-      L.polyline(routeLatLngs, {
-        renderer,
-        color: '#059669',
-        weight: 3.2,
-        opacity: 0.95,
-        dashArray: '8, 6',
-        lineCap: 'round',
-        lineJoin: 'round',
-        interactive: false,
-      }).addTo(vectorGroup);
+        // Inner dashed primary route line
+        L.polyline(routeLatLngs, {
+          renderer,
+          color: '#059669',
+          weight: 3.2,
+          opacity: 0.95,
+          dashArray: '8, 6',
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false,
+        }).addTo(vectorGroup);
+      });
     }
 
     // Admin direct route from User GPS Pinpoint to Today's Target Store
-    if (isAdmin && showRouteLine && showUserPinpoints && shouldDrawRoute) {
+    if (isAdmin && showRouteLine && showUserPinpoints) {
       adminUserPinpoints.forEach((up) => {
         if (!up.hasStoreVisitToday || !up.targetStoreCode) return;
-        const targetStore = todayVisitPoints.find((s) => s.code === up.targetStoreCode);
-        if (targetStore && up.distanceToStoreMeters < 50000) {
+        const targetStore =
+          todayVisitPoints.find((s) => s.code === up.targetStoreCode) ||
+          allMasterStores.find((s) => s.code === up.targetStoreCode);
+        if (targetStore && up.distanceToStoreMeters < 150000) {
           L.polyline(
             [
               [up.lat, up.lng],
@@ -541,9 +632,9 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             {
               renderer,
               color: up.isInsideRadius ? '#10B981' : '#3B82F6',
-              weight: 2,
-              opacity: 0.8,
-              dashArray: '4, 4',
+              weight: 2.2,
+              opacity: 0.85,
+              dashArray: '5, 5',
               interactive: false,
             }
           ).addTo(vectorGroup);
@@ -700,6 +791,8 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     selectedPicFilter,
     searchQuery,
     updateViewportLabels,
+    routesByPic,
+    allMasterStores,
   ]);
 
   // Cleanup map instance when modal closes
@@ -739,8 +832,12 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         : upcomingStorePoints;
     if (targetPoints.length > 0) {
       try {
-        const bounds = L.latLngBounds(targetPoints.map((p) => [p.lat, p.lng]));
-        mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+        if (targetPoints.length === 1) {
+          mapInstanceRef.current.setView([targetPoints[0].lat, targetPoints[0].lng], 14, { animate: true });
+        } else {
+          const bounds = L.latLngBounds(targetPoints.map((p) => [p.lat, p.lng]));
+          mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+        }
       } catch {
         // ignore
       }
@@ -778,12 +875,14 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 <span className="text-[11px] font-extrabold text-slate-900 whitespace-nowrap">
                   {displayedStorePoints.length} Toko Terjadwal
                 </span>
-                {todayVisitPoints.length >= 2 ? (
+                {routesByPic.length > 0 ? (
                   <>
                     <span className="text-slate-300 hidden sm:inline">•</span>
                     <span className="hidden sm:flex text-[11px] font-extrabold text-teal-700 items-center gap-1 whitespace-nowrap">
                       <Route className="w-3 h-3" />
-                      Rute Hari Ini ({todayRouteKm} km)
+                      {routesByPic.length === 1
+                        ? `Rute Hari Ini (${todayRouteKm} km)`
+                        : `${routesByPic.length} Rute Personel (${todayRouteKm} km)`}
                     </span>
                   </>
                 ) : todayVisitPoints.length === 1 ? (
@@ -1167,12 +1266,24 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               </div>
             </div>
 
-            {selectedStore.agendaPic && (
+            {selectedStore.schedules && selectedStore.schedules.length > 1 ? (
+              <div className="text-[10px] text-slate-600 font-semibold mb-2 bg-emerald-50/70 p-2 rounded-xl border border-emerald-200/70 space-y-1">
+                <div className="text-[9px] font-extrabold uppercase text-emerald-800 tracking-wider">
+                  {selectedStore.schedules.length} Personel Terjadwal ({selectedStore.agendaDate === todayYmd ? 'Hari Ini' : selectedStore.agendaDate}):
+                </div>
+                {selectedStore.schedules.map((sch, i) => (
+                  <div key={sch.id || i} className="flex items-center justify-between gap-1 text-[9.5px]">
+                    <span className="font-bold text-slate-800">• {sch.pic}</span>
+                    <span className="text-emerald-700 font-semibold tabular-nums">{sch.time || '08:30'}</span>
+                  </div>
+                ))}
+              </div>
+            ) : selectedStore.agendaPic ? (
               <div className="text-[10px] text-slate-600 font-semibold mb-2 bg-emerald-50/70 px-2.5 py-1 rounded-xl border border-emerald-200/70">
                 Jadwal: <strong className="text-emerald-800">{selectedStore.agendaPic}</strong> (
                 {selectedStore.agendaDate || ''} {selectedStore.agendaTime || ''})
               </div>
-            )}
+            ) : null}
 
             <div className="flex items-center justify-between gap-2">
               <div className="text-[10px] text-slate-500 truncate">
@@ -1204,18 +1315,24 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               </span>
             </span>
             {todayVisitPoints.length >= 2 && viewMode !== 'upcoming' && (
-              <a
-                href={`https://www.google.com/maps/dir/${todayVisitPoints
-                  .slice(0, 10)
-                  .map((p) => `${p.lat},${p.lng}`)
-                  .join('/')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[10px] font-extrabold text-teal-700 hover:text-teal-800 flex items-center gap-1 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200"
-              >
-                <Navigation className="w-3 h-3" />
-                <span>Buka Multi-Rute Hari Ini di Google Maps</span>
-              </a>
+              !isAdmin || selectedPicFilter !== 'ALL' ? (
+                <a
+                  href={`https://www.google.com/maps/dir/${todayVisitPoints
+                    .slice(0, 10)
+                    .map((p) => `${p.lat},${p.lng}`)
+                    .join('/')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-extrabold text-teal-700 hover:text-teal-800 flex items-center gap-1 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200"
+                >
+                  <Navigation className="w-3 h-3" />
+                  <span>Buka Multi-Rute Hari Ini di Google Maps</span>
+                </a>
+              ) : (
+                <span className="text-[9.5px] font-semibold text-slate-400">
+                  Filter per personel untuk membuka multi-rute Google Maps
+                </span>
+              )
             )}
           </div>
 

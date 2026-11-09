@@ -43,6 +43,15 @@ export function loadLeaflet(): Promise<any> {
   return leafletLoadPromise;
 }
 
+export interface StoreScheduleItem {
+  id?: string;
+  pic?: string;
+  title?: string;
+  date?: string;
+  time?: string;
+  category?: string;
+}
+
 export interface StoreGeoPoint {
   code: string;
   name: string;
@@ -62,6 +71,18 @@ export interface StoreGeoPoint {
   agendaPic?: string;
   agendaCategory?: string;
   routeOrder?: number;
+  schedules?: StoreScheduleItem[];
+}
+
+/**
+ * Standardized Indonesian local date YYYY-MM-DD
+ * Eliminates UTC midnight offset anomalies where UTC is yesterday during 00:00 - 06:59 WIB.
+ */
+export function getLocalDateYmd(date: Date = new Date()): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 /**
@@ -495,31 +516,78 @@ export function buildAdminUserPinpoints(
       return;
     }
 
-    // 1. Cari agenda user hari ini
-    const todayYmd = new Date().toISOString().split('T')[0];
+    // 1. Cari agenda user hari ini menggunakan local timezone YYYY-MM-DD
+    const todayYmd = getLocalDateYmd();
     const userTodayAgendas = agendas.filter(
       (a) => isSamePersonName(a.pic, u.name) && a.date === todayYmd
     );
 
     // Prioritaskan agenda visit toko hari ini
-    const todayVisitAgenda = userTodayAgendas.find(
+    const todayVisitAgendas = userTodayAgendas.filter(
       (a) => a.category === 'VISIT' || a.category === 'NSO' || Boolean(a.storeCode)
     );
 
-    // Agenda non-kunjungan hari ini (OFF, MEETING, TRAINING, dll)
+    // Agenda non-kunjungan hari ini (OFF, MEETING, TRAINING, OPERATION tanpa toko, dll)
     const todayNonVisitAgenda = userTodayAgendas.find(
       (a) => a.category !== 'VISIT' && a.category !== 'NSO' && !a.storeCode
     );
 
-    // Cari titik koordinat toko HANYA yang dijadwalkan khusus untuk user ini
-    let userStore = scheduledPoints.find((p) => isSamePersonName(p.agendaPic, u.name));
+    // Cari titik koordinat toko HANYA dari agenda visit HARI INI
+    let userStore: StoreGeoPoint | null = null;
+    let activeVisitAgenda: ScheduleAgenda | null = null;
 
-    if (!userStore && todayVisitAgenda) {
-      userStore = scheduledPoints.find(
-        (p) =>
-          (todayVisitAgenda.storeCode && p.code.toUpperCase() === todayVisitAgenda.storeCode.toUpperCase()) ||
-          (todayVisitAgenda.location && p.name.toLowerCase() === todayVisitAgenda.location.toLowerCase())
-      );
+    if (todayVisitAgendas.length > 0) {
+      // Jika ada lebih dari 1 visit hari ini, cari toko terdekat dari lokasi GPS aktual user
+      let bestStore: StoreGeoPoint | null = null;
+      let minDistance = Infinity;
+
+      for (const ag of todayVisitAgendas) {
+        // Coba cari di scheduledPoints yang sesuai dengan agenda PIC dan storeCode
+        let stPoint = scheduledPoints.find(
+          (p) =>
+            (ag.storeCode && p.code.toUpperCase() === ag.storeCode.toUpperCase()) ||
+            (p.agendaPic && isSamePersonName(p.agendaPic, u.name))
+        );
+
+        // Jika belum ada di scheduledPoints, resolve langsung dari master stores
+        if (!stPoint && ag.storeCode) {
+          const master = findMasterStoreByCodeOrName(ag.storeCode);
+          if (master) {
+            stPoint = toStoreGeoPoint(master, {
+              agendaId: ag.id,
+              agendaTitle: ag.title,
+              agendaDate: ag.date,
+              agendaTime: ag.time,
+              agendaPic: ag.pic,
+              agendaCategory: ag.category,
+            });
+          }
+        }
+        if (!stPoint && ag.location) {
+          const master = findMasterStoreByCodeOrName(ag.location);
+          if (master) {
+            stPoint = toStoreGeoPoint(master, {
+              agendaId: ag.id,
+              agendaTitle: ag.title,
+              agendaDate: ag.date,
+              agendaTime: ag.time,
+              agendaPic: ag.pic,
+              agendaCategory: ag.category,
+            });
+          }
+        }
+
+        if (stPoint) {
+          const d = calculateHaversineKm(realCoords.lat, realCoords.lng, stPoint.lat, stPoint.lng) * 1000;
+          if (d < minDistance) {
+            minDistance = d;
+            bestStore = stPoint;
+            activeVisitAgenda = ag;
+          }
+        }
+      }
+
+      userStore = bestStore;
     }
 
     const hasStoreVisitToday = Boolean(userStore);
@@ -535,30 +603,18 @@ export function buildAdminUserPinpoints(
     if (userStore) {
       targetCode = userStore.code;
       targetName = userStore.name;
-      agendaTitle = todayVisitAgenda?.title || userStore.agendaTitle || userStore.name;
-      agendaCategory = todayVisitAgenda?.category || 'VISIT';
+      agendaTitle = activeVisitAgenda?.title || userStore.agendaTitle || userStore.name;
+      agendaCategory = activeVisitAgenda?.category || userStore.agendaCategory || 'VISIT';
     } else if (todayNonVisitAgenda) {
       targetCode = '';
       targetName = todayNonVisitAgenda.title;
       agendaTitle = todayNonVisitAgenda.title;
-      agendaCategory = todayNonVisitAgenda.category;
+      agendaCategory = todayNonVisitAgenda.category || 'STANDBY';
     } else {
-      // Cek apakah ada jadwal kunjungan mendatang
-      const upcoming = agendas
-        .filter((a) => isSamePersonName(a.pic, u.name) && a.date > todayYmd)
-        .sort((a, b) => a.date.localeCompare(b.date))[0];
-
-      if (upcoming) {
-        targetCode = upcoming.storeCode || '';
-        targetName = upcoming.title;
-        agendaTitle = `Mendatang (${upcoming.date}): ${upcoming.title}`;
-        agendaCategory = upcoming.category;
-      } else {
-        targetCode = '';
-        targetName = 'Area Operasional FMCU';
-        agendaTitle = 'Standby (Tidak Ada Kunjungan Hari Ini)';
-        agendaCategory = 'STANDBY';
-      }
+      targetCode = '';
+      targetName = 'Area Operasional FMCU';
+      agendaTitle = 'Standby (Tidak Ada Kunjungan Hari Ini)';
+      agendaCategory = 'STANDBY';
     }
 
     result.push({
