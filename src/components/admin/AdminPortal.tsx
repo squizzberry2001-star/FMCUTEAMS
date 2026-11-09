@@ -34,7 +34,18 @@ import {
   BookOpen,
   PieChart,
   SlidersHorizontal,
-  Compass
+  Compass,
+  MapPin,
+  X,
+  Filter,
+  ArrowUpDown,
+  FileText,
+  UserCheck,
+  CalendarDays,
+  Layers,
+  ChevronDown,
+  CheckCircle,
+  HelpCircle,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ScheduleAgenda, ScheduleCategory, User, VisitReportData } from '../../types';
@@ -55,12 +66,15 @@ import {
   INITIAL_HOLDING_TIME_R23,
 } from '../../data/holdingTimeR23';
 import {
-  parseScheduleExcelSheet,
+  parseScheduleExcelFile,
   exportScheduleToTemplateExcel,
   exportMasterStoresToExcel,
   ParsedExcelScheduleSummary,
 } from '../../services/scheduleExcelService';
 
+// ============================================================================
+// PROPS INTERFACE
+// ============================================================================
 interface AdminPortalProps {
   adminUser: User;
   agendas: ScheduleAgenda[];
@@ -81,23 +95,457 @@ interface AdminPortalProps {
   onOpenLiveMaps?: () => void;
 }
 
-type AdminTab = 'agendas' | 'calendar' | 'analytics' | 'monitoring' | 'master-excel';
-type ActivityDomain = 'STORE' | 'OFFICE' | 'LEAVE' | 'ALL';
-type DateFilterPreset = 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'THIS_MONTH' | 'ALL' | 'CUSTOM';
+// ============================================================================
+// DOMAIN-ACCURATE ACTIVITY CLASSIFICATION
+// ATURAN PENTING FMCU:
+// "Tidak semua adalah kegiatan visit misal terdapat nama toko tapi agenda
+// bukan tertulis visit maka BUKAN visit. Filter dan analisa dengan cermat."
+// ============================================================================
+export type ActivityKind =
+  | 'VISIT'        // Hanya jika agenda secara eksplisit tertulis "VISIT" atau "KUNJUNGAN"
+  | 'MEETING'      // Meeting, Rapat, Koordinasi, Briefing, Evaluasi
+  | 'TRAINING'     // Training, Coaching, Pelatihan, Shadowing
+  | 'NSO'          // New Store Opening (Setup Toko Baru)
+  | 'AUDIT'        // Audit Investigasi / Khusus
+  | 'OPERATION'    // Maintenance, Waste, Thawing, Stock Opname, Pendampingan Kasir/Barista
+  | 'LEAVE'        // Cuti, Izin, Sakit
+  | 'OFF'          // Hari Libur / Off
+  | 'OTHER';       // Tugas Admin / Kantor / Lainnya
 
-// Category Configuration & Domain Mapping
-export const CATEGORY_DOMAINS: Record<ScheduleCategory, { domain: 'STORE' | 'OFFICE' | 'LEAVE'; label: string; color: string; bg: string; border: string }> = {
-  VISIT: { domain: 'STORE', label: 'Visit Toko', color: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  NSO: { domain: 'STORE', label: 'NSO Toko Baru', color: 'text-amber-800', bg: 'bg-amber-50', border: 'border-amber-200' },
-  AUDIT: { domain: 'STORE', label: 'Audit Investigasi', color: 'text-purple-800', bg: 'bg-purple-50', border: 'border-purple-200' },
-  OPERATION: { domain: 'STORE', label: 'Operasional Lapangan', color: 'text-teal-800', bg: 'bg-teal-50', border: 'border-teal-200' },
-  MEETING: { domain: 'OFFICE', label: 'Meeting / Koordinasi', color: 'text-blue-800', bg: 'bg-blue-50', border: 'border-blue-200' },
-  TRAINING: { domain: 'OFFICE', label: 'Training / Coaching', color: 'text-cyan-800', bg: 'bg-cyan-50', border: 'border-cyan-200' },
-  WORK_PLAN: { domain: 'OFFICE', label: 'Work Plan / Admin', color: 'text-indigo-800', bg: 'bg-indigo-50', border: 'border-indigo-200' },
-  CUTI: { domain: 'LEAVE', label: 'Cuti / Izin / Sakit', color: 'text-rose-800', bg: 'bg-rose-50', border: 'border-rose-200' },
-  OFF: { domain: 'LEAVE', label: 'Off / Hari Libur', color: 'text-slate-600', bg: 'bg-slate-100', border: 'border-slate-200' },
-};
+export interface ClassifiedAgenda {
+  agenda: ScheduleAgenda;
+  kind: ActivityKind;
+  isExplicitVisit: boolean;
+  requiresReport: boolean;
+  requiresCheckIn: boolean;
+  badge: {
+    label: string;
+    iconName: string;
+    color: string;
+    bg: string;
+    border: string;
+  };
+  status: {
+    code: 'COMPLETED' | 'IN_PROGRESS' | 'SCHEDULED' | 'LEAVE' | 'OFF';
+    label: string;
+    color: string;
+    bg: string;
+    border: string;
+    dot: string;
+  };
+  report?: VisitReportData;
+}
 
+/**
+ * Logika Klasifikasi Akurat:
+ * Membedakan secara tegas apakah suatu agenda adalah Kunjungan Visit Toko
+ * atau kegiatan lainnya meskipun lokasi menyebutkan nama toko.
+ */
+export function classifyAgendaItem(
+  agenda: ScheduleAgenda,
+  reportMap: Map<string, VisitReportData>
+): ClassifiedAgenda {
+  const titleLower = (agenda.title || '').toLowerCase().trim();
+  const catUpper = (agenda.category || '').toUpperCase();
+  const locLower = (agenda.location || '').toLowerCase();
+  const descLower = (agenda.description || '').toLowerCase();
+
+  // Terkait Laporan Visit
+  const report =
+    reportMap.get(agenda.id) ||
+    (agenda.storeCode && agenda.date ? reportMap.get(`${agenda.storeCode}_${agenda.date}`) : undefined);
+
+  // 1. Cuti / Izin / Sakit
+  if (
+    catUpper === 'CUTI' ||
+    titleLower.includes('cuti') ||
+    titleLower.includes('izin') ||
+    titleLower.includes('sakit')
+  ) {
+    return {
+      agenda,
+      kind: 'LEAVE',
+      isExplicitVisit: false,
+      requiresReport: false,
+      requiresCheckIn: false,
+      badge: {
+        label: 'Cuti / Izin',
+        iconName: 'Coffee',
+        color: 'text-rose-700',
+        bg: 'bg-rose-50',
+        border: 'border-rose-200',
+      },
+      status: {
+        code: 'LEAVE',
+        label: 'Cuti / Izin Resmi',
+        color: 'text-rose-700',
+        bg: 'bg-rose-50',
+        border: 'border-rose-200',
+        dot: 'bg-rose-500',
+      },
+      report: undefined,
+    };
+  }
+
+  // 2. Off / Hari Libur
+  if (
+    catUpper === 'OFF' ||
+    titleLower === 'off' ||
+    titleLower.startsWith('off ') ||
+    titleLower.includes('libur')
+  ) {
+    return {
+      agenda,
+      kind: 'OFF',
+      isExplicitVisit: false,
+      requiresReport: false,
+      requiresCheckIn: false,
+      badge: {
+        label: 'Off / Libur',
+        iconName: 'Coffee',
+        color: 'text-slate-600',
+        bg: 'bg-slate-100',
+        border: 'border-slate-200',
+      },
+      status: {
+        code: 'OFF',
+        label: 'Hari Libur / Off',
+        color: 'text-slate-600',
+        bg: 'bg-slate-100',
+        border: 'border-slate-200',
+        dot: 'bg-slate-400',
+      },
+      report: undefined,
+    };
+  }
+
+  // 3. Training / Coaching / Shadowing / Pelatihan
+  if (
+    catUpper === 'TRAINING' ||
+    titleLower.includes('training') ||
+    titleLower.includes('coaching') ||
+    titleLower.includes('shadowing') ||
+    titleLower.includes('pelatihan')
+  ) {
+    const isDone = Boolean(agenda.completed);
+    return {
+      agenda,
+      kind: 'TRAINING',
+      isExplicitVisit: false,
+      requiresReport: false,
+      requiresCheckIn: false,
+      badge: {
+        label: 'Training / Coaching',
+        iconName: 'BookOpen',
+        color: 'text-cyan-800',
+        bg: 'bg-cyan-50',
+        border: 'border-cyan-200',
+      },
+      status: {
+        code: isDone ? 'COMPLETED' : 'SCHEDULED',
+        label: isDone ? 'Selesai Dilaksanakan' : 'Terjadwal',
+        color: isDone ? 'text-emerald-700' : 'text-blue-700',
+        bg: isDone ? 'bg-emerald-50' : 'bg-blue-50',
+        border: isDone ? 'border-emerald-200' : 'border-blue-200',
+        dot: isDone ? 'bg-emerald-500' : 'bg-blue-500',
+      },
+      report: undefined,
+    };
+  }
+
+  // 4. Meeting / Koordinasi / Rapat
+  if (
+    catUpper === 'MEETING' ||
+    titleLower.includes('meeting') ||
+    titleLower.includes('rapat') ||
+    titleLower.includes('koordinasi') ||
+    titleLower.includes('briefing') ||
+    titleLower.includes('evaluasi')
+  ) {
+    const isDone = Boolean(agenda.completed);
+    return {
+      agenda,
+      kind: 'MEETING',
+      isExplicitVisit: false,
+      requiresReport: false,
+      requiresCheckIn: false,
+      badge: {
+        label: 'Meeting / Koordinasi',
+        iconName: 'Building2',
+        color: 'text-blue-800',
+        bg: 'bg-blue-50',
+        border: 'border-blue-200',
+      },
+      status: {
+        code: isDone ? 'COMPLETED' : 'SCHEDULED',
+        label: isDone ? 'Selesai Rapat' : 'Terjadwal',
+        color: isDone ? 'text-emerald-700' : 'text-blue-700',
+        bg: isDone ? 'bg-emerald-50' : 'bg-blue-50',
+        border: isDone ? 'border-emerald-200' : 'border-blue-200',
+        dot: isDone ? 'bg-emerald-500' : 'bg-blue-500',
+      },
+      report: undefined,
+    };
+  }
+
+  // 5. NSO (New Store Opening)
+  if (
+    catUpper === 'NSO' ||
+    titleLower.includes('nso') ||
+    titleLower.includes('opening') ||
+    titleLower.includes('buka toko')
+  ) {
+    const isDone = Boolean(agenda.completed);
+    return {
+      agenda,
+      kind: 'NSO',
+      isExplicitVisit: false,
+      requiresReport: false,
+      requiresCheckIn: false,
+      badge: {
+        label: 'NSO Toko Baru',
+        iconName: 'Sparkles',
+        color: 'text-amber-800',
+        bg: 'bg-amber-50',
+        border: 'border-amber-200',
+      },
+      status: {
+        code: isDone ? 'COMPLETED' : 'SCHEDULED',
+        label: isDone ? 'Selesai Setup NSO' : 'Terjadwal',
+        color: isDone ? 'text-emerald-700' : 'text-amber-700',
+        bg: isDone ? 'bg-emerald-50' : 'bg-amber-50',
+        border: isDone ? 'border-emerald-200' : 'border-amber-200',
+        dot: isDone ? 'bg-emerald-500' : 'bg-amber-500',
+      },
+      report: undefined,
+    };
+  }
+
+  // 6. Audit Khusus / Investigasi
+  if (
+    catUpper === 'AUDIT' ||
+    titleLower.includes('audit') ||
+    titleLower.includes('investigasi')
+  ) {
+    const isDone = Boolean(agenda.completed);
+    return {
+      agenda,
+      kind: 'AUDIT',
+      isExplicitVisit: false,
+      requiresReport: false,
+      requiresCheckIn: false,
+      badge: {
+        label: 'Audit Khusus',
+        iconName: 'ShieldCheck',
+        color: 'text-purple-800',
+        bg: 'bg-purple-50',
+        border: 'border-purple-200',
+      },
+      status: {
+        code: isDone ? 'COMPLETED' : 'SCHEDULED',
+        label: isDone ? 'Selesai Audit' : 'Terjadwal',
+        color: isDone ? 'text-emerald-700' : 'text-purple-700',
+        bg: isDone ? 'bg-emerald-50' : 'bg-purple-50',
+        border: isDone ? 'border-emerald-200' : 'border-purple-200',
+        dot: isDone ? 'bg-emerald-500' : 'bg-purple-500',
+      },
+      report: undefined,
+    };
+  }
+
+  // 7. Operasional Lapangan (Maintenance, Thawing, Waste, Stock Opname, Pendampingan Toko)
+  if (
+    catUpper === 'OPERATION' ||
+    titleLower.includes('maintenance') ||
+    titleLower.includes('opname') ||
+    titleLower.includes('thawing') ||
+    titleLower.includes('waste') ||
+    titleLower.includes('holding time') ||
+    titleLower.includes('support') ||
+    titleLower.includes('pendampingan') ||
+    titleLower.includes('bantuan')
+  ) {
+    const isDone = Boolean(agenda.completed);
+    return {
+      agenda,
+      kind: 'OPERATION',
+      isExplicitVisit: false,
+      requiresReport: false,
+      requiresCheckIn: false,
+      badge: {
+        label: 'Operasional Lapangan',
+        iconName: 'Briefcase',
+        color: 'text-teal-800',
+        bg: 'bg-teal-50',
+        border: 'border-teal-200',
+      },
+      status: {
+        code: isDone ? 'COMPLETED' : 'SCHEDULED',
+        label: isDone ? 'Selesai Penugasan' : 'Terjadwal',
+        color: isDone ? 'text-emerald-700' : 'text-teal-700',
+        bg: isDone ? 'bg-emerald-50' : 'bg-teal-50',
+        border: isDone ? 'border-emerald-200' : 'border-teal-200',
+        dot: isDone ? 'bg-emerald-500' : 'bg-teal-500',
+      },
+      report: undefined,
+    };
+  }
+
+  // 8. Work Plan / Tugas Admin / Kantor
+  if (
+    catUpper === 'WORK_PLAN' ||
+    titleLower.includes('work plan') ||
+    titleLower.includes('admin') ||
+    titleLower.includes('laporan') ||
+    titleLower.includes('rekap')
+  ) {
+    const isDone = Boolean(agenda.completed);
+    return {
+      agenda,
+      kind: 'OTHER',
+      isExplicitVisit: false,
+      requiresReport: false,
+      requiresCheckIn: false,
+      badge: {
+        label: 'Tugas Admin / Kantor',
+        iconName: 'FileText',
+        color: 'text-indigo-800',
+        bg: 'bg-indigo-50',
+        border: 'border-indigo-200',
+      },
+      status: {
+        code: isDone ? 'COMPLETED' : 'SCHEDULED',
+        label: isDone ? 'Selesai Tugas' : 'Terjadwal',
+        color: isDone ? 'text-emerald-700' : 'text-indigo-700',
+        bg: isDone ? 'bg-emerald-50' : 'bg-indigo-50',
+        border: isDone ? 'border-emerald-200' : 'border-indigo-200',
+        dot: isDone ? 'bg-emerald-500' : 'bg-indigo-500',
+      },
+      report: undefined,
+    };
+  }
+
+  // 9. EXPLICIT VISIT:
+  // HANYA dianggap VISIT jika:
+  // - Category secara eksplisit 'VISIT'
+  // - ATAU title secara eksplisit mengandung kata 'visit' atau 'kunjungan'
+  const isExplicitVisit =
+    catUpper === 'VISIT' ||
+    titleLower.includes('visit') ||
+    titleLower.includes('kunjungan');
+
+  if (isExplicitVisit) {
+    const actualIn = agenda.actualIn || report?.actualIn;
+    const actualOut = agenda.actualOut || report?.actualOut;
+    const isSubmitted = report?.status === 'SUBMITTED' || agenda.completed;
+
+    if (isSubmitted || (actualIn && actualOut)) {
+      return {
+        agenda,
+        kind: 'VISIT',
+        isExplicitVisit: true,
+        requiresReport: true,
+        requiresCheckIn: true,
+        badge: {
+          label: 'Visit Toko Resmi',
+          iconName: 'Store',
+          color: 'text-emerald-800 font-bold',
+          bg: 'bg-emerald-50',
+          border: 'border-emerald-300',
+        },
+        status: {
+          code: 'COMPLETED',
+          label: 'Selesai Kunjungan',
+          color: 'text-emerald-800',
+          bg: 'bg-emerald-50',
+          border: 'border-emerald-200',
+          dot: 'bg-emerald-500',
+        },
+        report,
+      };
+    }
+
+    if (actualIn && !actualOut) {
+      return {
+        agenda,
+        kind: 'VISIT',
+        isExplicitVisit: true,
+        requiresReport: true,
+        requiresCheckIn: true,
+        badge: {
+          label: 'Visit Toko Resmi',
+          iconName: 'Store',
+          color: 'text-emerald-800 font-bold',
+          bg: 'bg-emerald-50',
+          border: 'border-emerald-300',
+        },
+        status: {
+          code: 'IN_PROGRESS',
+          label: 'Di Toko (In-Progress)',
+          color: 'text-amber-800',
+          bg: 'bg-amber-50',
+          border: 'border-amber-300',
+          dot: 'bg-amber-500 animate-pulse',
+        },
+        report,
+      };
+    }
+
+    return {
+      agenda,
+      kind: 'VISIT',
+      isExplicitVisit: true,
+      requiresReport: true,
+      requiresCheckIn: true,
+      badge: {
+        label: 'Visit Toko Resmi',
+        iconName: 'Store',
+        color: 'text-emerald-800 font-bold',
+        bg: 'bg-emerald-50',
+        border: 'border-emerald-300',
+      },
+      status: {
+        code: 'SCHEDULED',
+        label: 'Belum Check-In',
+        color: 'text-slate-600',
+        bg: 'bg-slate-100',
+        border: 'border-slate-200',
+        dot: 'bg-slate-400',
+      },
+      report,
+    };
+  }
+
+  // 10. Fallback: Agenda Umum Non-Visit
+  const isDone = Boolean(agenda.completed);
+  return {
+    agenda,
+    kind: 'OTHER',
+    isExplicitVisit: false,
+    requiresReport: false,
+    requiresCheckIn: false,
+    badge: {
+      label: 'Agenda Non-Visit',
+      iconName: 'Briefcase',
+      color: 'text-slate-700',
+      bg: 'bg-slate-100',
+      border: 'border-slate-200',
+    },
+    status: {
+      code: isDone ? 'COMPLETED' : 'SCHEDULED',
+      label: isDone ? 'Selesai' : 'Terjadwal',
+      color: isDone ? 'text-emerald-700' : 'text-slate-700',
+      bg: isDone ? 'bg-emerald-50' : 'bg-slate-100',
+      border: isDone ? 'border-emerald-200' : 'border-slate-200',
+      dot: isDone ? 'bg-emerald-500' : 'bg-slate-400',
+    },
+    report: undefined,
+  };
+}
+
+// ============================================================================
+// MAIN ADMIN PORTAL COMPONENT
+// ============================================================================
 export const AdminPortal: React.FC<AdminPortalProps> = ({
   adminUser,
   agendas = [],
@@ -110,20 +558,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onLogout,
   onOpenLiveMaps,
 }) => {
-  // Navigation State
-  const [activeTab, setActiveTab] = useState<AdminTab>('agendas');
+  // Navigation Tabs:
+  // 1. 'table' -> Data Agenda Lengkap (Spreadsheet View)
+  // 2. 'calendar' -> Kalender Interaktif
+  // 3. 'analytics' -> Rekap Produktivitas & Grafik
+  // 4. 'monitoring' -> Audit Presensi Kunjungan & Laporan QSC
+  // 5. 'datahub' -> Pusat Sinkronisasi Excel & Master Toko
+  const [activeTab, setActiveTab] = useState<'table' | 'calendar' | 'analytics' | 'monitoring' | 'datahub'>('table');
 
-  // Search & Filters
+  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
-  const [datePreset, setDatePreset] = useState<DateFilterPreset>('ALL');
+  const [filterKind, setFilterKind] = useState<string>('ALL');
+  const [filterPic, setFilterPic] = useState<string>('ALL');
+  const [filterDatePreset, setFilterDatePreset] = useState<'TODAY' | 'TOMORROW' | 'WEEK' | 'MONTH' | 'ALL' | 'CUSTOM'>('ALL');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [selectedPic, setSelectedPic] = useState<string>('ALL');
-  const [selectedDomain, setSelectedDomain] = useState<ActivityDomain>('ALL');
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
 
-  // Full Calendar State
-  const [calendarDate, setCalendarDate] = useState(() => new Date());
+  // Calendar State
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   // Cloud Reports State
@@ -146,6 +598,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // Raw Data Export Modal
   const [showExportModal, setShowExportModal] = useState(false);
 
+  // Master Store Data
+  const [masterStores, setMasterStores] = useState<MasterStore[]>(() => getMasterStores());
+  const [storeSearch, setStoreSearch] = useState('');
+  const [storeFeedback, setStoreFeedback] = useState<string | null>(null);
+
   // Excel Schedule Import
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelSummary, setExcelSummary] = useState<ParsedExcelScheduleSummary | null>(null);
@@ -154,19 +611,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Master Store Data
-  const [masterStores, setMasterStores] = useState<MasterStore[]>(() => getMasterStores());
-  const [storeSearchFilter, setStoreSearchFilter] = useState('');
-  const [storeFeedback, setStoreFeedback] = useState<string | null>(null);
-  const storeImportInputRef = useRef<HTMLInputElement>(null);
-
-  // Holding Time Update
-  const holdingImportInputRef = useRef<HTMLInputElement>(null);
-
-  // Today Date String
+  // Today Date
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
 
-  // Fetch Cloud Visit Reports
+  // Fetch Cloud Reports
   const loadReports = async () => {
     setIsLoadingReports(true);
     try {
@@ -197,77 +645,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     return map;
   }, [cloudReports]);
 
-  // Helper: Determine status of an agenda
-  const getAgendaStatusInfo = (agenda: ScheduleAgenda) => {
-    const meta = CATEGORY_DOMAINS[agenda.category] || CATEGORY_DOMAINS.VISIT;
-    const isStore = meta.domain === 'STORE';
-    const isLeave = meta.domain === 'LEAVE';
-
-    if (isLeave) {
-      return {
-        domain: 'LEAVE' as const,
-        code: 'LEAVE',
-        label: agenda.category === 'CUTI' ? 'Cuti / Izin' : 'Off / Libur',
-        badge: 'bg-rose-50 text-rose-800 border-rose-200',
-        dot: 'bg-rose-400',
-        needsVisitTracking: false,
-        report: undefined,
-      };
-    }
-
-    if (!isStore) {
-      return {
-        domain: 'OFFICE' as const,
-        code: 'OFFICE',
-        label: agenda.completed ? 'Selesai' : 'Terjadwal',
-        badge: 'bg-blue-50 text-blue-800 border-blue-200',
-        dot: 'bg-blue-500',
-        needsVisitTracking: false,
-        report: undefined,
-      };
-    }
-
-    // Store Activities (Visit, NSO, Audit, Operation)
-    const report =
-      reportMap.get(agenda.id) ||
-      (agenda.storeCode && agenda.date ? reportMap.get(`${agenda.storeCode}_${agenda.date}`) : undefined);
-
-    const actualIn = agenda.actualIn || report?.actualIn;
-    const actualOut = agenda.actualOut || report?.actualOut;
-    const isSubmitted = report?.status === 'SUBMITTED' || agenda.completed;
-
-    if (isSubmitted || (actualIn && actualOut)) {
-      return {
-        domain: 'STORE' as const,
-        code: 'COMPLETED',
-        label: 'Selesai Kunjungan',
-        badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-        dot: 'bg-emerald-500',
-        needsVisitTracking: true,
-        report,
-      };
-    }
-    if (actualIn && !actualOut) {
-      return {
-        domain: 'STORE' as const,
-        code: 'IN_PROGRESS',
-        label: 'Di Toko (In-Progress)',
-        badge: 'bg-amber-50 text-amber-800 border-amber-300',
-        dot: 'bg-amber-500 animate-pulse',
-        needsVisitTracking: true,
-        report,
-      };
-    }
-    return {
-      domain: 'STORE' as const,
-      code: 'SCHEDULED',
-      label: 'Belum Check-In',
-      badge: 'bg-slate-100 text-slate-600 border-slate-200',
-      dot: 'bg-slate-400',
-      needsVisitTracking: true,
-      report,
-    };
-  };
+  // Classified Agendas List
+  const allClassifiedAgendas = useMemo(() => {
+    return agendas.map((ag) => classifyAgendaItem(ag, reportMap));
+  }, [agendas, reportMap]);
 
   // Date Filter Bounds
   const dateRangeBounds = useMemo(() => {
@@ -299,50 +680,48 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   }, []);
 
   // Filtered Agendas
-  const filteredAgendas = useMemo(() => {
+  const filteredClassifiedAgendas = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
-    return agendas.filter((item) => {
+    return allClassifiedAgendas.filter((item) => {
+      const ag = item.agenda;
+
       // 1. Date Filter
-      if (datePreset === 'TODAY' && item.date !== dateRangeBounds.today) return false;
-      if (datePreset === 'TOMORROW' && item.date !== dateRangeBounds.tomorrow) return false;
-      if (datePreset === 'THIS_WEEK') {
-        if (item.date < dateRangeBounds.weekStart || item.date > dateRangeBounds.weekEnd) return false;
+      if (filterDatePreset === 'TODAY' && ag.date !== dateRangeBounds.today) return false;
+      if (filterDatePreset === 'TOMORROW' && ag.date !== dateRangeBounds.tomorrow) return false;
+      if (filterDatePreset === 'WEEK') {
+        if (ag.date < dateRangeBounds.weekStart || ag.date > dateRangeBounds.weekEnd) return false;
       }
-      if (datePreset === 'THIS_MONTH') {
-        if (item.date < dateRangeBounds.monthStart || item.date > dateRangeBounds.monthEnd) return false;
+      if (filterDatePreset === 'MONTH') {
+        if (ag.date < dateRangeBounds.monthStart || ag.date > dateRangeBounds.monthEnd) return false;
       }
-      if (datePreset === 'CUSTOM') {
-        if (customStartDate && item.date < customStartDate) return false;
-        if (customEndDate && item.date > customEndDate) return false;
-      }
-
-      // 2. Domain Filter
-      const catMeta = CATEGORY_DOMAINS[item.category] || CATEGORY_DOMAINS.VISIT;
-      if (selectedDomain !== 'ALL' && catMeta.domain !== selectedDomain) {
-        return false;
+      if (filterDatePreset === 'CUSTOM') {
+        if (customStartDate && ag.date < customStartDate) return false;
+        if (customEndDate && ag.date > customEndDate) return false;
       }
 
-      // 3. Category Filter
-      if (selectedCategory !== 'ALL' && item.category !== selectedCategory) {
-        return false;
+      // 2. Kind Filter (Visit vs Meeting vs Training vs Cuti dll)
+      if (filterKind !== 'ALL') {
+        if (filterKind === 'VISIT' && !item.isExplicitVisit) return false;
+        if (filterKind === 'NON_VISIT' && item.isExplicitVisit) return false;
+        if (filterKind !== 'VISIT' && filterKind !== 'NON_VISIT' && item.kind !== filterKind) return false;
       }
 
-      // 4. PIC Filter
-      if (selectedPic !== 'ALL') {
-        if (!item.pic || !item.pic.toLowerCase().includes(selectedPic.toLowerCase())) {
+      // 3. PIC Filter
+      if (filterPic !== 'ALL') {
+        if (!ag.pic || !ag.pic.toLowerCase().includes(filterPic.toLowerCase())) {
           return false;
         }
       }
 
-      // 5. Query Search
+      // 4. Query Search
       if (q) {
-        const matchTitle = item.title?.toLowerCase().includes(q);
-        const matchLocation = item.location?.toLowerCase().includes(q);
-        const matchPic = item.pic?.toLowerCase().includes(q);
-        const matchStoreCode = item.storeCode?.toLowerCase().includes(q);
-        const matchStoreName = item.storeName?.toLowerCase().includes(q);
-        const matchDesc = item.description?.toLowerCase().includes(q);
+        const matchTitle = ag.title?.toLowerCase().includes(q);
+        const matchLocation = ag.location?.toLowerCase().includes(q);
+        const matchPic = ag.pic?.toLowerCase().includes(q);
+        const matchStoreCode = ag.storeCode?.toLowerCase().includes(q);
+        const matchStoreName = ag.storeName?.toLowerCase().includes(q);
+        const matchDesc = ag.description?.toLowerCase().includes(q);
         if (!matchTitle && !matchLocation && !matchPic && !matchStoreCode && !matchStoreName && !matchDesc) {
           return false;
         }
@@ -351,489 +730,301 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       return true;
     });
   }, [
-    agendas,
-    searchQuery,
-    datePreset,
+    allClassifiedAgendas,
+    filterDatePreset,
+    dateRangeBounds,
     customStartDate,
     customEndDate,
-    selectedDomain,
-    selectedCategory,
-    selectedPic,
-    dateRangeBounds,
+    filterKind,
+    filterPic,
+    searchQuery,
   ]);
 
-  // Sorted Agendas
-  const sortedAgendas = useMemo(() => {
-    return [...filteredAgendas].sort((a, b) => {
-      if (b.date !== a.date) return b.date.localeCompare(a.date);
-      return (a.time || '').localeCompare(b.time || '');
-    });
-  }, [filteredAgendas]);
+  // Quick Executive Metrics
+  const metrics = useMemo(() => {
+    const total = allClassifiedAgendas.length;
+    const visits = allClassifiedAgendas.filter((i) => i.isExplicitVisit);
+    const nonVisits = allClassifiedAgendas.filter((i) => !i.isExplicitVisit && i.kind !== 'LEAVE' && i.kind !== 'OFF');
+    const leaves = allClassifiedAgendas.filter((i) => i.kind === 'LEAVE' || i.kind === 'OFF');
 
-  // High-Level Domain Statistics
-  const domainStats = useMemo(() => {
-    let storeTotal = 0;
-    let storeCompleted = 0;
-    let storeInProgress = 0;
-    let storeSubmittedReports = 0;
+    const visitDone = visits.filter((i) => i.status.code === 'COMPLETED').length;
+    const visitInProgress = visits.filter((i) => i.status.code === 'IN_PROGRESS').length;
+    const visitPending = visits.filter((i) => i.status.code === 'SCHEDULED').length;
 
-    let officeTotal = 0;
-    let leaveTotal = 0;
-
-    const uniqueStores = new Set<string>();
-    const uniquePics = new Set<string>();
-
-    filteredAgendas.forEach((a) => {
-      const st = getAgendaStatusInfo(a);
-      if (a.pic) uniquePics.add(a.pic.trim());
-
-      if (st.domain === 'STORE') {
-        storeTotal++;
-        if (a.storeCode) uniqueStores.add(a.storeCode);
-        if (st.code === 'COMPLETED') storeCompleted++;
-        if (st.code === 'IN_PROGRESS') storeInProgress++;
-        if (st.report?.status === 'SUBMITTED') storeSubmittedReports++;
-      } else if (st.domain === 'OFFICE') {
-        officeTotal++;
-      } else if (st.domain === 'LEAVE') {
-        leaveTotal++;
-      }
-    });
-
-    const storeCompletionRate = storeTotal > 0 ? Math.round((storeCompleted / storeTotal) * 100) : 0;
+    const meetings = allClassifiedAgendas.filter((i) => i.kind === 'MEETING').length;
+    const trainings = allClassifiedAgendas.filter((i) => i.kind === 'TRAINING').length;
+    const ops = allClassifiedAgendas.filter((i) => i.kind === 'OPERATION' || i.kind === 'NSO' || i.kind === 'AUDIT').length;
 
     return {
-      totalAll: filteredAgendas.length,
-      storeTotal,
-      storeCompleted,
-      storeInProgress,
-      storeSubmittedReports,
-      storeCompletionRate,
-      officeTotal,
-      leaveTotal,
-      uniqueStores: uniqueStores.size,
-      uniquePics: uniquePics.size,
+      total,
+      visitsCount: visits.length,
+      visitDone,
+      visitInProgress,
+      visitPending,
+      visitPercentage: visits.length > 0 ? Math.round((visitDone / visits.length) * 100) : 0,
+      nonVisitsCount: nonVisits.length,
+      meetings,
+      trainings,
+      ops,
+      leavesCount: leaves.length,
     };
-  }, [filteredAgendas, reportMap]);
+  }, [allClassifiedAgendas]);
 
-  // Team Members List
-  const allTeamMembers = useMemo(() => {
-    const set = new Set<string>();
-    users.forEach((u) => u.name && set.add(u.name.trim()));
-    agendas.forEach((a) => a.pic && set.add(a.pic.trim()));
-    return Array.from(set).sort();
-  }, [users, agendas]);
+  // Unique PICs list with tasks count
+  const picList = useMemo(() => {
+    const map = new Map<string, number>();
+    agendas.forEach((a) => {
+      const p = a.pic ? a.pic.trim() : 'Unassigned';
+      map.set(p, (map.get(p) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [agendas]);
 
-  // Team Productivity Leaderboard Matrix
-  const teamMatrix = useMemo(() => {
+  // Calendar Matrix Computation
+  const calendarMatrix = useMemo(() => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+
+    // Monday-based (1 = Monday, 7 = Sunday)
+    let startDay = firstDayOfMonth.getDay();
+    startDay = startDay === 0 ? 7 : startDay;
+
+    const daysInMonth = lastDayOfMonth.getDate();
+    const matrix: Array<{ dateStr: string; dayNum: number; isCurrentMonth: boolean }> = [];
+
+    // Prev month padding
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = startDay - 1; i > 0; i--) {
+      const d = prevMonthLastDay - i + 1;
+      const prevDate = new Date(year, month - 1, d);
+      matrix.push({
+        dateStr: prevDate.toISOString().split('T')[0],
+        dayNum: d,
+        isCurrentMonth: false,
+      });
+    }
+
+    // Current month days
+    for (let d = 1; d <= daysInMonth; d++) {
+      const currDate = new Date(year, month, d);
+      matrix.push({
+        dateStr: currDate.toISOString().split('T')[0],
+        dayNum: d,
+        isCurrentMonth: true,
+      });
+    }
+
+    // Next month padding (total cells divisible by 7)
+    const remaining = 7 - (matrix.length % 7);
+    if (remaining < 7) {
+      for (let d = 1; d <= remaining; d++) {
+        const nextDate = new Date(year, month + 1, d);
+        matrix.push({
+          dateStr: nextDate.toISOString().split('T')[0],
+          dayNum: d,
+          isCurrentMonth: false,
+        });
+      }
+    }
+
+    return matrix;
+  }, [calendarMonth]);
+
+  // Calendar Agendas Map by Date
+  const calendarAgendasMap = useMemo(() => {
+    const map = new Map<string, ClassifiedAgenda[]>();
+    allClassifiedAgendas.forEach((item) => {
+      const d = item.agenda.date;
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(item);
+    });
+    return map;
+  }, [allClassifiedAgendas]);
+
+  // Agendas for Selected Calendar Date
+  const selectedCalendarAgendas = useMemo(() => {
+    return calendarAgendasMap.get(selectedCalendarDate) || [];
+  }, [calendarAgendasMap, selectedCalendarDate]);
+
+  // Leaderboard / Rekap Tim
+  const teamLeaderboard = useMemo(() => {
     const map = new Map<
       string,
       {
-        pic: string;
         total: number;
-        storeVisits: number;
-        completedVisits: number;
-        officeCount: number;
-        leaveCount: number;
-        submittedReports: number;
+        visits: number;
+        visitDone: number;
+        meetings: number;
+        trainings: number;
+        ops: number;
+        leaves: number;
       }
     >();
 
-    filteredAgendas.forEach((a) => {
-      const name = a.pic?.trim() || 'Unassigned';
-      if (!map.has(name)) {
-        map.set(name, {
-          pic: name,
-          total: 0,
-          storeVisits: 0,
-          completedVisits: 0,
-          officeCount: 0,
-          leaveCount: 0,
-          submittedReports: 0,
-        });
+    allClassifiedAgendas.forEach((item) => {
+      const p = item.agenda.pic ? item.agenda.pic.trim() : 'Unassigned';
+      if (!map.has(p)) {
+        map.set(p, { total: 0, visits: 0, visitDone: 0, meetings: 0, trainings: 0, ops: 0, leaves: 0 });
       }
-      const entry = map.get(name)!;
-      entry.total++;
-
-      const st = getAgendaStatusInfo(a);
-      if (st.domain === 'STORE') {
-        entry.storeVisits++;
-        if (st.code === 'COMPLETED') entry.completedVisits++;
-        if (st.report?.status === 'SUBMITTED') entry.submittedReports++;
-      } else if (st.domain === 'OFFICE') {
-        entry.officeCount++;
-      } else if (st.domain === 'LEAVE') {
-        entry.leaveCount++;
+      const data = map.get(p)!;
+      data.total += 1;
+      if (item.isExplicitVisit) {
+        data.visits += 1;
+        if (item.status.code === 'COMPLETED') data.visitDone += 1;
+      } else if (item.kind === 'MEETING') {
+        data.meetings += 1;
+      } else if (item.kind === 'TRAINING') {
+        data.trainings += 1;
+      } else if (item.kind === 'OPERATION' || item.kind === 'NSO' || item.kind === 'AUDIT') {
+        data.ops += 1;
+      } else if (item.kind === 'LEAVE' || item.kind === 'OFF') {
+        data.leaves += 1;
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => b.completedVisits - a.completedVisits || b.total - a.total);
-  }, [filteredAgendas, reportMap]);
+    return Array.from(map.entries())
+      .map(([name, stats]) => ({
+        name,
+        ...stats,
+        completionRate: stats.visits > 0 ? Math.round((stats.visitDone / stats.visits) * 100) : 100,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [allClassifiedAgendas]);
 
-  // Full Month Calendar Matrix Generation
-  const calendarMonthData = useMemo(() => {
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
-    const firstDayIndex = new Date(year, month, 1).getDay(); // 0 = Sun, 1 = Mon ...
-    const totalDays = new Date(year, month + 1, 0).getDate();
-
-    // Monday First Index: Mon = 0, Tue = 1 ... Sun = 6
-    const shift = (firstDayIndex + 6) % 7;
-
-    const days: { day: number; dateStr: string; agendas: ScheduleAgenda[] }[] = [];
-
-    for (let i = 1; i <= totalDays; i++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      const dayAgendas = agendas.filter((a) => a.date === dateStr);
-      days.push({ day: i, dateStr, agendas: dayAgendas });
-    }
-
-    return {
-      year,
-      month,
-      monthName: calendarDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
-      shift,
-      days,
-    };
-  }, [calendarDate, agendas]);
-
-  // Selected Calendar Day Agendas
-  const selectedDayAgendas = useMemo(() => {
-    return agendas.filter((a) => a.date === selectedCalendarDate).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-  }, [agendas, selectedCalendarDate]);
-
-  // =========================================================================
-  // RAW DATA EXTRACTION HANDLERS
-  // =========================================================================
-  const handleExportRawAgendas = () => {
-    const headers = [
-      'ID Agenda',
-      'Tanggal',
-      'Jam Mulai',
-      'Jam Selesai',
-      'Domain Kegiatan',
-      'Kategori Agenda',
-      'Personil (PIC)',
-      'Kode Toko',
-      'Nama Toko',
-      'Tipe Toko',
-      'Lokasi / Alamat',
-      'Area Manager (AM)',
-      'Regional Manager (RM)',
-      'Status Visit',
-      'Actual IN (WIB)',
-      'Actual OUT (WIB)',
-      'Kepatuhan Geofence',
-      'Jarak Check-In (m)',
-      'Status Laporan QSC',
-      'URL Google Drive Laporan',
-      'Catatan / Instruksi',
-    ];
-
-    const rows = filteredAgendas.map((a) => {
-      const st = getAgendaStatusInfo(a);
-      const rep = st.report;
-      const actualIn = a.actualIn || rep?.actualIn || '-';
-      const actualOut = a.actualOut || rep?.actualOut || '-';
-      const geofence =
-        actualIn !== '-'
-          ? a.silentAudit?.inDistanceToStoreMeters !== undefined
-            ? `${a.silentAudit.inDistanceToStoreMeters}m Terverifikasi`
-            : 'Radius 1-50m Toko'
-          : '-';
-
-      return [
-        a.id,
-        a.date,
-        a.time || '08:00',
-        a.endTime || 'Selesai',
-        st.domain === 'STORE' ? 'Kegiatan Toko' : st.domain === 'OFFICE' ? 'Kantor & Koordinasi' : 'Status Cuti / Libur',
-        a.category,
-        a.pic || 'Belum Ditugaskan',
-        a.storeCode || '-',
-        a.storeName || a.location || a.title,
-        a.storeType || '-',
-        a.location || '-',
-        a.areaManager || '-',
-        a.regionalManager || '-',
-        st.label,
-        actualIn,
-        actualOut,
-        geofence,
-        a.silentAudit?.inDistanceToStoreMeters ?? '-',
-        rep?.status || (st.domain === 'STORE' ? 'Belum Ada Laporan' : 'Tidak Butuh Laporan'),
-        rep?.qscDriveUrl || '-',
-        a.description || '-',
-      ];
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Data Mentah Agenda');
-    XLSX.writeFile(wb, `Laporan_Mentah_Seluruh_Agenda_FMCU_${todayIso}.xlsx`);
-    setShowExportModal(false);
-  };
-
-  const handleExportRawReports = () => {
-    const headers = [
-      'ID Laporan',
-      'Agenda ID',
-      'Tanggal Visit',
-      'Kode Toko',
-      'Nama Toko',
-      'Tipe Toko',
-      'Visitor / Auditor',
-      'Store Head',
-      'Area Manager',
-      'Regional Manager',
-      'Actual IN',
-      'Actual OUT',
-      'Jumlah Temuan Observasi',
-      'Jumlah Foto Bukti',
-      'Status Laporan',
-      'Waktu Submit',
-      'Link PDF Google Drive',
-      'Link Spreadsheet CA Toko',
-    ];
-
-    const rows = cloudReports.map((r) => [
-      r.id,
-      r.agendaId || '-',
-      r.visitDate || '-',
-      r.storeCode || '-',
-      r.storeName || '-',
-      r.storeType || '-',
-      r.visitorName || '-',
-      r.storeHead || '-',
-      r.areaManager || '-',
-      r.regionalManager || '-',
-      r.actualIn || '-',
-      r.actualOut || '-',
-      r.observations?.length || 0,
-      r.evidencePhotos?.length || 0,
-      r.status || 'DRAFT',
-      r.submittedAt || '-',
-      r.qscDriveUrl || '-',
-      r.spreadsheetUrl || '-',
-    ]);
-
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Data Mentah Laporan QSC');
-    XLSX.writeFile(wb, `Laporan_Mentah_Visit_QSC_FMCU_${todayIso}.xlsx`);
-    setShowExportModal(false);
-  };
-
-  const handleExportTeamMatrix = () => {
-    const headers = [
-      'Peringkat',
-      'Nama Personil (PIC)',
-      'Total Agenda',
-      'Total Kunjungan Toko',
-      'Kunjungan Selesai',
-      'Persentase Realisasi',
-      'Meeting & Koordinasi',
-      'Cuti / Off',
-      'Laporan QSC Submit',
-    ];
-
-    const rows = teamMatrix.map((item, idx) => {
-      const rate = item.storeVisits > 0 ? Math.round((item.completedVisits / item.storeVisits) * 100) : 0;
-      return [
-        idx + 1,
-        item.pic,
-        item.total,
-        item.storeVisits,
-        item.completedVisits,
-        `${rate}%`,
-        item.officeCount,
-        item.leaveCount,
-        item.submittedReports,
-      ];
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Rekapitulasi Performa Tim');
-    XLSX.writeFile(wb, `Rekapitulasi_Produktivitas_Tim_FMCU_${todayIso}.xlsx`);
-    setShowExportModal(false);
-  };
-
-  const handleExportHoldingTimeExcel = () => {
-    const headers = [
-      'No',
-      'Kategori',
-      'Suhu Mesin / Display',
-      'Nama Produk',
-      'Standar Holding Time Resmi',
-      'Thawing',
-      'Shelf Life Setelah Thawing',
-      'Cooking Spec',
-      'Lokasi Penyimpanan',
-      'Keterangan Khusus',
-    ];
-
-    const rows: any[] = [];
-    let no = 1;
-    holdingStandards.categories.forEach((cat) => {
-      cat.items.forEach((item) => {
-        rows.push([
-          no++,
-          cat.name,
-          cat.machineTemp || '-',
-          item.name,
-          item.holding || '-',
-          item.thawing || '-',
-          item.shelfLife || '-',
-          item.cooking || '-',
-          item.storage || '-',
-          item.keterangan || '-',
-        ]);
-      });
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Holding Time R23');
-    XLSX.writeFile(wb, `Standar_Holding_Time_R23_FMCU_${todayIso}.xlsx`);
-  };
-
-  // =========================================================================
-  // EXCEL SCHEDULE IMPORT HANDLERS
-  // =========================================================================
-  const handleExcelFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Excel Schedule File Selection
+  const handleExcelFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setExcelFile(file);
     setIsParsingExcel(true);
     setImportFeedback(null);
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const buffer = evt.target?.result;
-        const wb = XLSX.read(buffer, { type: 'array' });
-        const firstSheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[firstSheetName];
-
-        const summary = parseScheduleExcelSheet(ws, firstSheetName, users);
-        setExcelSummary(summary);
-      } catch (err) {
-        console.error('Excel parse error:', err);
-        alert('Format file Excel tidak sesuai standar FMCU. Silakan unduh template resmi terlebih dahulu.');
-      } finally {
-        setIsParsingExcel(false);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const handleCommitExcelImport = () => {
-    if (!excelSummary || excelSummary.agendas.length === 0) return;
-
-    onImportExcel(excelSummary.updatedUsers, excelSummary.agendas, importMode);
-    setImportFeedback(
-      `Berhasil memperbarui jadwal: ${excelSummary.agendas.length} agenda diimpor dengan mode [${
-        importMode === 'replace' ? 'Gantikan Seluruh Jadwal' : 'Gabungkan (Merge)'
-      }].`
-    );
-    setExcelFile(null);
-    setExcelSummary(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    setActiveTab('agendas');
-  };
-
-  // Reset Holding Time to Default
-  const handleResetHoldingTime = () => {
-    if (confirm('Kembalikan Standar Holding Time ke default resmi R23 (QA & Product Improvement)?')) {
-      saveHoldingTimeStandards(INITIAL_HOLDING_TIME_R23);
-      setHoldingStandards(INITIAL_HOLDING_TIME_R23);
-      alert('Standar Holding Time berhasil dikembalikan ke standar bawaan R23.');
+    try {
+      const parseRes = await parseScheduleExcelFile(file, users);
+      setExcelSummary(parseRes.summary);
+    } catch (err: any) {
+      setImportFeedback(`Gagal membaca Excel: ${err?.message || 'Format tidak valid'}`);
+    } finally {
+      setIsParsingExcel(false);
     }
   };
 
+  // Execute Excel Schedule Import
+  const handleExecuteImport = () => {
+    if (!excelSummary) return;
+    try {
+      onImportExcel(excelSummary.updatedUsers, excelSummary.agendas, importMode);
+      setImportFeedback(
+        `Sukses mengimpor ${excelSummary.agendas.length} agenda (${importMode === 'replace' ? 'Mode Timpa Penuh' : 'Mode Gabung'}).`
+      );
+      setExcelFile(null);
+      setExcelSummary(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err: any) {
+      setImportFeedback(`Gagal menyimpan data impor: ${err?.message || 'Error tidak diketahui'}`);
+    }
+  };
+
+  // Download Official Schedule Template
+  const handleDownloadScheduleTemplate = () => {
+    exportScheduleToTemplateExcel(agendas, users);
+  };
+
+  // Download Master Stores
+  const handleDownloadMasterStores = () => {
+    exportMasterStoresToExcel();
+  };
+
+  // Export Filtered Agendas to Raw Excel
+  const handleExportRawAgendas = () => {
+    const rows = filteredClassifiedAgendas.map((item, idx) => {
+      const ag = item.agenda;
+      return {
+        'No': idx + 1,
+        'Tanggal': ag.date,
+        'Jam Mulai': ag.time || '08:00',
+        'Jam Selesai': ag.endTime || '17:00',
+        'PIC / Personil': ag.pic,
+        'Klasifikasi Kegiatan': item.badge.label,
+        'Apakah Visit Resmi': item.isExplicitVisit ? 'YA (VISIT TOKO)' : 'TIDAK (NON-VISIT)',
+        'Judul Agenda': ag.title,
+        'Kode Toko': ag.storeCode || '-',
+        'Nama Toko / Lokasi': ag.storeName || ag.location,
+        'Status Pelaksanaan': item.status.label,
+        'Actual IN': ag.actualIn || item.report?.actualIn || '-',
+        'Actual OUT': ag.actualOut || item.report?.actualOut || '-',
+        'Laporan QSC Submit': item.report?.status === 'SUBMITTED' ? 'SUDAH SUBMIT' : item.isExplicitVisit ? 'BELUM' : 'TIDAK PERLU',
+        'Deskripsi / Catatan': ag.description || '-',
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Agenda FMCU');
+    XLSX.writeFile(workbook, `FMCU_Data_Agenda_${todayIso}.xlsx`);
+  };
+
   return (
-    <div className="min-h-screen bg-[#F4F6F9] text-slate-900 flex flex-col font-sans select-none antialiased">
-      {/* =========================================================================
-          1. CORPORATE HEADER (Command Bar)
-          ========================================================================= */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs px-3 sm:px-6 py-2.5">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-          {/* Brand & Identity */}
-          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
-              <Building2 className="w-5 h-5 text-emerald-400" />
+    <div className="min-h-screen bg-[#F4F6F9] text-slate-800 flex flex-col font-sans select-none">
+      {/* ============================================================
+          TOP EXECUTIVE APP BAR (Apple Glass Style, Minimalist, Clean)
+          ============================================================ */}
+      <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-slate-200/80 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+          {/* Left: Branding & Role */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-black shadow-sm ring-2 ring-emerald-500/20">
+              <Store className="w-5 h-5" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 rounded-full bg-slate-900 text-white text-[9.5px] font-black uppercase tracking-wider">
-                  Admin Command Center
-                </span>
-                <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 hidden sm:inline">
-                  ● Real-Time Cloud Sync
+            <div>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-none">
+                  FMCU Central Admin
+                </h1>
+                <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  Master Data
                 </span>
               </div>
-              <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight truncate">
-                Pusat Kendali Operasional &amp; Seluruh Agenda Personil
-              </h1>
+              <p className="text-[11px] font-bold text-slate-500 leading-none mt-1">
+                FamilyMart Operational & Activity Command Center
+              </p>
             </div>
           </div>
 
-          {/* Quick Header Tools */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Tarik Data Mentah Export Button */}
-            <button
-              type="button"
-              onClick={() => setShowExportModal(true)}
-              className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Tarik & Ekspor Data Mentah Operasional (.xlsx)"
-            >
-              <FolderDown className="w-3.5 h-3.5 stroke-[2.4]" />
-              <span className="hidden md:inline">Tarik Data Mentah</span>
-            </button>
-
-            {/* Peta Toko Live Maps */}
+          {/* Right: Quick Actions (Maps, Switch View, Logout) */}
+          <div className="flex items-center gap-2">
             {onOpenLiveMaps && (
               <button
                 type="button"
                 onClick={onOpenLiveMaps}
-                className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Buka Peta Lokasi Toko"
+                title="Buka Peta Live Pinpoint Toko"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 text-xs font-bold transition active:scale-95 cursor-pointer"
               >
-                <Compass className="w-3.5 h-3.5 text-teal-600" />
-                <span className="hidden lg:inline">Peta Toko</span>
+                <MapPin className="w-3.5 h-3.5" />
+                <span>Live Maps</span>
               </button>
             )}
 
-            {/* Standar R23 Quick Pill */}
-            <button
-              type="button"
-              onClick={() => setShowHoldingTimeModal(true)}
-              className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Pratinjau Standar Holding Time R23"
-            >
-              <Clock className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden lg:inline">Holding Time R23</span>
-            </button>
-
-            {/* Tampilan Kru / User */}
             <button
               type="button"
               onClick={onSwitchToUserView}
-              className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Pratinjau tampilan kru / staff lapangan"
+              title="Beralih ke Tampilan Staff Lapangan"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer border border-slate-200"
             >
-              <Eye className="w-3.5 h-3.5 text-teal-600" />
-              <span className="hidden sm:inline">Tampilan Staff</span>
+              <Users className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Mode Staff</span>
             </button>
 
-            {/* Logout */}
             <button
               type="button"
               onClick={onLogout}
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200/70 transition flex items-center justify-center cursor-pointer shadow-2xs"
-              title="Keluar"
+              title="Keluar dari Portal Admin"
+              className="w-8 h-8 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center transition active:scale-95 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -841,575 +1032,554 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         </div>
       </header>
 
-      {/* =========================================================================
-          2. CLASSIFICATION HUB CARDS (Mengelompokkan Domain Kegiatan Terstruktur)
-          ========================================================================= */}
-      <section className="px-3 sm:px-6 pt-4 pb-2 max-w-7xl mx-auto w-full">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-          {/* Card 1: Domain Kunjungan Toko (Visit, NSO, Audit) */}
-          <div
-            onClick={() => {
-              setSelectedDomain(selectedDomain === 'STORE' ? 'ALL' : 'STORE');
-              setSelectedCategory('ALL');
-            }}
-            className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between shadow-2xs ${
-              selectedDomain === 'STORE'
-                ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/20'
-                : 'bg-white hover:bg-slate-50 border-slate-200/80'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                <Store className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Kegiatan Toko</span>
-              </span>
-              <span className="text-[10.5px] font-extrabold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded">
-                {domainStats.storeCompletionRate}% Selesai
-              </span>
+      {/* ============================================================
+          EXECUTIVE 4-PILLAR STATS BAR (High-Density & Clean Clarity)
+          ============================================================ */}
+      <section className="bg-white border-b border-slate-200/80 px-4 sm:px-6 py-3.5">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Card 1: Total Agenda */}
+          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-700 flex items-center justify-center shrink-0">
+              <CalendarDays className="w-5 h-5" />
             </div>
-            <div className="mt-2.5">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  {domainStats.storeTotal}
-                </span>
-                <span className="text-xs text-slate-500 font-semibold">Tugas Lapangan</span>
-              </div>
-              <span className="text-[10.5px] text-slate-500 font-medium block mt-1">
-                {domainStats.storeCompleted} Selesai • {domainStats.storeInProgress} di Toko • {domainStats.uniqueStores} Toko
+            <div className="min-w-0">
+              <span className="block text-[10px] font-black uppercase text-slate-500 leading-none">
+                Total Seluruh Agenda
+              </span>
+              <span className="block text-lg font-black text-slate-900 leading-tight mt-0.5">
+                {metrics.total}{' '}
+                <span className="text-xs font-bold text-slate-500">Kegiatan</span>
+              </span>
+              <span className="block text-[10px] font-bold text-slate-500 truncate mt-0.5">
+                Terdaftar di database
               </span>
             </div>
           </div>
 
-          {/* Card 2: Domain Kantor & Koordinasi (Meeting, Training, Work Plan) */}
-          <div
-            onClick={() => {
-              setSelectedDomain(selectedDomain === 'OFFICE' ? 'ALL' : 'OFFICE');
-              setSelectedCategory('ALL');
-            }}
-            className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between shadow-2xs ${
-              selectedDomain === 'OFFICE'
-                ? 'bg-blue-50/90 border-blue-400 ring-2 ring-blue-400/20'
-                : 'bg-white hover:bg-slate-50 border-slate-200/80'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800 flex items-center gap-1.5">
-                <Briefcase className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <span>Kantor &amp; Koordinasi</span>
-              </span>
-              <span className="text-[10.5px] font-extrabold text-blue-700 bg-blue-100/80 px-1.5 py-0.2 rounded">
-                Non-Toko
-              </span>
+          {/* Card 2: Visit Toko Resmi */}
+          <div className="p-3 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Store className="w-5 h-5" />
             </div>
-            <div className="mt-2.5">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  {domainStats.officeTotal}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="block text-[10px] font-black uppercase text-emerald-800 leading-none">
+                  Visit Toko Resmi
                 </span>
-                <span className="text-xs text-slate-500 font-semibold">Sesi Agenda</span>
+                <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-900">
+                  {metrics.visitPercentage}% Done
+                </span>
               </div>
-              <span className="text-[10.5px] text-slate-500 font-medium block mt-1">
-                Meeting, Training, Work Plan &amp; Konsolidasi
+              <span className="block text-lg font-black text-emerald-950 leading-tight mt-0.5">
+                {metrics.visitDone} / {metrics.visitsCount}{' '}
+                <span className="text-xs font-bold text-emerald-700">Toko</span>
+              </span>
+              <span className="block text-[10px] font-bold text-emerald-800 truncate mt-0.5">
+                {metrics.visitInProgress} Sedang di Toko • {metrics.visitPending} Belum
               </span>
             </div>
           </div>
 
-          {/* Card 3: Domain Ketersediaan Personil (Cuti & Off) */}
-          <div
-            onClick={() => {
-              setSelectedDomain(selectedDomain === 'LEAVE' ? 'ALL' : 'LEAVE');
-              setSelectedCategory('ALL');
-            }}
-            className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between shadow-2xs ${
-              selectedDomain === 'LEAVE'
-                ? 'bg-rose-50/90 border-rose-400 ring-2 ring-rose-400/20'
-                : 'bg-white hover:bg-slate-50 border-slate-200/80'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
-                <Coffee className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                <span>Status Personil</span>
-              </span>
-              <span className="text-[10.5px] font-extrabold text-rose-700 bg-rose-100/80 px-1.5 py-0.2 rounded">
-                Cuti &amp; Off
-              </span>
+          {/* Card 3: Non-Visit Activities */}
+          <div className="p-3 rounded-2xl bg-cyan-50/60 border border-cyan-200 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Building2 className="w-5 h-5" />
             </div>
-            <div className="mt-2.5">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  {domainStats.leaveTotal}
-                </span>
-                <span className="text-xs text-slate-500 font-semibold">Jadwal Libur/Cuti</span>
-              </div>
-              <span className="text-[10.5px] text-slate-500 font-medium block mt-1">
-                Ketersediaan &amp; presensi istirahat personil
+            <div className="min-w-0">
+              <span className="block text-[10px] font-black uppercase text-cyan-800 leading-none">
+                Agenda Non-Visit
+              </span>
+              <span className="block text-lg font-black text-cyan-950 leading-tight mt-0.5">
+                {metrics.nonVisitsCount}{' '}
+                <span className="text-xs font-bold text-cyan-700">Sesi</span>
+              </span>
+              <span className="block text-[10px] font-bold text-cyan-800 truncate mt-0.5">
+                {metrics.meetings} Meeting • {metrics.trainings} Training • {metrics.ops} Ops
               </span>
             </div>
           </div>
 
-          {/* Card 4: Laporan Resmi Selesai Disubmit */}
-          <div
-            onClick={() => setActiveTab('monitoring')}
-            className="p-3.5 sm:p-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/80 transition-all cursor-pointer flex flex-col justify-between shadow-2xs"
-          >
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                <span>Laporan QSC Submit</span>
-              </span>
-              <span className="text-[10.5px] font-extrabold text-teal-700 bg-teal-100/80 px-1.5 py-0.2 rounded">
-                Official PDF
-              </span>
+          {/* Card 4: Ketersediaan Personil */}
+          <div className="p-3 rounded-2xl bg-rose-50/60 border border-rose-200 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Coffee className="w-5 h-5" />
             </div>
-            <div className="mt-2.5">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-xl sm:text-2xl font-black text-teal-700 tracking-tight">
-                  {domainStats.storeSubmittedReports}
-                </span>
-                <span className="text-xs text-slate-500 font-semibold">Laporan Terarsip</span>
-              </div>
-              <span className="text-[10.5px] text-slate-500 font-medium block mt-1">
-                Tersimpan di Google Drive &amp; Cloud Database
+            <div className="min-w-0">
+              <span className="block text-[10px] font-black uppercase text-rose-800 leading-none">
+                Cuti & Hari Libur
+              </span>
+              <span className="block text-lg font-black text-rose-950 leading-tight mt-0.5">
+                {metrics.leavesCount}{' '}
+                <span className="text-xs font-bold text-rose-700">Personil</span>
+              </span>
+              <span className="block text-[10px] font-bold text-rose-800 truncate mt-0.5">
+                Status ketersediaan tim
               </span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* =========================================================================
-          3. 5-PILLAR MAIN NAVIGATION TABS
-          ========================================================================= */}
-      <section className="px-3 sm:px-6 pt-2 pb-3 max-w-7xl mx-auto w-full">
-        <div className="flex items-center gap-1 sm:gap-2 p-1.5 bg-slate-200/70 rounded-2xl overflow-x-auto no-scrollbar">
-          {/* Tab 1: Seluruh Agenda */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('agendas')}
-            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'agendas'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <CalendarIcon className="w-4 h-4 text-emerald-600" />
-            <span>Seluruh Agenda ({filteredAgendas.length})</span>
-          </button>
-
-          {/* Tab 2: Kalender Penuh */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('calendar')}
-            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'calendar'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <CalendarIcon className="w-4 h-4 text-blue-600" />
-            <span>Kalender Penuh</span>
-          </button>
-
-          {/* Tab 3: Visual Analitik & Grafik */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('analytics')}
-            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'analytics'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4 text-purple-600" />
-            <span>Visual Analitik &amp; Grafik</span>
-          </button>
-
-          {/* Tab 4: Monitoring Lapangan & Laporan */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('monitoring')}
-            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'monitoring'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 text-teal-600" />
-            <span>Monitoring Visit &amp; Laporan</span>
-            {domainStats.storeInProgress > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-black">
-                {domainStats.storeInProgress} live
-              </span>
-            )}
-          </button>
-
-          {/* Tab 5: Pusat Data & Kelola Excel */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('master-excel')}
-            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'master-excel'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4 text-slate-700" />
-            <span>Pusat Data &amp; Sinkronisasi Excel</span>
-          </button>
-        </div>
-      </section>
-
-      {/* =========================================================================
-          4. MAIN CONTENT AREA
-          ========================================================================= */}
-      <main className="flex-1 px-3 sm:px-6 pb-12 max-w-7xl mx-auto w-full space-y-4">
-        {/* Feedback Alert Banner */}
-        {importFeedback && (
-          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-between shadow-2xs animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{importFeedback}</span>
-            </div>
+      {/* ============================================================
+          MAIN NAVIGATION TABS (5 Core Pillars)
+          ============================================================ */}
+      <nav className="bg-white border-b border-slate-200 sticky top-[57px] z-20 px-4 sm:px-6 shadow-2xs">
+        <div className="max-w-7xl mx-auto flex items-center justify-between overflow-x-auto no-scrollbar gap-2 py-2">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Tab 1: Data Table */}
             <button
               type="button"
-              onClick={() => setImportFeedback(null)}
-              className="text-emerald-700 hover:text-emerald-900 font-black cursor-pointer text-sm"
+              onClick={() => setActiveTab('table')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                activeTab === 'table'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
             >
-              ✕
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Data Agenda (Excel)</span>
+              <span
+                className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                  activeTab === 'table' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {filteredClassifiedAgendas.length}
+              </span>
+            </button>
+
+            {/* Tab 2: Calendar */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('calendar')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                activeTab === 'calendar'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <CalendarIcon className="w-4 h-4" />
+              <span>Kalender Interaktif</span>
+            </button>
+
+            {/* Tab 3: Analytics */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('analytics')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                activeTab === 'analytics'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span>Analitik & Rekap Tim</span>
+            </button>
+
+            {/* Tab 4: Monitoring Visit & Laporan */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('monitoring')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                activeTab === 'monitoring'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Audit Kunjungan & Laporan</span>
+              <span
+                className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                  activeTab === 'monitoring' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                {metrics.visitsCount}
+              </span>
+            </button>
+
+            {/* Tab 5: Data Hub & Sync */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('datahub')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                activeTab === 'datahub'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              <span>Pusat Data & Sinkronisasi Excel</span>
             </button>
           </div>
-        )}
 
-        {/* ---------------------------------------------------------------------
-            TAB 1: SELURUH AGENDA (DATA TABLE & HIGH DENSITY MANAGEMENT)
-            --------------------------------------------------------------------- */}
-        {activeTab === 'agendas' && (
-          <div className="space-y-3.5 animate-in fade-in">
-            {/* Filter & Action Tool Bar */}
-            <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-2xs space-y-3">
+          {/* Quick Add Agenda Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setEditingAgenda(null);
+              setDefaultDateForModal(todayIso);
+              setIsAgendaModalOpen(true);
+            }}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span className="hidden sm:inline">Tambah Agenda Baru</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* ============================================================
+          MAIN CONTENT CONTAINER
+          ============================================================ */}
+      <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-4">
+        {/* ============================================================
+            TAB 1: DATA AGENDA LENGKAP (Spreadsheet Table View)
+            "Kemudahan lihat data dibuat maksimal, spreadsheet-level"
+            ============================================================ */}
+        {activeTab === 'table' && (
+          <div className="space-y-4">
+            {/* Top Toolbar: Search, Filters, and Raw Export */}
+            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 shadow-xs space-y-3">
               {/* Row 1: Search & Date Presets */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                 {/* Search Bar */}
-                <div className="relative flex-1 min-w-[240px]">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari kode toko, nama toko, PIC, atau catatan..."
-                    className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-slate-200/80 text-xs sm:text-sm font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition shadow-2xs"
+                    placeholder="Cari nama toko, kode toko (misal: 3006), PIC, atau judul kegiatan..."
+                    className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 transition"
                   />
                   {searchQuery && (
                     <button
                       type="button"
                       onClick={() => setSearchQuery('')}
-                      className="w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] cursor-pointer"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                     >
-                      ✕
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
 
-                {/* Date Filter Presets */}
-                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 text-xs">
+                {/* Date Filter Buttons */}
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
+                  <span className="text-[11px] font-black text-slate-400 uppercase mr-1">Tanggal:</span>
                   {(
                     [
-                      { key: 'ALL', label: 'Semua Tanggal' },
-                      { key: 'TODAY', label: 'Hari Ini' },
-                      { key: 'TOMORROW', label: 'Besok' },
-                      { key: 'THIS_WEEK', label: 'Minggu Ini' },
-                      { key: 'THIS_MONTH', label: 'Bulan Ini' },
-                      { key: 'CUSTOM', label: 'Rentang Tanggal' },
+                      { id: 'ALL', label: 'Semua' },
+                      { id: 'TODAY', label: 'Hari Ini' },
+                      { id: 'TOMORROW', label: 'Besok' },
+                      { id: 'WEEK', label: 'Minggu Ini' },
+                      { id: 'MONTH', label: 'Bulan Ini' },
                     ] as const
-                  ).map((p) => (
+                  ).map((preset) => (
                     <button
-                      key={p.key}
+                      key={preset.id}
                       type="button"
-                      onClick={() => setDatePreset(p.key)}
-                      className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition cursor-pointer text-xs ${
-                        datePreset === p.key
-                          ? 'bg-slate-900 text-white shadow-2xs'
+                      onClick={() => setFilterDatePreset(preset.id)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        filterDatePreset === preset.id
+                          ? 'bg-slate-800 text-white shadow-xs'
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                       }`}
                     >
-                      {p.label}
+                      {preset.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Custom Date Inputs if CUSTOM is active */}
-              {datePreset === 'CUSTOM' && (
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center gap-3 text-xs font-bold animate-in fade-in">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500">Mulai:</span>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-xs text-slate-800"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500">Sampai:</span>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-xs text-slate-800"
-                    />
-                  </div>
-                  {(customStartDate || customEndDate) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomStartDate('');
-                        setCustomEndDate('');
-                      }}
-                      className="text-rose-600 hover:underline text-[11px]"
-                    >
-                      Reset Rentang
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Row 2: Secondary Dropdowns & Action Buttons */}
+              {/* Row 2: Category Chips & PIC Filter & Export */}
               <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Domain Selector */}
-                  <select
-                    value={selectedDomain}
-                    onChange={(e) => {
-                      setSelectedDomain(e.target.value as ActivityDomain);
-                      setSelectedCategory('ALL');
-                    }}
-                    className="h-8.5 px-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                  >
-                    <option value="ALL">Semua Domain Kegiatan</option>
-                    <option value="STORE">Kegiatan Toko (Visit, NSO, Audit)</option>
-                    <option value="OFFICE">Kantor &amp; Koordinasi (Meeting, Training)</option>
-                    <option value="LEAVE">Status Personil (Cuti &amp; Off)</option>
-                  </select>
+                {/* 1-Click Classification Chips */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase mr-1">Filter Jenis:</span>
 
-                  {/* Category Dropdown */}
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="h-8.5 px-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                  >
-                    <option value="ALL">Semua Kategori Detail</option>
-                    <option value="VISIT">VISIT (Store Visit)</option>
-                    <option value="NSO">NSO (New Store Opening)</option>
-                    <option value="MEETING">MEETING</option>
-                    <option value="AUDIT">AUDIT</option>
-                    <option value="TRAINING">TRAINING</option>
-                    <option value="WORK_PLAN">WORK PLAN</option>
-                    <option value="OPERATION">OPERATIONAL</option>
-                    <option value="CUTI">CUTI</option>
-                    <option value="OFF">OFF / LIBUR</option>
-                  </select>
-
-                  {/* PIC Dropdown */}
-                  <select
-                    value={selectedPic}
-                    onChange={(e) => setSelectedPic(e.target.value)}
-                    className="h-8.5 px-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                  >
-                    <option value="ALL">Semua Personil ({allTeamMembers.length})</option>
-                    {allTeamMembers.map((pic) => (
-                      <option key={pic} value={pic}>
-                        {pic}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Right Action Buttons */}
-                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowExportModal(true)}
-                    className="h-8.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                    title="Ekspor data mentah ke Excel"
+                    onClick={() => setFilterKind('ALL')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
+                      filterKind === 'ALL'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
                   >
-                    <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Ekspor Data Mentah</span>
+                    Semua ({allClassifiedAgendas.length})
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditingAgenda(null);
-                      setDefaultDateForModal(undefined);
-                      setIsAgendaModalOpen(true);
-                    }}
-                    className="h-8.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    onClick={() => setFilterKind('VISIT')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1 ${
+                      filterKind === 'VISIT'
+                        ? 'bg-emerald-700 text-white'
+                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    }`}
                   >
-                    <Plus className="w-4 h-4 stroke-[2.5]" />
-                    <span>Tambah Jadwal</span>
+                    <Store className="w-3 h-3" />
+                    <span>Hanya Visit Toko ({metrics.visitsCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterKind('NON_VISIT')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1 ${
+                      filterKind === 'NON_VISIT'
+                        ? 'bg-cyan-700 text-white'
+                        : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200'
+                    }`}
+                  >
+                    <Building2 className="w-3 h-3" />
+                    <span>Semua Non-Visit ({metrics.nonVisitsCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterKind('MEETING')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
+                      filterKind === 'MEETING'
+                        ? 'bg-blue-700 text-white'
+                        : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200'
+                    }`}
+                  >
+                    Meeting ({metrics.meetings})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterKind('TRAINING')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
+                      filterKind === 'TRAINING'
+                        ? 'bg-cyan-700 text-white'
+                        : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200'
+                    }`}
+                  >
+                    Training ({metrics.trainings})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterKind('LEAVE')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
+                      filterKind === 'LEAVE'
+                        ? 'bg-rose-700 text-white'
+                        : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200'
+                    }`}
+                  >
+                    Cuti / Off ({metrics.leavesCount})
+                  </button>
+                </div>
+
+                {/* Right: PIC Dropdown & Download Button */}
+                <div className="flex items-center gap-2">
+                  {/* PIC Dropdown */}
+                  <select
+                    value={filterPic}
+                    onChange={(e) => setFilterPic(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none"
+                  >
+                    <option value="ALL">Semua Personil ({picList.length})</option>
+                    {picList.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name} ({p.count})
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* 1-Click Excel Export */}
+                  <button
+                    type="button"
+                    onClick={handleExportRawAgendas}
+                    title="Unduh data tabel saat ini ke spreadsheet Excel"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Tarik Excel (.xlsx)</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Agendas List Table */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between text-xs text-slate-500">
-                <span>
-                  Menampilkan <b className="text-slate-800">{sortedAgendas.length}</b> agenda terklasifikasi
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Data otomatis tersinkron ke Cloudflare D1 &amp; Google Drive
-                </span>
-              </div>
-
-              {sortedAgendas.length === 0 ? (
-                <div className="py-14 px-4 text-center space-y-2">
-                  <CalendarIcon className="w-10 h-10 text-slate-300 mx-auto" />
-                  <h3 className="text-sm font-black text-slate-700">Tidak Ada Agenda Sesuai Filter</h3>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    Silakan ubah domain, kategori, atau preset tanggal di atas.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-100/75 border-b border-slate-200/80 text-[11px] font-black text-slate-600 uppercase tracking-wider">
-                        <th className="py-3 px-3.5">Tanggal &amp; Waktu</th>
-                        <th className="py-3 px-3">Kategori &amp; Domain</th>
-                        <th className="py-3 px-3">Kegiatan / Lokasi / Toko</th>
-                        <th className="py-3 px-3">Personil (PIC)</th>
-                        <th className="py-3 px-3">Status Pelaksanaan</th>
-                        <th className="py-3 px-3 text-right">Aksi</th>
+            {/* SPREADSHEET HIGH-DENSITY DATA TABLE */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-black tracking-wider">
+                      <th className="py-2.5 px-3 text-center w-10">No</th>
+                      <th className="py-2.5 px-3 w-28">Tanggal & Jam</th>
+                      <th className="py-2.5 px-3 w-36">Personil (PIC)</th>
+                      <th className="py-2.5 px-3 w-32">Jenis Kegiatan</th>
+                      <th className="py-2.5 px-4 min-w-[200px]">Judul Agenda & Deskripsi</th>
+                      <th className="py-2.5 px-3 min-w-[160px]">Lokasi / Toko</th>
+                      <th className="py-2.5 px-3 w-36">Status Pelaksanaan</th>
+                      <th className="py-2.5 px-3 w-28 text-center">Laporan QSC</th>
+                      <th className="py-2.5 px-3 w-20 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredClassifiedAgendas.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-slate-400">
+                          <Info className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                          <p className="font-bold text-sm text-slate-600">Tidak ada agenda yang cocok dengan filter</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Coba ubah tanggal preset, kata kunci pencarian, atau jenis kegiatan
+                          </p>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                      {sortedAgendas.map((agenda) => {
-                        const st = getAgendaStatusInfo(agenda);
-                        const isToday = agenda.date === todayIso;
-                        const catMeta = CATEGORY_DOMAINS[agenda.category] || CATEGORY_DOMAINS.VISIT;
+                    ) : (
+                      filteredClassifiedAgendas.map((item, idx) => {
+                        const ag = item.agenda;
+                        const hasStore = Boolean(ag.storeCode || ag.storeName);
 
                         return (
                           <tr
-                            key={agenda.id}
+                            key={ag.id}
                             className={`hover:bg-slate-50/80 transition-colors ${
-                              isToday ? 'bg-emerald-50/25' : ''
+                              idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'
                             }`}
                           >
-                            {/* 1. Date & Time */}
-                            <td className="py-3 px-3.5 whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-black text-slate-900">{agenda.date}</span>
-                                {isToday && (
-                                  <span className="px-1.5 py-0.2 rounded bg-emerald-500 text-white text-[9px] font-black">
-                                    Hari Ini
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[10.5px] text-slate-400 font-mono">
-                                {agenda.time || '08:00'} - {agenda.endTime || 'Selesai'}
+                            {/* No */}
+                            <td className="py-2 px-3 text-center font-bold text-slate-400">
+                              {idx + 1}
+                            </td>
+
+                            {/* Tanggal & Jam */}
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span className="font-black text-slate-900 block leading-tight">
+                                {ag.date}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-500 block leading-tight mt-0.5">
+                                {ag.time || '08:00'} - {ag.endTime || '17:00'} WIB
                               </span>
                             </td>
 
-                            {/* 2. Category & Domain */}
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              <span
-                                className={`px-2 py-0.5 rounded-lg text-[10.5px] font-black uppercase tracking-tight border inline-block ${catMeta.bg} ${catMeta.color} ${catMeta.border}`}
-                              >
-                                {catMeta.label}
-                              </span>
-                            </td>
-
-                            {/* 3. Description / Location / Store */}
-                            <td className="py-3 px-3 min-w-[220px]">
-                              <div className="flex items-center gap-1.5">
-                                {st.domain === 'STORE' ? (
-                                  <Store className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                                ) : st.domain === 'OFFICE' ? (
-                                  <Briefcase className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                ) : (
-                                  <Coffee className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                )}
-                                <span className="font-black text-slate-900 leading-snug">
-                                  {agenda.storeName || agenda.location || agenda.title}
+                            {/* PIC */}
+                            <td className="py-2 px-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                                  {ag.pic ? ag.pic.charAt(0).toUpperCase() : '?'}
+                                </div>
+                                <span className="font-bold text-slate-800 truncate" title={ag.pic}>
+                                  {ag.pic || 'Unassigned'}
                                 </span>
-                                {agenda.storeCode && (
-                                  <span className="px-1.5 py-0.2 rounded bg-slate-100 font-mono text-[10px] font-black text-slate-700 shrink-0">
-                                    {agenda.storeCode}
-                                  </span>
-                                )}
                               </div>
-                              {agenda.description && (
-                                <span className="text-[10px] text-slate-500 block mt-0.5 truncate max-w-sm">
-                                  {agenda.description}
+                            </td>
+
+                            {/* Jenis Kegiatan Badge */}
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
+                              >
+                                {item.isExplicitVisit && <Store className="w-3 h-3 shrink-0" />}
+                                {item.kind === 'MEETING' && <Building2 className="w-3 h-3 shrink-0" />}
+                                {item.kind === 'TRAINING' && <BookOpen className="w-3 h-3 shrink-0" />}
+                                {item.kind === 'LEAVE' && <Coffee className="w-3 h-3 shrink-0" />}
+                                <span>{item.badge.label}</span>
+                              </span>
+                            </td>
+
+                            {/* Judul & Deskripsi */}
+                            <td className="py-2 px-4">
+                              <p className="font-black text-slate-900 leading-tight">
+                                {ag.title}
+                              </p>
+                              {ag.description && (
+                                <p className="text-[11px] font-medium text-slate-500 line-clamp-1 mt-0.5">
+                                  {ag.description}
+                                </p>
+                              )}
+                            </td>
+
+                            {/* Lokasi / Toko */}
+                            <td className="py-2 px-3">
+                              {hasStore ? (
+                                <div>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {ag.storeCode && (
+                                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">
+                                        {ag.storeCode}
+                                      </span>
+                                    )}
+                                    <span className="font-black text-slate-800 text-xs">
+                                      {ag.storeName || ag.location}
+                                    </span>
+                                  </div>
+                                  {!item.isExplicitVisit && (
+                                    <span className="text-[9.5px] font-bold text-slate-400 block mt-0.5">
+                                      (Lokasi Toko, Agenda Non-Visit)
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="font-medium text-slate-700">
+                                  {ag.location || 'Kantor / Daring'}
                                 </span>
                               )}
                             </td>
 
-                            {/* 4. PIC */}
-                            <td className="py-3 px-3 whitespace-nowrap">
+                            {/* Status Pelaksanaan */}
+                            <td className="py-2 px-3 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
-                                <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 font-black text-[10px] flex items-center justify-center shrink-0">
-                                  {(agenda.pic || 'U').charAt(0)}
-                                </div>
-                                <span className="font-bold text-slate-800">
-                                  {agenda.pic || 'Belum Ditugaskan'}
-                                </span>
-                              </div>
-                            </td>
-
-                            {/* 5. Status Pelaksanaan */}
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              <div className="flex flex-col gap-0.5">
+                                <span className={`w-2 h-2 rounded-full ${item.status.dot} shrink-0`} />
                                 <span
-                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black border self-start ${st.badge}`}
+                                  className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${item.status.bg} ${item.status.color} ${item.status.border}`}
                                 >
-                                  <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                                  <span>{st.label}</span>
+                                  {item.status.label}
                                 </span>
-                                {st.needsVisitTracking && (agenda.actualIn || st.report?.actualIn) && (
-                                  <span className="text-[10px] text-slate-400 font-mono">
-                                    IN: {agenda.actualIn || st.report?.actualIn}
-                                    {(agenda.actualOut || st.report?.actualOut) &&
-                                      ` • OUT: ${agenda.actualOut || st.report?.actualOut}`}
-                                  </span>
-                                )}
                               </div>
+                              {/* Actual In/Out info for visit */}
+                              {item.isExplicitVisit && (ag.actualIn || item.report?.actualIn) && (
+                                <span className="text-[9.5px] font-bold text-slate-500 block mt-0.5">
+                                  IN: {ag.actualIn || item.report?.actualIn}{' '}
+                                  {ag.actualOut || item.report?.actualOut ? `• OUT: ${ag.actualOut || item.report?.actualOut}` : ''}
+                                </span>
+                              )}
                             </td>
 
-                            {/* 6. Actions */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-1.5">
-                                {st.report && (
+                            {/* Laporan QSC */}
+                            <td className="py-2 px-3 text-center whitespace-nowrap">
+                              {item.isExplicitVisit ? (
+                                item.report ? (
                                   <button
                                     type="button"
-                                    onClick={() => setPreviewingReport(st.report!)}
-                                    className="p-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 transition cursor-pointer"
-                                    title="Pratinjau Hasil Laporan Visit"
+                                    onClick={() => setPreviewingReport(item.report!)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition cursor-pointer shadow-xs active:scale-95"
                                   >
-                                    <Eye className="w-3.5 h-3.5" />
+                                    <FileText className="w-3 h-3" />
+                                    <span>Lihat PDF</span>
                                   </button>
-                                )}
+                                ) : (
+                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                    Menunggu
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-[11px] font-bold text-slate-300">—</span>
+                              )}
+                            </td>
 
+                            {/* Aksi */}
+                            <td className="py-2 px-3 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setEditingAgenda(agenda);
+                                    setEditingAgenda(ag);
                                     setIsAgendaModalOpen(true);
                                   }}
-                                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
                                   title="Edit Agenda"
+                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
                                 </button>
-
                                 <button
                                   type="button"
-                                  onClick={() => setDeletingAgenda(agenda)}
-                                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition cursor-pointer"
+                                  onClick={() => setDeletingAgenda(ag)}
                                   title="Hapus Agenda"
+                                  className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -1417,507 +1587,528 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             </td>
                           </tr>
                         );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ---------------------------------------------------------------------
-            TAB 2: KALENDER PENUH (FULL INTERACTIVE MONTH CALENDAR)
-            --------------------------------------------------------------------- */}
-        {activeTab === 'calendar' && (
-          <div className="space-y-4 animate-in fade-in">
-            {/* Calendar Month Header & Navigation */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black">
-                  <CalendarIcon className="w-5 h-5 stroke-[2.2]" />
-                </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-black text-slate-900 capitalize">
-                    {calendarMonthData.monthName}
-                  </h2>
-                  <span className="text-xs text-slate-500 font-medium">
-                    Kalender Seluruh Jadwal Tim Lapangan &amp; Kantor
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const prev = new Date(calendarDate);
-                    prev.setMonth(prev.getMonth() - 1);
-                    setCalendarDate(prev);
-                  }}
-                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                  title="Bulan Sebelumnya"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const now = new Date();
-                    setCalendarDate(now);
-                    setSelectedCalendarDate(todayIso);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black transition cursor-pointer"
-                >
-                  Bulan Ini
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = new Date(calendarDate);
-                    next.setMonth(next.getMonth() + 1);
-                    setCalendarDate(next);
-                  }}
-                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                  title="Bulan Berikutnya"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Calendar Grid & Detail Drawer Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Full Month Grid (2 Cols on Desktop) */}
-              <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden p-3 sm:p-4 space-y-2">
-                {/* Day Header Row */}
-                <div className="grid grid-cols-7 text-center text-[11px] font-black text-slate-400 uppercase py-1 border-b border-slate-100">
-                  <span>Sen</span>
-                  <span>Sel</span>
-                  <span>Rab</span>
-                  <span>Kam</span>
-                  <span>Jum</span>
-                  <span className="text-rose-500">Sab</span>
-                  <span className="text-rose-600">Min</span>
-                </div>
-
-                {/* Day Cells Matrix */}
-                <div className="grid grid-cols-7 gap-1 sm:gap-1.5 auto-rows-fr">
-                  {/* Empty Shift Cells */}
-                  {Array.from({ length: calendarMonthData.shift }).map((_, i) => (
-                    <div key={`empty-${i}`} className="min-h-[72px] sm:min-h-[90px] rounded-xl bg-slate-50/50 p-1" />
-                  ))}
-
-                  {/* Month Day Cells */}
-                  {calendarMonthData.days.map(({ day, dateStr, agendas: dayAgendas }) => {
-                    const isSelected = dateStr === selectedCalendarDate;
-                    const isToday = dateStr === todayIso;
-
-                    return (
-                      <div
-                        key={dateStr}
-                        onClick={() => setSelectedCalendarDate(dateStr)}
-                        className={`min-h-[72px] sm:min-h-[90px] rounded-xl p-1.5 border transition cursor-pointer flex flex-col justify-between ${
-                          isSelected
-                            ? 'bg-blue-50/70 border-blue-400 ring-2 ring-blue-400/30'
-                            : isToday
-                            ? 'bg-emerald-50/50 border-emerald-300'
-                            : 'bg-white hover:bg-slate-50 border-slate-200/70'
-                        }`}
-                      >
-                        {/* Day Number */}
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-                              isToday
-                                ? 'bg-emerald-600 text-white'
-                                : isSelected
-                                ? 'bg-blue-600 text-white'
-                                : 'text-slate-800'
-                            }`}
-                          >
-                            {day}
-                          </span>
-                          {dayAgendas.length > 0 && (
-                            <span className="text-[10px] font-bold text-slate-400">
-                              {dayAgendas.length}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Micro Chips */}
-                        <div className="space-y-0.5 mt-1 overflow-hidden">
-                          {dayAgendas.slice(0, 2).map((a) => {
-                            const meta = CATEGORY_DOMAINS[a.category] || CATEGORY_DOMAINS.VISIT;
-                            return (
-                              <div
-                                key={a.id}
-                                className={`px-1 py-0.2 rounded text-[9px] font-bold truncate ${meta.bg} ${meta.color}`}
-                                title={`${a.category}: ${a.storeName || a.title} (${a.pic})`}
-                              >
-                                {a.category}: {a.storeCode || a.pic}
-                              </div>
-                            );
-                          })}
-                          {dayAgendas.length > 2 && (
-                            <span className="text-[8.5px] font-bold text-slate-400 block truncate">
-                              +{dayAgendas.length - 2} lagi
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Day Detail Panel (1 Col on Desktop) */}
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 flex flex-col justify-between space-y-3">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Agenda Terpilih
-                      </span>
-                      <h3 className="text-sm font-black text-slate-900">
-                        {new Date(selectedCalendarDate + 'T00:00:00').toLocaleDateString('id-ID', {
-                          weekday: 'long',
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric',
-                        })}
-                      </h3>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingAgenda(null);
-                        setDefaultDateForModal(selectedCalendarDate);
-                        setIsAgendaModalOpen(true);
-                      }}
-                      className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition cursor-pointer"
-                      title="Tambah jadwal di tanggal ini"
-                    >
-                      <Plus className="w-4 h-4 stroke-[2.5]" />
-                    </button>
-                  </div>
-
-                  {/* Day Agenda Items */}
-                  <div className="space-y-2 max-h-[460px] overflow-y-auto no-scrollbar">
-                    {selectedDayAgendas.length === 0 ? (
-                      <div className="py-12 text-center text-slate-400 space-y-1.5">
-                        <CalendarIcon className="w-8 h-8 text-slate-300 mx-auto" />
-                        <p className="text-xs">Tidak ada agenda pada tanggal ini.</p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingAgenda(null);
-                            setDefaultDateForModal(selectedCalendarDate);
-                            setIsAgendaModalOpen(true);
-                          }}
-                          className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
-                        >
-                          + Tambah Agenda
-                        </button>
-                      </div>
-                    ) : (
-                      selectedDayAgendas.map((item) => {
-                        const st = getAgendaStatusInfo(item);
-                        const meta = CATEGORY_DOMAINS[item.category] || CATEGORY_DOMAINS.VISIT;
-
-                        return (
-                          <div
-                            key={item.id}
-                            className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 transition space-y-1.5"
-                          >
-                            <div className="flex items-center justify-between gap-1.5">
-                              <span
-                                className={`px-1.5 py-0.2 rounded text-[9.5px] font-black uppercase tracking-tight ${meta.bg} ${meta.color}`}
-                              >
-                                {meta.label}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                {item.time || '08:00'} - {item.endTime || 'Selesai'}
-                              </span>
-                            </div>
-
-                            <div>
-                              <h4 className="text-xs font-black text-slate-900 leading-snug">
-                                {item.storeName || item.location || item.title}
-                              </h4>
-                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
-                                <span className="font-bold text-slate-700">{item.pic || 'Belum Ditugaskan'}</span>
-                                {item.storeCode && <span>• Kode: {item.storeCode}</span>}
-                              </div>
-                            </div>
-
-                            {/* Status and Action Strip */}
-                            <div className="pt-1 border-t border-slate-200/60 flex items-center justify-between text-[10px]">
-                              <span className={`inline-flex items-center gap-1 font-bold ${st.code === 'COMPLETED' ? 'text-emerald-700' : 'text-slate-600'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                                <span>{st.label}</span>
-                              </span>
-
-                              <div className="flex items-center gap-1">
-                                {st.report && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setPreviewingReport(st.report!)}
-                                    className="p-1 text-teal-700 hover:bg-teal-100 rounded"
-                                    title="Lihat Laporan"
-                                  >
-                                    <Eye className="w-3 h-3" />
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingAgenda(item);
-                                    setIsAgendaModalOpen(true);
-                                  }}
-                                  className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                                  title="Edit"
-                                >
-                                  <Edit3 className="w-3 h-3" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeletingAgenda(item)}
-                                  className="p-1 text-rose-600 hover:bg-rose-100 rounded"
-                                  title="Hapus"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
                       })
                     )}
-                  </div>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table Footer: Summary Count */}
+              <div className="bg-slate-50 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between text-xs text-slate-500 font-bold">
+                <span>
+                  Menampilkan <strong className="text-slate-800">{filteredClassifiedAgendas.length}</strong> dari{' '}
+                  <strong className="text-slate-800">{allClassifiedAgendas.length}</strong> total agenda
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  FamilyMart Operations Data Engine
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================
+            TAB 2: KALENDER INTERAKTIF (Full Month Interactive Matrix)
+            ============================================================ */}
+        {activeTab === 'calendar' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left 2 Cols: Interactive Calendar Matrix */}
+            <div className="lg:col-span-2 bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-4">
+              {/* Calendar Month Header & Nav */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-black text-slate-900 leading-none">
+                    {calendarMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                  </h2>
+                  <p className="text-xs font-bold text-slate-500 mt-1">
+                    Klik pada tanggal untuk melihat agenda kerja
+                  </p>
                 </div>
 
-                <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400 text-center">
-                  Total {selectedDayAgendas.length} agenda di tanggal ini
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date();
+                      setCalendarMonth(now);
+                      setSelectedCalendarDate(now.toISOString().split('T')[0]);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
+                  >
+                    Bulan Ini
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Day Labels */}
+              <div className="grid grid-cols-7 gap-1 text-center font-black text-[11px] text-slate-400 uppercase py-1 border-b border-slate-100">
+                <span>Sen</span>
+                <span>Sel</span>
+                <span>Rab</span>
+                <span>Kam</span>
+                <span>Jum</span>
+                <span className="text-amber-600">Sab</span>
+                <span className="text-rose-600">Min</span>
+              </div>
+
+              {/* Days Matrix */}
+              <div className="grid grid-cols-7 gap-1.5">
+                {calendarMatrix.map((cell) => {
+                  const dayAgendas = calendarAgendasMap.get(cell.dateStr) || [];
+                  const isSelected = selectedCalendarDate === cell.dateStr;
+                  const isToday = todayIso === cell.dateStr;
+
+                  const visitCount = dayAgendas.filter((i) => i.isExplicitVisit).length;
+                  const nonVisitCount = dayAgendas.filter((i) => !i.isExplicitVisit && i.kind !== 'LEAVE' && i.kind !== 'OFF').length;
+                  const leaveCount = dayAgendas.filter((i) => i.kind === 'LEAVE' || i.kind === 'OFF').length;
+
+                  return (
+                    <button
+                      key={cell.dateStr}
+                      type="button"
+                      onClick={() => setSelectedCalendarDate(cell.dateStr)}
+                      className={`min-h-[72px] sm:min-h-[82px] p-1.5 rounded-xl text-left border flex flex-col justify-between transition cursor-pointer ${
+                        isSelected
+                          ? 'border-slate-900 bg-slate-900 text-white shadow-md'
+                          : isToday
+                          ? 'border-emerald-400 bg-emerald-50/50 text-slate-900'
+                          : cell.isCurrentMonth
+                          ? 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800'
+                          : 'border-slate-100 bg-slate-50/50 text-slate-300'
+                      }`}
+                    >
+                      {/* Top Day Number */}
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-xs font-black w-6 h-6 rounded-full flex items-center justify-center ${
+                            isToday && !isSelected
+                              ? 'bg-emerald-600 text-white'
+                              : isSelected
+                              ? 'text-white'
+                              : 'text-slate-700'
+                          }`}
+                        >
+                          {cell.dayNum}
+                        </span>
+
+                        {dayAgendas.length > 0 && (
+                          <span
+                            className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${
+                              isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                            }`}
+                          >
+                            {dayAgendas.length}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Micro Dot Indicators */}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {visitCount > 0 && (
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-emerald-500"
+                            title={`${visitCount} Visit Toko`}
+                          />
+                        )}
+                        {nonVisitCount > 0 && (
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-blue-500"
+                            title={`${nonVisitCount} Non-Visit (Meeting/Training)`}
+                          />
+                        )}
+                        {leaveCount > 0 && (
+                          <span
+                            className="inline-block w-2 h-2 rounded-full bg-rose-500"
+                            title={`${leaveCount} Cuti/Off`}
+                          />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="flex items-center justify-center gap-4 text-xs font-bold text-slate-500 pt-2 border-t border-slate-100 flex-wrap">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span>Visit Toko</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  <span>Meeting / Training</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                  <span>Cuti / Off</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Right 1 Col: Selected Date Agenda List */}
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-3">
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 leading-none">
+                      Agenda Tanggal {selectedCalendarDate}
+                    </h3>
+                    <p className="text-xs font-bold text-slate-500 mt-1">
+                      {selectedCalendarAgendas.length} kegiatan terjadwal
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingAgenda(null);
+                      setDefaultDateForModal(selectedCalendarDate);
+                      setIsAgendaModalOpen(true);
+                    }}
+                    className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition active:scale-95 cursor-pointer"
+                    title="Tambah agenda pada tanggal ini"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* List Container */}
+                <div className="divide-y divide-slate-100 mt-2 max-h-[500px] overflow-y-auto no-scrollbar space-y-2">
+                  {selectedCalendarAgendas.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400">
+                      <CalendarDays className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                      <p className="font-bold text-xs text-slate-600">Tidak ada agenda pada tanggal ini</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingAgenda(null);
+                          setDefaultDateForModal(selectedCalendarDate);
+                          setIsAgendaModalOpen(true);
+                        }}
+                        className="mt-3 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
+                      >
+                        + Jadwalkan Kegiatan
+                      </button>
+                    </div>
+                  ) : (
+                    selectedCalendarAgendas.map((item) => {
+                      const ag = item.agenda;
+                      return (
+                        <div key={ag.id} className="pt-2 pb-2 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`text-[9.5px] font-black px-2 py-0.5 rounded-md border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
+                            >
+                              {item.badge.label}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500">
+                              {ag.time || '08:00'} WIB
+                            </span>
+                          </div>
+
+                          <h4 className="text-xs font-black text-slate-900 leading-tight">
+                            {ag.title}
+                          </h4>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-600">
+                            <span className="font-bold text-slate-700 truncate">
+                              📍 {ag.storeName || ag.location || '-'}
+                            </span>
+                            <span className="font-bold text-slate-500 shrink-0">
+                              👤 {ag.pic}
+                            </span>
+                          </div>
+
+                          {/* Quick Actions */}
+                          <div className="flex items-center justify-end gap-1.5 pt-1">
+                            {item.report && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewingReport(item.report!)}
+                                className="text-[10px] font-black text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <FileText className="w-3 h-3" />
+                                <span>Lihat Laporan</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingAgenda(ag);
+                                setIsAgendaModalOpen(true);
+                              }}
+                              className="text-[10px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            <span className="text-slate-300">•</span>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingAgenda(ag)}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* ---------------------------------------------------------------------
-            TAB 3: VISUAL ANALITIK & GRAFIK OPERASIONAL
-            --------------------------------------------------------------------- */}
+        {/* ============================================================
+            TAB 3: ANALITIK & REKAP PRODUKTIVITAS TIM
+            ============================================================ */}
         {activeTab === 'analytics' && (
-          <div className="space-y-4 animate-in fade-in">
-            {/* Top Overview Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Distribution Chart Bar */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
+          <div className="space-y-4">
+            {/* Top Row: Visual Breakdown Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Card 1: Distribusi Kegiatan */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    <PieChart className="w-4 h-4 text-emerald-600" />
-                    <span>Distribusi Kegiatan</span>
+                  <h3 className="text-xs font-black uppercase text-slate-500 tracking-wider">
+                    Distribusi Kegiatan Tim
                   </h3>
-                  <span className="text-[11px] font-bold text-slate-400">
-                    {filteredAgendas.length} Total
-                  </span>
-                </div>
-
-                {/* Stacked Progress Bar */}
-                <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
-                  <div
-                    style={{
-                      width: `${filteredAgendas.length > 0 ? (domainStats.storeTotal / filteredAgendas.length) * 100 : 0}%`,
-                    }}
-                    className="bg-emerald-500 h-full"
-                    title={`Kegiatan Toko: ${domainStats.storeTotal}`}
-                  />
-                  <div
-                    style={{
-                      width: `${filteredAgendas.length > 0 ? (domainStats.officeTotal / filteredAgendas.length) * 100 : 0}%`,
-                    }}
-                    className="bg-blue-500 h-full"
-                    title={`Kantor & Koordinasi: ${domainStats.officeTotal}`}
-                  />
-                  <div
-                    style={{
-                      width: `${filteredAgendas.length > 0 ? (domainStats.leaveTotal / filteredAgendas.length) * 100 : 0}%`,
-                    }}
-                    className="bg-rose-400 h-full"
-                    title={`Cuti & Libur: ${domainStats.leaveTotal}`}
-                  />
-                </div>
-
-                {/* Legend Breakdown */}
-                <div className="space-y-1.5 text-xs pt-1">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      <span>Kegiatan Toko (Visit / NSO / Audit)</span>
-                    </span>
-                    <span className="font-black text-slate-900">{domainStats.storeTotal}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                      <span>Kantor &amp; Koordinasi (Meeting/Train)</span>
-                    </span>
-                    <span className="font-black text-slate-900">{domainStats.officeTotal}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                      <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
-                      <span>Status Personil (Cuti / Libur Off)</span>
-                    </span>
-                    <span className="font-black text-slate-900">{domainStats.leaveTotal}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Realisasi Kunjungan Gauge */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    <TrendingUp className="w-4 h-4 text-teal-600" />
-                    <span>Tingkat Realisasi Kunjungan</span>
-                  </h3>
-                  <span className="text-xs font-black text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full">
-                    {domainStats.storeCompletionRate}% Target
-                  </span>
+                  <PieChart className="w-4 h-4 text-slate-400" />
                 </div>
 
                 <div className="space-y-2">
-                  <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      style={{ width: `${domainStats.storeCompletionRate}%` }}
-                      className="bg-teal-500 h-full rounded-full transition-all duration-500"
-                    />
+                  {/* Visit Toko Bar */}
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-emerald-800 flex items-center gap-1">
+                        <Store className="w-3.5 h-3.5" /> Visit Toko Resmi
+                      </span>
+                      <span className="text-slate-800">
+                        {metrics.visitsCount} ({metrics.total > 0 ? Math.round((metrics.visitsCount / metrics.total) * 100) : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full"
+                        style={{ width: `${metrics.total > 0 ? (metrics.visitsCount / metrics.total) * 100 : 0}%` }}
+                      />
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    <b className="text-slate-800">{domainStats.storeCompleted}</b> dari total{' '}
-                    <b className="text-slate-800">{domainStats.storeTotal}</b> kunjungan toko telah selesai dilaksanakan oleh tim.
-                  </p>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                  {/* Meeting Bar */}
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Sedang di Toko</span>
-                    <span className="text-base font-black text-amber-600">{domainStats.storeInProgress} Kru</span>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-blue-800 flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5" /> Meeting & Koordinasi
+                      </span>
+                      <span className="text-slate-800">
+                        {metrics.meetings} ({metrics.total > 0 ? Math.round((metrics.meetings / metrics.total) * 100) : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 rounded-full"
+                        style={{ width: `${metrics.total > 0 ? (metrics.meetings / metrics.total) * 100 : 0}%` }}
+                      />
+                    </div>
                   </div>
+
+                  {/* Training Bar */}
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Laporan Submit</span>
-                    <span className="text-base font-black text-teal-700">{domainStats.storeSubmittedReports} Dokumen</span>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-cyan-800 flex items-center gap-1">
+                        <BookOpen className="w-3.5 h-3.5" /> Training & Coaching
+                      </span>
+                      <span className="text-slate-800">
+                        {metrics.trainings} ({metrics.total > 0 ? Math.round((metrics.trainings / metrics.total) * 100) : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full bg-cyan-500 rounded-full"
+                        style={{ width: `${metrics.total > 0 ? (metrics.trainings / metrics.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cuti & Off Bar */}
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-rose-800 flex items-center gap-1">
+                        <Coffee className="w-3.5 h-3.5" /> Cuti & Libur Off
+                      </span>
+                      <span className="text-slate-800">
+                        {metrics.leavesCount} ({metrics.total > 0 ? Math.round((metrics.leavesCount / metrics.total) * 100) : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full bg-rose-500 rounded-full"
+                        style={{ width: `${metrics.total > 0 ? (metrics.leavesCount / metrics.total) * 100 : 0}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Master Data Metrics */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
+              {/* Card 2: Kepatuhan Visit Lapangan */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    <Store className="w-4 h-4 text-purple-600" />
-                    <span>Cakupan Toko &amp; Tim</span>
+                  <h3 className="text-xs font-black uppercase text-slate-500 tracking-wider">
+                    Realisasi Visit Toko
                   </h3>
-                  <span className="text-xs font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
-                    610 Cabang
-                  </span>
+                  <Award className="w-4 h-4 text-emerald-600" />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-bold block">Toko Terkunjungi</span>
-                    <span className="text-lg font-black text-slate-900 block mt-0.5">
-                      {domainStats.uniqueStores} <span className="text-xs text-slate-500">Cabang</span>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-500 flex flex-col items-center justify-center shrink-0">
+                    <span className="text-xl font-black text-emerald-800 leading-none">
+                      {metrics.visitPercentage}%
                     </span>
+                    <span className="text-[9px] font-bold text-emerald-600 uppercase mt-0.5">Selesai</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-bold block">Personil On-Duty</span>
-                    <span className="text-lg font-black text-slate-900 block mt-0.5">
-                      {domainStats.uniquePics} <span className="text-xs text-slate-500">Staff</span>
-                    </span>
+
+                  <div className="space-y-1 text-xs">
+                    <p className="font-black text-slate-800">
+                      {metrics.visitDone} dari {metrics.visitsCount} Visit Selesai
+                    </p>
+                    <p className="text-[11px] font-bold text-slate-500">
+                      • {metrics.visitInProgress} sedang berada di toko
+                    </p>
+                    <p className="text-[11px] font-bold text-slate-500">
+                      • {metrics.visitPending} belum melakukan check-in
+                    </p>
                   </div>
                 </div>
+              </div>
 
-                <div className="text-[11px] text-slate-500">
-                  Total database resmi: <b className="text-slate-800">{masterStores.length}</b> toko di seluruh wilayah operasional.
+              {/* Card 3: Master Toko Coverage */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase text-slate-500 tracking-wider">
+                    Database Master Toko
+                  </h3>
+                  <Store className="w-4 h-4 text-slate-400" />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-black text-slate-900 leading-none">
+                      {masterStores.length}
+                    </span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                      Cabang Aktif
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium text-slate-500">
+                    Terdata resmi di seluruh area Jabodetabek, Bandung, dan sekitarnya.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('datahub')}
+                    className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Kelola Master Toko di Data Hub</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Team Productivity Matrix Table */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-              <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between">
+            {/* Bottom Row: Team Productivity Leaderboard */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="px-4 sm:px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
-                    <Award className="w-4 h-4 text-amber-500" />
-                    <span>Rekapitulasi Produktivitas Seluruh Personil</span>
+                  <h3 className="text-sm font-black text-slate-900 leading-none">
+                    Rekapitulasi Produktivitas Personil (Team Leaderboard)
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium">
-                    Breakdown aktivitas per personil mencakup kunjungan toko, koordinasi kantor, dan kepatuhan submit laporan.
+                  <p className="text-xs font-bold text-slate-500 mt-1">
+                    Akumulasi beban kerja, visit toko selesai, dan kegiatan operasional
                   </p>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleExportTeamMatrix}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <Download className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Download Rekap (.xlsx)</span>
-                </button>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-slate-100/75 border-b border-slate-200/80 text-[11px] font-black text-slate-600 uppercase tracking-wider">
-                      <th className="py-3 px-3.5">Peringkat &amp; Nama Personil</th>
-                      <th className="py-3 px-3 text-center">Total Agenda</th>
-                      <th className="py-3 px-3 text-center">Visit Toko</th>
-                      <th className="py-3 px-3 text-center">Realisasi Selesai</th>
-                      <th className="py-3 px-3 text-center">% Realisasi</th>
-                      <th className="py-3 px-3 text-center">Kantor &amp; Meeting</th>
-                      <th className="py-3 px-3 text-center">Cuti &amp; Libur</th>
-                      <th className="py-3 px-3 text-right">Laporan Submit</th>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px] font-black tracking-wider">
+                      <th className="py-2.5 px-3 text-center w-12">Rank</th>
+                      <th className="py-2.5 px-3">Nama Personil</th>
+                      <th className="py-2.5 px-3 text-center">Total Agenda</th>
+                      <th className="py-2.5 px-3 text-center">Visit Selesai / Total</th>
+                      <th className="py-2.5 px-3 text-center">Meeting</th>
+                      <th className="py-2.5 px-3 text-center">Training</th>
+                      <th className="py-2.5 px-3 text-center">Cuti / Off</th>
+                      <th className="py-2.5 px-3 min-w-[120px]">Tingkat Realisasi Visit</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                    {teamMatrix.map((item, idx) => {
-                      const rate = item.storeVisits > 0 ? Math.round((item.completedVisits / item.storeVisits) * 100) : 0;
-                      return (
-                        <tr key={item.pic} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3 px-3.5 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-md bg-slate-200 text-slate-700 font-black text-[10px] flex items-center justify-center">
-                                {idx + 1}
-                              </span>
-                              <span className="font-black text-slate-900">{item.pic}</span>
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {teamLeaderboard.map((person, idx) => (
+                      <tr key={person.name} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2.5 px-3 text-center font-black text-slate-400">
+                          #{idx + 1}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                              {person.name.charAt(0).toUpperCase()}
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-center font-bold text-slate-800">{item.total}</td>
-                          <td className="py-3 px-3 text-center font-black text-emerald-800">{item.storeVisits}</td>
-                          <td className="py-3 px-3 text-center font-black text-emerald-600">{item.completedVisits}</td>
-                          <td className="py-3 px-3 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-2">
-                              <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                <div style={{ width: `${rate}%` }} className="bg-emerald-500 h-full rounded-full" />
-                              </div>
-                              <span className="font-bold text-[11px] text-slate-700">{rate}%</span>
+                            <span className="font-black text-slate-900">{person.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-black text-slate-800">
+                          {person.total}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="text-emerald-700 font-black">
+                            {person.visitDone}
+                          </span>{' '}
+                          / <span className="text-slate-500">{person.visits}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-blue-700">
+                          {person.meetings}
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-cyan-700">
+                          {person.trainings}
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-rose-700">
+                          {person.leaves}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-500 rounded-full"
+                                style={{ width: `${person.completionRate}%` }}
+                              />
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-center text-blue-700 font-bold">{item.officeCount}</td>
-                          <td className="py-3 px-3 text-center text-rose-600 font-bold">{item.leaveCount}</td>
-                          <td className="py-3 px-3 text-right whitespace-nowrap">
-                            <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-black text-[10.5px]">
-                              {item.submittedReports} Dokumen
+                            <span className="text-[11px] font-black text-slate-700 w-9 text-right">
+                              {person.completionRate}%
                             </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1925,161 +2116,121 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
 
-        {/* ---------------------------------------------------------------------
-            TAB 4: MONITORING VISIT LAPANGAN & LAPORAN RESMI
-            --------------------------------------------------------------------- */}
+        {/* ============================================================
+            TAB 4: MONITORING VISIT TOKO & LAPORAN QSC
+            Khusus Kunjungan Toko Resmi (Wajib Geofence & Laporan)
+            ============================================================ */}
         {activeTab === 'monitoring' && (
-          <div className="space-y-4 animate-in fade-in">
-            {/* Header Tools */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-4">
+            {/* Header info */}
+            <div className="bg-emerald-900 text-white rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-teal-600 stroke-[2.4]" />
-                  <span>Monitoring Actual Visit Toko &amp; Arsip Laporan QSC</span>
-                </h2>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Khusus kegiatan kunjungan toko: verifikasi jam Actual IN/OUT, kepatuhan radius geofence, dan pratinjau PDF laporan resmi.
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  <h2 className="text-base font-black">
+                    Monitoring Kunjungan Toko Resmi FMCU
+                  </h2>
+                </div>
+                <p className="text-xs text-emerald-200 mt-1">
+                  Menampilkan hanya agenda yang berstatus <strong>Visit Toko Resmi</strong>. Presensi actual IN/OUT terekam otomatis via radius 1–50m.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={handleExportRawReports}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <Download className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Ekspor Laporan (.xlsx)</span>
-                </button>
-
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={loadReports}
                   disabled={isLoadingReports}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition active:scale-95 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingReports ? 'animate-spin' : ''}`} />
-                  <span>Segarkan</span>
+                  <span>Segarkan Laporan</span>
                 </button>
               </div>
             </div>
 
-            {/* Visit Monitoring Table */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            {/* Table of Store Visits */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-slate-100/75 border-b border-slate-200/80 text-[11px] font-black text-slate-600 uppercase tracking-wider">
-                      <th className="py-3 px-3.5">Personil (PIC)</th>
-                      <th className="py-3 px-3">Toko Tujuan</th>
-                      <th className="py-3 px-3">Jadwal (Plan)</th>
-                      <th className="py-3 px-3">Actual IN (WIB)</th>
-                      <th className="py-3 px-3">Actual OUT (WIB)</th>
-                      <th className="py-3 px-3">Geofence Radius</th>
-                      <th className="py-3 px-3">Status Laporan</th>
-                      <th className="py-3 px-3 text-right">Aksi</th>
+                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-black tracking-wider">
+                      <th className="py-2.5 px-3 text-center w-10">No</th>
+                      <th className="py-2.5 px-3">Tanggal</th>
+                      <th className="py-2.5 px-3">PIC Lapangan</th>
+                      <th className="py-2.5 px-3">Kode & Nama Toko</th>
+                      <th className="py-2.5 px-3 text-center">Actual IN (Auto)</th>
+                      <th className="py-2.5 px-3 text-center">Actual OUT (Auto)</th>
+                      <th className="py-2.5 px-3 text-center">Status Audit</th>
+                      <th className="py-2.5 px-3 text-center">Laporan QSC</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                    {sortedAgendas
-                      .filter((a) => (CATEGORY_DOMAINS[a.category] || CATEGORY_DOMAINS.VISIT).domain === 'STORE')
-                      .map((agenda) => {
-                        const st = getAgendaStatusInfo(agenda);
-                        const rep = st.report;
-                        const actualInTime = agenda.actualIn || rep?.actualIn;
-                        const actualOutTime = agenda.actualOut || rep?.actualOut;
-                        const distMeters = agenda.silentAudit?.inDistanceToStoreMeters;
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {allClassifiedAgendas
+                      .filter((i) => i.isExplicitVisit)
+                      .map((item, idx) => {
+                        const ag = item.agenda;
+                        const inTime = ag.actualIn || item.report?.actualIn || '-';
+                        const outTime = ag.actualOut || item.report?.actualOut || '-';
 
                         return (
-                          <tr key={agenda.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-3.5 whitespace-nowrap">
-                              <span className="font-black text-slate-900 block">{agenda.pic || 'Belum Ditugaskan'}</span>
-                              <span className="text-[10px] text-slate-400 font-mono">{agenda.date}</span>
+                          <tr key={ag.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2.5 px-3 text-center text-slate-400 font-black">
+                              {idx + 1}
                             </td>
-
-                            <td className="py-3 px-3 min-w-[200px]">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-slate-900">{agenda.storeName || agenda.location || agenda.title}</span>
-                                {agenda.storeCode && (
-                                  <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-black text-slate-600 font-mono">
-                                    {agenda.storeCode}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-slate-400 block mt-0.5">{agenda.location || 'Bandung'}</span>
+                            <td className="py-2.5 px-3 whitespace-nowrap text-slate-900 font-black">
+                              {ag.date}
                             </td>
-
-                            <td className="py-3 px-3 whitespace-nowrap font-mono text-slate-600">
-                              {agenda.time || '08:00'} - {agenda.endTime || 'Selesai'}
+                            <td className="py-2.5 px-3 whitespace-nowrap text-slate-800">
+                              {ag.pic}
                             </td>
-
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              {actualInTime ? (
-                                <div className="flex items-center gap-1.5 text-emerald-800 font-mono font-black">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                                  <span>{actualInTime}</span>
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 italic">Belum Check-In</span>
-                              )}
+                            <td className="py-2.5 px-3">
+                              <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 mr-1.5">
+                                {ag.storeCode || '3006'}
+                              </span>
+                              <span className="font-black text-slate-900">
+                                {ag.storeName || ag.location}
+                              </span>
                             </td>
-
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              {actualOutTime ? (
-                                <div className="flex items-center gap-1.5 text-teal-800 font-mono font-black">
-                                  <span className="w-2 h-2 rounded-full bg-teal-500" />
-                                  <span>{actualOutTime}</span>
-                                </div>
-                              ) : actualInTime ? (
-                                <span className="text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-full text-[10px]">
-                                  Sedang di Toko
+                            <td className="py-2.5 px-3 text-center font-mono">
+                              {inTime !== '-' ? (
+                                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  {inTime} WIB
                                 </span>
                               ) : (
-                                <span className="text-slate-400 italic">-</span>
+                                <span className="text-slate-400">Belum IN</span>
                               )}
                             </td>
-
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              {actualInTime ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black">
-                                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                                  <span>
-                                    {distMeters !== undefined ? `${distMeters}m Terverifikasi` : 'Radius 1–50m Toko'}
-                                  </span>
+                            <td className="py-2.5 px-3 text-center font-mono">
+                              {outTime !== '-' ? (
+                                <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                  {outTime} WIB
                                 </span>
                               ) : (
-                                <span className="text-slate-400 text-[11px]">-</span>
+                                <span className="text-slate-400">Belum OUT</span>
                               )}
                             </td>
-
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              {rep ? (
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                    rep.status === 'SUBMITTED'
-                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                      : 'bg-amber-50 text-amber-800 border border-amber-200'
-                                  }`}
-                                >
-                                  {rep.status || 'DRAFT'}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 text-[10.5px]">Belum Submit</span>
-                              )}
+                            <td className="py-2.5 px-3 text-center">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black border ${item.status.bg} ${item.status.color} ${item.status.border}`}
+                              >
+                                {item.status.label}
+                              </span>
                             </td>
-
-                            <td className="py-3 px-3 text-right whitespace-nowrap">
-                              {rep ? (
+                            <td className="py-2.5 px-3 text-center">
+                              {item.report ? (
                                 <button
                                   type="button"
-                                  onClick={() => setPreviewingReport(rep)}
-                                  className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 font-extrabold text-[10.5px] transition flex items-center gap-1 cursor-pointer ml-auto"
+                                  onClick={() => setPreviewingReport(item.report!)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition cursor-pointer shadow-xs active:scale-95"
                                 >
-                                  <Eye className="w-3 h-3" />
+                                  <FileText className="w-3 h-3" />
                                   <span>Lihat PDF</span>
                                 </button>
                               ) : (
-                                <span className="text-slate-400 text-[10.5px]">-</span>
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                  Belum Submit
+                                </span>
                               )}
                             </td>
                           </tr>
@@ -2092,249 +2243,190 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
 
-        {/* ---------------------------------------------------------------------
-            TAB 5: PUSAT DATA & SINKRONISASI EXCEL (JADWAL, 610 TOKO, R23)
-            --------------------------------------------------------------------- */}
-        {activeTab === 'master-excel' && (
-          <div className="space-y-4 animate-in fade-in">
-            {/* 3 Modular Cards: Jadwal, 610 Master Toko, Holding Time R23 */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Dataset 1: Jadwal Agenda */}
-              <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-emerald-700">
-                    <CalendarIcon className="w-5 h-5 stroke-[2.2]" />
-                    <h3 className="text-sm sm:text-base font-black text-slate-900">
-                      1. Dataset Jadwal Agenda
-                    </h3>
-                  </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Unggah atau ekspor seluruh jadwal kegiatan tim (Visit, NSO, Meeting, Training, dan Cuti/Libur).
-                  </p>
+        {/* ============================================================
+            TAB 5: DATA HUB & EXCEL SYNC (Schedule, Master Toko, R23)
+            ============================================================ */}
+        {activeTab === 'datahub' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Box 1: Excel Schedule Sync */}
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-black">
+                  <CalendarDays className="w-4 h-4" />
                 </div>
-
-                {/* Upload Button & Template */}
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Upload Jadwal Excel (.xlsx)</span>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleExcelFileSelect}
-                    className="hidden"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => exportScheduleToTemplateExcel([], users, 'ALL', 'Template FMCU')}
-                    className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                  >
-                    <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Download Template Jadwal Resmi</span>
-                  </button>
+                <div>
+                  <h3 className="text-xs font-black uppercase text-slate-800">
+                    1. Sinkronisasi Jadwal Kerja
+                  </h3>
+                  <p className="text-[11px] font-medium text-slate-500">
+                    Upload & Download Jadwal Excel
+                  </p>
                 </div>
               </div>
 
-              {/* Dataset 2: 610 Master Toko */}
-              <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-teal-700">
-                    <Store className="w-5 h-5 stroke-[2.2]" />
-                    <h3 className="text-sm sm:text-base font-black text-slate-900">
-                      2. Database 610 Master Toko
-                    </h3>
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={handleExcelFileSelect}
+                  className="hidden"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Pilih File Excel Jadwal...</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadScheduleTemplate}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Download Template Excel</span>
+                </button>
+
+                {importFeedback && (
+                  <div className="p-2.5 rounded-xl bg-slate-100 text-[11px] font-bold text-slate-700">
+                    {importFeedback}
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Database 610 cabang resmi FamilyMart Indonesia lengkap dengan AM, RM, koordinat GPS, dan tipe toko.
-                  </p>
-                </div>
+                )}
 
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => exportMasterStoresToExcel()}
-                    className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Export 610 Toko ke Excel (.xlsx)</span>
-                  </button>
+                {/* Summary Modal / Section if parsed */}
+                {excelSummary && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
+                    <p className="text-xs font-black text-emerald-900">
+                      File Siap Diimpor: {excelSummary.agendas.length} Agenda
+                    </p>
+                    <div className="text-[11px] text-emerald-800 space-y-0.5">
+                      <p>• {excelSummary.stats.visitCount} Visit Toko Resmi</p>
+                      <p>• {excelSummary.stats.nonStoreAgendaCount} Agenda Non-Visit</p>
+                      <p>• {excelSummary.stats.cutiCount + excelSummary.stats.offCount} Cuti & Off</p>
+                    </div>
 
-                  <div className="text-[11px] text-slate-500 text-center">
-                    Terverifikasi: 610 Master Stores aktif
-                  </div>
-                </div>
-              </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <label className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          checked={importMode === 'merge'}
+                          onChange={() => setImportMode('merge')}
+                        />
+                        Gabung
+                      </label>
+                      <label className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          checked={importMode === 'replace'}
+                          onChange={() => setImportMode('replace')}
+                        />
+                        Timpa Semua
+                      </label>
+                    </div>
 
-              {/* Dataset 3: Standar Holding Time R23 */}
-              <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-amber-700">
-                    <Clock className="w-5 h-5 stroke-[2.2]" />
-                    <h3 className="text-sm sm:text-base font-black text-slate-900">
-                      3. Standar Holding Time R23
-                    </h3>
-                  </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    STD/FMI/PD-QC/001/R23 — Acuan resmi QA &amp; Product Improvement mencakup 9 kategori dan 71 produk display.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={handleExportHoldingTimeExcel}
-                    className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Export Standar R23 (.xlsx)</span>
-                  </button>
-
-                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowHoldingTimeModal(true)}
-                      className="py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition cursor-pointer text-center"
+                      onClick={handleExecuteImport}
+                      className="w-full py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-black hover:bg-emerald-800 transition cursor-pointer"
                     >
-                      Pratinjau R23
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResetHoldingTime}
-                      className="py-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-xs transition cursor-pointer text-center"
-                    >
-                      Reset Default
+                      Eksekusi Impor Sekarang
                     </button>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Parsed Excel Preview Drawer if file selected */}
-            {excelSummary && (
-              <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3.5 animate-in fade-in">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <div>
-                      <h4 className="text-sm font-black text-slate-900">
-                        Pratinjau Impor Excel: {excelSummary.sheetName}
-                      </h4>
-                      <span className="text-xs text-slate-500">
-                        {excelSummary.agendas.length} agenda berhasil diverifikasi dari file
-                      </span>
-                    </div>
-                  </div>
+            {/* Box 2: Master Store 610 Toko */}
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-black">
+                  <Store className="w-4 h-4" />
                 </div>
-
-                {/* Breakdown Stats */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-bold block">Visit Toko</span>
-                    <span className="text-base font-black text-slate-900 mt-0.5 block">{excelSummary.stats.visitCount}</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-bold block">NSO</span>
-                    <span className="text-base font-black text-slate-900 mt-0.5 block">{excelSummary.stats.nsoCount}</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-bold block">Toko Cocok</span>
-                    <span className="text-base font-black text-emerald-600 mt-0.5 block">{excelSummary.stats.matchedStoresCount}</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-bold block">Personil Cocok</span>
-                    <span className="text-base font-black text-teal-600 mt-0.5 block">{excelSummary.stats.matchedUsersCount}</span>
-                  </div>
-                </div>
-
-                {/* Import Mode Radio */}
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <span className="text-xs font-black text-slate-700 block">Pilih Mode Impor:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <label
-                      className={`p-3 rounded-xl border text-xs cursor-pointer transition flex items-start gap-2.5 ${
-                        importMode === 'merge' ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950 font-bold' : 'bg-white border-slate-200 text-slate-700'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="importMode"
-                        checked={importMode === 'merge'}
-                        onChange={() => setImportMode('merge')}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <span className="block font-black">Gabungkan (Merge)</span>
-                        <span className="text-[10.5px] font-normal opacity-80 block">
-                          Menambahkan jadwal baru ke jadwal yang sudah ada tanpa menghapus jadwal sebelumnya.
-                        </span>
-                      </div>
-                    </label>
-
-                    <label
-                      className={`p-3 rounded-xl border text-xs cursor-pointer transition flex items-start gap-2.5 ${
-                        importMode === 'replace' ? 'bg-amber-50/70 border-amber-300 text-amber-950 font-bold' : 'bg-white border-slate-200 text-slate-700'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="importMode"
-                        checked={importMode === 'replace'}
-                        onChange={() => setImportMode('replace')}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <span className="block font-black">Gantikan Seluruh Jadwal (Replace)</span>
-                        <span className="text-[10.5px] font-normal opacity-80 block">
-                          Menghapus jadwal lama dan menggantikannya dengan jadwal dari file ini.
-                        </span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="pt-2 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExcelSummary(null)}
-                    className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCommitExcelImport}
-                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition cursor-pointer shadow-xs"
-                  >
-                    Konfirmasi &amp; Simpan ke Cloud
-                  </button>
+                <div>
+                  <h3 className="text-xs font-black uppercase text-slate-800">
+                    2. Master Toko (610 Cabang)
+                  </h3>
+                  <p className="text-[11px] font-medium text-slate-500">
+                    Database Koordinat & Info Toko
+                  </p>
                 </div>
               </div>
-            )}
+
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600">Total Database</span>
+                  <span className="text-xs font-black text-slate-900">{masterStores.length} Toko</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadMasterStores}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Master Toko (.xlsx)</span>
+                </button>
+
+                <p className="text-[11px] text-slate-500">
+                  Data master toko memuat koordinat GPS presisi (Latitude, Longitude), Area Manager, dan Regional Manager.
+                </p>
+              </div>
+            </div>
+
+            {/* Box 3: Holding Time Standards (R23) */}
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-black">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black uppercase text-slate-800">
+                    3. Standar Holding Time R23
+                  </h3>
+                  <p className="text-[11px] font-medium text-slate-500">
+                    71 Produk & 9 Kategori Resmi
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowHoldingTimeModal(true)}
+                  className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Lihat Standar Holding Time R23</span>
+                </button>
+
+                <p className="text-[11px] text-slate-500">
+                  Nomor Dokumen: STD/FMI/PD-QC/001/R23. Mencakup seluruh parameter holding time makanan, minuman, dan bakery.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </main>
 
-      {/* =========================================================================
-          5. MODAL FORM: TAMBAH / EDIT AGENDA
-          ========================================================================= */}
+      {/* ============================================================
+          MODAL: TAMBAH / EDIT AGENDA (Domain-Aware Smart Form)
+          ============================================================ */}
       {isAgendaModalOpen && (
         <AgendaFormModal
           isOpen={isAgendaModalOpen}
-          initialData={editingAgenda}
+          editingAgenda={editingAgenda}
           defaultDate={defaultDateForModal}
-          allUsers={users}
+          users={users}
           masterStores={masterStores}
           onClose={() => {
             setIsAgendaModalOpen(false);
             setEditingAgenda(null);
-            setDefaultDateForModal(undefined);
           }}
           onSave={(saved) => {
             if (editingAgenda) {
@@ -2344,148 +2436,63 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             }
             setIsAgendaModalOpen(false);
             setEditingAgenda(null);
-            setDefaultDateForModal(undefined);
           }}
         />
       )}
 
-      {/* =========================================================================
-          6. MODAL KONFIRMASI HAPUS AGENDA
-          ========================================================================= */}
+      {/* ============================================================
+          MODAL: KONFIRMASI HAPUS AGENDA
+          ============================================================ */}
       {deletingAgenda && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in select-none">
-          <div className="w-full max-w-md bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6 stroke-[2.2]" />
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 shadow-xl border border-slate-200">
+            <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+              <Trash2 className="w-5 h-5" />
             </div>
-            <div className="text-center space-y-1">
-              <h3 className="text-base font-black text-slate-900">Hapus Agenda Jadwal?</h3>
-              <p className="text-xs text-slate-500">
-                Apakah Anda yakin ingin menghapus jadwal untuk{' '}
-                <b className="text-slate-800">{deletingAgenda.storeName || deletingAgenda.location}</b> ({deletingAgenda.date}) oleh personil{' '}
-                <b className="text-slate-800">{deletingAgenda.pic}</b>?
+            <div className="text-center">
+              <h3 className="text-sm font-black text-slate-900">Konfirmasi Hapus Agenda</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Apakah Anda yakin ingin menghapus agenda{' '}
+                <strong className="text-slate-800">"{deletingAgenda.title}"</strong> ({deletingAgenda.date})? Tindakan ini tidak dapat dibatalkan.
               </p>
             </div>
             <div className="flex items-center gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setDeletingAgenda(null)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  if (deletingAgenda) {
-                    onDeleteAgenda(deletingAgenda.id);
-                    setDeletingAgenda(null);
-                  }
+                  onDeleteAgenda(deletingAgenda.id);
+                  setDeletingAgenda(null);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition cursor-pointer shadow-xs"
+                className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer"
               >
-                Hapus Jadwal
+                Hapus
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* =========================================================================
-          7. MODAL TARIK DATA MENTAH EXPORT ENGINE
-          ========================================================================= */}
-      {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in select-none">
-          <div className="w-full max-w-md bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <FolderDown className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-sm sm:text-base font-black text-slate-900">
-                  Pusat Tarik Data Mentah
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowExportModal(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              Pilih jenis laporan mentah berformat Excel (*.xlsx) yang ingin Anda unduh untuk keperluan analisis, rekap, atau arsip audit:
-            </p>
-
-            <div className="space-y-2.5 pt-1">
-              <button
-                type="button"
-                onClick={handleExportRawAgendas}
-                className="w-full p-3 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200 text-left transition flex items-center justify-between cursor-pointer"
-              >
-                <div>
-                  <span className="text-xs font-black text-emerald-950 block">
-                    1. Data Mentah Seluruh Agenda
-                  </span>
-                  <span className="text-[10.5px] text-emerald-700 block mt-0.5">
-                    Mencakup kolom waktu, PIC, toko, koordinat, presensi IN/OUT, &amp; geofence
-                  </span>
-                </div>
-                <Download className="w-4 h-4 text-emerald-700 shrink-0" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportRawReports}
-                className="w-full p-3 rounded-2xl bg-teal-50/70 hover:bg-teal-100/80 border border-teal-200 text-left transition flex items-center justify-between cursor-pointer"
-              >
-                <div>
-                  <span className="text-xs font-black text-teal-950 block">
-                    2. Data Mentah Laporan Visit &amp; QSC
-                  </span>
-                  <span className="text-[10.5px] text-teal-700 block mt-0.5">
-                    Mencakup skor temuan, foto bukti, link Google Drive PDF, dan status submit
-                  </span>
-                </div>
-                <Download className="w-4 h-4 text-teal-700 shrink-0" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportTeamMatrix}
-                className="w-full p-3 rounded-2xl bg-purple-50/70 hover:bg-purple-100/80 border border-purple-200 text-left transition flex items-center justify-between cursor-pointer"
-              >
-                <div>
-                  <span className="text-xs font-black text-purple-950 block">
-                    3. Rekapitulasi Performa Tim
-                  </span>
-                  <span className="text-[10.5px] text-purple-700 block mt-0.5">
-                    Matriks jumlah kunjungan, % realisasi, meeting, dan ketersediaan personil
-                  </span>
-                </div>
-                <Download className="w-4 h-4 text-purple-700 shrink-0" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          8. MODAL PRATINJAU LAPORAN VISIT PDF (EXECUTIVE SUITE)
-          ========================================================================= */}
+      {/* ============================================================
+          MODAL: PREVIEW LAPORAN VISIT PDF (Executive Mode)
+          ============================================================ */}
       {previewingReport && (
         <ExecutiveReportPreviewModal
           isOpen={Boolean(previewingReport)}
-          onClose={() => setPreviewingReport(null)}
           reportData={previewingReport}
-          gdrivePdfUrl={previewingReport.qscDriveUrl}
-          storeFolderName={previewingReport.storeName}
+          onClose={() => setPreviewingReport(null)}
         />
       )}
 
-      {/* =========================================================================
-          9. MODAL STANDAR HOLDING TIME R23
-          ========================================================================= */}
+      {/* ============================================================
+          MODAL: STANDAR HOLDING TIME R23
+          ============================================================ */}
       {showHoldingTimeModal && (
         <HoldingTimeR23Modal
           isOpen={showHoldingTimeModal}
@@ -2494,19 +2501,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       )}
 
       {/* Footer */}
-      <DeveloperFooter className="py-6 border-t border-slate-200/80 bg-white" />
+      <DeveloperFooter />
     </div>
   );
 };
 
-// =============================================================================
-// SUB-COMPONENT: MODAL FORM TAMBAH / EDIT AGENDA LENGKAP
-// =============================================================================
+// ============================================================================
+// SUB-COMPONENT: AGENDA FORM MODAL (DOMAIN-AWARE)
+// ============================================================================
 interface AgendaFormModalProps {
   isOpen: boolean;
-  initialData: ScheduleAgenda | null;
+  editingAgenda: ScheduleAgenda | null;
   defaultDate?: string;
-  allUsers: User[];
+  users: User[];
   masterStores: MasterStore[];
   onClose: () => void;
   onSave: (agenda: ScheduleAgenda) => void;
@@ -2514,309 +2521,251 @@ interface AgendaFormModalProps {
 
 const AgendaFormModal: React.FC<AgendaFormModalProps> = ({
   isOpen,
-  initialData,
+  editingAgenda,
   defaultDate,
-  allUsers,
+  users,
   masterStores,
   onClose,
   onSave,
 }) => {
-  const [storeSearch, setStoreSearch] = useState('');
-  const [selectedStore, setSelectedStore] = useState<MasterStore | null>(null);
+  const [title, setTitle] = useState(editingAgenda?.title || '');
+  const [date, setDate] = useState(editingAgenda?.date || defaultDate || new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState(editingAgenda?.time || '08:00');
+  const [endTime, setEndTime] = useState(editingAgenda?.endTime || '17:00');
+  const [category, setCategory] = useState<ScheduleCategory>(editingAgenda?.category || 'VISIT');
+  const [pic, setPic] = useState(editingAgenda?.pic || (users[0]?.name || ''));
+  const [selectedStoreCode, setSelectedStoreCode] = useState(editingAgenda?.storeCode || '');
+  const [customLocation, setCustomLocation] = useState(editingAgenda?.location || '');
+  const [description, setDescription] = useState(editingAgenda?.description || '');
+  const [completed, setCompleted] = useState(Boolean(editingAgenda?.completed));
 
-  const [date, setDate] = useState(
-    initialData?.date || defaultDate || new Date().toISOString().split('T')[0]
-  );
-  const [time, setTime] = useState(initialData?.time || '08:00');
-  const [endTime, setEndTime] = useState(initialData?.endTime || '17:00');
-  const [category, setCategory] = useState<ScheduleCategory>(initialData?.category || 'VISIT');
-  const [pic, setPic] = useState(initialData?.pic || (allUsers[0]?.name || ''));
-  const [description, setDescription] = useState(initialData?.description || '');
-  const [customLocation, setCustomLocation] = useState(initialData?.location || '');
+  // Auto-detect if title is explicit visit
+  const isVisitCategory = category === 'VISIT';
 
-  // Detect domain of selected category
-  const currentDomain = (CATEGORY_DOMAINS[category] || CATEGORY_DOMAINS.VISIT).domain;
-  const isStoreActivity = currentDomain === 'STORE';
-
-  // Initialize store if editing
-  useEffect(() => {
-    if (initialData?.storeCode) {
-      const match = findMasterStoreByCodeOrName(initialData.storeCode);
-      if (match) setSelectedStore(match);
+  // Handle store select
+  const handleStoreChange = (code: string) => {
+    setSelectedStoreCode(code);
+    const store = masterStores.find((s) => s.code === code);
+    if (store) {
+      if (!title || title.startsWith('Visit ')) {
+        setTitle(`Visit Toko ${store.name}`);
+      }
+      setCustomLocation(store.name);
     }
-  }, [initialData]);
-
-  // Filtered Store Options (Top 12)
-  const filteredStores = useMemo(() => {
-    const q = storeSearch.trim().toLowerCase();
-    if (!q) return masterStores.slice(0, 10);
-    return masterStores
-      .filter((s) => s.code.toLowerCase().includes(q) || s.name.toLowerCase().includes(q))
-      .slice(0, 12);
-  }, [masterStores, storeSearch]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    let storeName: string | undefined = undefined;
-    let storeCode: string | undefined = undefined;
-    let storeType: string | undefined = undefined;
-    let location = customLocation;
-    let title = `${category}`;
-
-    if (isStoreActivity) {
-      storeName = selectedStore?.name || initialData?.storeName || 'Store FamilyMart';
-      storeCode = selectedStore?.code || initialData?.storeCode || '3000';
-      storeType = selectedStore?.type || initialData?.storeType || 'CVS';
-      location = selectedStore ? `${selectedStore.name} (${selectedStore.city})` : location || storeName;
-      title = `${category}: ${storeName}`;
-    } else {
-      title = customLocation ? `${category}: ${customLocation}` : `${category} Personil`;
+    if (!title.trim() || !date) {
+      alert('Mohon isi Judul Agenda dan Tanggal');
+      return;
     }
 
-    const savedAgenda: ScheduleAgenda = {
-      id: initialData?.id || `agenda-${Date.now()}`,
-      title,
+    const matchedStore = masterStores.find((s) => s.code === selectedStoreCode);
+
+    const newAgenda: ScheduleAgenda = {
+      id: editingAgenda?.id || `ag-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      title: title.trim(),
       date,
-      time,
-      endTime,
+      time: time || '08:00',
+      endTime: endTime || '17:00',
       category,
-      pic,
-      location: location || 'Bandung',
-      storeCode,
-      storeName,
-      storeType,
-      areaManager: selectedStore?.areaManager || initialData?.areaManager || '',
-      regionalManager: selectedStore?.regionalManager || initialData?.regionalManager || '',
-      description,
-      tags: [category, storeType || 'NON_STORE'],
+      location: matchedStore ? matchedStore.name : customLocation || 'Kantor Pusat',
+      pic: pic || 'Unassigned',
+      storeCode: matchedStore ? matchedStore.code : undefined,
+      storeName: matchedStore ? matchedStore.name : undefined,
+      storeType: matchedStore ? matchedStore.type : undefined,
+      description: description.trim(),
+      tags: [category.toLowerCase()],
+      completed,
     };
 
-    onSave(savedAgenda);
+    onSave(newAgenda);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in select-none">
-      <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black">
-              <CalendarIcon className="w-4 h-4 stroke-[2.4]" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-black text-slate-900">
-                {initialData ? 'Edit Agenda Jadwal' : 'Tambah Agenda Baru'}
-              </h3>
-              <span className="text-[10.5px] text-slate-400">
-                Mencakup kegiatan toko, koordinasi kantor, dan cuti/libur
-              </span>
-            </div>
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-black text-slate-900 leading-none">
+              {editingAgenda ? 'Edit Agenda Kerja' : 'Tambah Agenda Kerja Baru'}
+            </h3>
+            <p className="text-xs font-bold text-slate-500 mt-1">
+              FamilyMart Management Activity Form
+            </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-3.5 text-xs">
-          {/* Category Dropdown (Domain-aware) */}
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          {/* Row 1: Kategori Kegiatan */}
           <div>
-            <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
-              Kategori Agenda *
-            </label>
+            <label className="block font-black text-slate-700 mb-1">Jenis Kegiatan *</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as ScheduleCategory)}
-              className="w-full py-2 px-2.5 rounded-xl bg-slate-100 border border-slate-200 font-bold text-xs text-slate-800 outline-none focus:bg-white cursor-pointer"
+              className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
             >
-              <optgroup label="🏪 Kegiatan Lapangan (Memerlukan Toko & Check-In)">
-                <option value="VISIT">VISIT (Store Visit Reguler)</option>
-                <option value="NSO">NSO (New Store Opening)</option>
-                <option value="AUDIT">AUDIT (Investigasi / Audit Khusus)</option>
-                <option value="OPERATION">OPERATIONAL (Dukungan Operasional Toko)</option>
-              </optgroup>
-              <optgroup label="🏢 Kegiatan Kantor & Koordinasi (Non-Toko)">
-                <option value="MEETING">MEETING (Koordinasi / Rapat Area)</option>
-                <option value="TRAINING">TRAINING (Pelatihan / Coaching)</option>
-                <option value="WORK_PLAN">WORK PLAN (Penyusunan Rencana Kerja)</option>
-              </optgroup>
-              <optgroup label="🏖️ Status Ketersediaan Personil">
-                <option value="CUTI">CUTI (Cuti Tahunan / Izin / Sakit)</option>
-                <option value="OFF">OFF (Hari Libur Reguler)</option>
-              </optgroup>
+              <option value="VISIT">🏪 Visit Toko Resmi (Wajib Presensi & Laporan QSC)</option>
+              <option value="MEETING">🏢 Meeting / Rapat / Koordinasi</option>
+              <option value="TRAINING">📚 Training / Coaching / Shadowing</option>
+              <option value="OPERATION">🛠️ Operasional Toko / Maintenance / Opname</option>
+              <option value="NSO">✨ NSO (New Store Opening)</option>
+              <option value="AUDIT">🛡️ Audit Investigasi</option>
+              <option value="WORK_PLAN">📋 Work Plan / Tugas Admin</option>
+              <option value="CUTI">☕ Cuti / Izin / Sakit</option>
+              <option value="OFF">💤 Off / Hari Libur</option>
             </select>
+            {!isVisitCategory && (
+              <p className="text-[11px] font-bold text-slate-500 mt-1">
+                ℹ️ Agenda non-visit tidak mewajibkan check-in radius toko atau pembuatan laporan QSC.
+              </p>
+            )}
           </div>
 
-          {/* Conditional Store Picker (Only if Store Activity) */}
-          {isStoreActivity ? (
+          {/* Row 2: Store Picker (If Visit or Store Operation) */}
+          {isVisitCategory ? (
             <div>
-              <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
-                Toko FMCU (610 Cabang Resmi) *
-              </label>
-              {selectedStore ? (
-                <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Store className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <div className="min-w-0">
-                      <span className="font-black text-emerald-950 block truncate">
-                        {selectedStore.code} - {selectedStore.name}
-                      </span>
-                      <span className="text-[10.5px] text-emerald-700 font-medium">
-                        Tipe: {selectedStore.type} • {selectedStore.city}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedStore(null)}
-                    className="px-2 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-bold text-[10px] hover:bg-emerald-100 transition cursor-pointer"
-                  >
-                    Ganti
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={storeSearch}
-                      onChange={(e) => setStoreSearch(e.target.value)}
-                      placeholder="Ketik kode (misal: 3006) atau nama cabang..."
-                      className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-                  <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white">
-                    {filteredStores.map((st) => (
-                      <div
-                        key={st.code}
-                        onClick={() => setSelectedStore(st)}
-                        className="p-2 hover:bg-emerald-50 cursor-pointer flex items-center justify-between transition"
-                      >
-                        <div className="min-w-0">
-                          <span className="font-bold text-slate-800 block truncate">
-                            {st.code} - {st.name}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            {st.city} ({st.type})
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded">
-                          Pilih
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <label className="block font-black text-slate-700 mb-1">Pilih Toko FMCU (Master 610 Toko) *</label>
+              <select
+                value={selectedStoreCode}
+                onChange={(e) => handleStoreChange(e.target.value)}
+                className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
+              >
+                <option value="">-- Pilih Toko FamilyMart --</option>
+                {masterStores.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    [{s.code}] {s.name} ({s.type || 'CVS'})
+                  </option>
+                ))}
+              </select>
             </div>
           ) : (
             <div>
-              <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
-                Lokasi / Keterangan Ruang / Kegiatan
-              </label>
+              <label className="block font-black text-slate-700 mb-1">Lokasi / Ruang / Keterangan Tempat</label>
               <input
                 type="text"
                 value={customLocation}
                 onChange={(e) => setCustomLocation(e.target.value)}
-                placeholder="Contoh: Kantor FMCU Bandung, Google Meet, Rumah..."
-                className="w-full py-2 px-2.5 rounded-xl bg-slate-100 border border-slate-200 font-bold text-xs text-slate-800 outline-none focus:bg-white"
+                placeholder="Misal: Kantor Pusat, Ruang Meeting Lt. 3, atau Zoom Online"
+                className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
               />
             </div>
           )}
 
-          {/* Date & Time Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* Row 3: Judul Agenda */}
+          <div>
+            <label className="block font-black text-slate-700 mb-1">Judul Agenda Kegiatan *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Misal: Visit Store BDG R.E Martadinata atau Training Barista Batch 3"
+              required
+              className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
+            />
+          </div>
+
+          {/* Row 4: Tanggal & Waktu */}
+          <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
-                Tanggal *
-              </label>
+              <label className="block font-black text-slate-700 mb-1">Tanggal *</label>
               <input
                 type="date"
-                required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full py-1.5 px-2.5 rounded-xl bg-slate-100 border border-slate-200 font-bold text-xs text-slate-800 outline-none focus:bg-white"
+                required
+                className="w-full p-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
               />
             </div>
+
             <div>
-              <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
-                Jam Mulai *
-              </label>
+              <label className="block font-black text-slate-700 mb-1">Mulai</label>
               <input
                 type="time"
-                required
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="w-full py-1.5 px-2.5 rounded-xl bg-slate-100 border border-slate-200 font-bold text-xs text-slate-800 outline-none focus:bg-white"
+                className="w-full p-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
               />
             </div>
+
             <div>
-              <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
-                Jam Selesai
-              </label>
+              <label className="block font-black text-slate-700 mb-1">Selesai</label>
               <input
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-full py-1.5 px-2.5 rounded-xl bg-slate-100 border border-slate-200 font-bold text-xs text-slate-800 outline-none focus:bg-white"
+                className="w-full p-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
               />
             </div>
           </div>
 
-          {/* Personil PIC */}
-          <div>
-            <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
-              Personil yang Ditugaskan (PIC) *
-            </label>
-            <select
-              value={pic}
-              onChange={(e) => setPic(e.target.value)}
-              className="w-full py-2 px-2.5 rounded-xl bg-slate-100 border border-slate-200 font-bold text-xs text-slate-800 outline-none focus:bg-white cursor-pointer"
-            >
-              {allUsers.map((u) => (
-                <option key={u.name} value={u.name}>
-                  {u.name} ({u.role || 'Staff'})
-                </option>
-              ))}
-            </select>
+          {/* Row 5: PIC & Status */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block font-black text-slate-700 mb-1">Personil (PIC) *</label>
+              <select
+                value={pic}
+                onChange={(e) => setPic(e.target.value)}
+                className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
+              >
+                {users.map((u) => (
+                  <option key={u.name} value={u.name}>
+                    {u.name} ({u.role || 'Staff'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-black text-slate-700 mb-1">Status Selesai</label>
+              <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={completed}
+                  onChange={(e) => setCompleted(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                />
+                <span>Tandai Selesai</span>
+              </label>
+            </div>
           </div>
 
-          {/* Description */}
+          {/* Row 6: Deskripsi / Catatan */}
           <div>
-            <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">
-              Catatan / Instruksi Tambahan
-            </label>
+            <label className="block font-black text-slate-700 mb-1">Catatan / Detail Instruksi</label>
             <textarea
-              rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Instruksi kerja atau catatan penting agenda ini..."
-              className="w-full p-2.5 rounded-xl bg-slate-100 border border-slate-200 font-medium text-xs text-slate-800 outline-none focus:bg-white"
+              placeholder="Catatan tambahan, agenda pembahasan, atau poin fokus pemeriksaan..."
+              rows={2}
+              className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
             />
           </div>
 
-          {/* Actions */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+              className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition cursor-pointer shadow-xs"
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black shadow-xs transition active:scale-95 cursor-pointer"
             >
-              {initialData ? 'Simpan Perubahan' : 'Buat Jadwal'}
+              Simpan Agenda
             </button>
           </div>
         </form>
