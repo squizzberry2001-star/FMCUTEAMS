@@ -172,12 +172,59 @@ const FMCU_HUB_LOCATIONS: Record<string, { name: string; city: string; address: 
 };
 
 /**
+ * Returns true if an agenda represents non-store activities:
+ * OFF, CUTI, SAKIT, LIBUR, IZIN, STANDBY, etc.
+ * Agenda jenis ini BUKAN kunjungan toko dan TIDAK BOLEH dipetakan ke toko fisik manapun di peta.
+ */
+export function isNonStoreAgenda(agenda?: Partial<ScheduleAgenda> | null): boolean {
+  if (!agenda) return true;
+  const cat = (agenda.category || '').toUpperCase();
+  if (cat === 'OFF' || cat === 'CUTI' || cat === 'SAKIT' || cat === 'LIBUR' || cat === 'IZIN') {
+    return true;
+  }
+  const title = (agenda.title || '').toUpperCase().trim();
+  const loc = (agenda.location || '').toUpperCase().trim();
+
+  // Pola eksplisit non-store
+  const nonStoreRegex = /\b(OFF|LIBUR|CUTI|SAKIT|IZIN|WEEKEND|STANDBY|WFH|DAY\s+OFF)\b/i;
+  const hasStoreKeyword =
+    title.includes('VISIT') ||
+    loc.includes('VISIT') ||
+    title.includes('TOKO') ||
+    loc.includes('TOKO') ||
+    title.includes('STORE') ||
+    loc.includes('STORE') ||
+    title.includes('NSO') ||
+    loc.includes('NSO');
+
+  if (
+    (!agenda.storeCode || agenda.storeCode === 'STORE') &&
+    (nonStoreRegex.test(title) || nonStoreRegex.test(loc)) &&
+    !hasStoreKeyword
+  ) {
+    return true;
+  }
+
+  // Jika lokasi hanya strip atau off
+  if (!agenda.storeCode && (!loc || loc === '-' || loc === 'OFF / LIBUR' || loc === 'OFF')) {
+    if (cat !== 'VISIT' && cat !== 'NSO' && cat !== 'AUDIT') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Resolve one or more StoreGeoPoints from a ScheduleAgenda
  */
 export function resolveAgendaGeoPoints(
   agenda: ScheduleAgenda,
   allStores?: MasterStore[]
 ): StoreGeoPoint[] {
+  if (!agenda || isNonStoreAgenda(agenda)) {
+    return [];
+  }
   const stores = allStores || getMasterStores();
   const results: StoreGeoPoint[] = [];
   const seenCodes = new Set<string>();
@@ -197,8 +244,8 @@ export function resolveAgendaGeoPoints(
     );
   };
 
-  // 1. Direct storeCode or storeName on agenda
-  if (agenda.storeCode) {
+  // 1. Direct storeCode or storeName on agenda (hanya jika valid dan bukan placeholder 'STORE')
+  if (agenda.storeCode && agenda.storeCode !== 'STORE') {
     const found = findMasterStoreByCodeOrName(agenda.storeCode);
     if (found) addStore(found);
   }
@@ -209,26 +256,41 @@ export function resolveAgendaGeoPoints(
 
   // 2. Parse location string (supports '&' separator for multi-store schedules)
   if (results.length === 0 && agenda.location) {
-    const parts = agenda.location.split(/\s*(?:&|\bdan\b|\/|,)\s*/i).filter(Boolean);
-    for (const part of parts) {
-      const { store } = matchStoreFromLocationPart(part, stores);
-      if (store) {
-        addStore(store);
-      } else {
-        const fallback = findMasterStoreByCodeOrName(part);
-        if (fallback) addStore(fallback);
+    const locClean = agenda.location.trim();
+    if (
+      locClean &&
+      !/^(off|libur|cuti|sakit|izin|weekend|standby|wfh)(\s*[\/\-]\s*|$)/i.test(locClean)
+    ) {
+      const parts = locClean.split(/\s*(?:&|\bdan\b|\/|,)\s*/i).filter(Boolean);
+      for (const part of parts) {
+        if (/^(off|libur|cuti|sakit|izin|weekend|standby|wfh|home|ho|office)$/i.test(part.trim())) {
+          continue;
+        }
+        const { store } = matchStoreFromLocationPart(part, stores);
+        if (store) {
+          addStore(store);
+        } else {
+          const fallback = findMasterStoreByCodeOrName(part);
+          if (fallback) addStore(fallback);
+        }
       }
     }
   }
 
   // 3. Parse agenda title if still empty
   if (results.length === 0 && agenda.title) {
-    const { store } = matchStoreFromLocationPart(agenda.title, stores);
-    if (store) {
-      addStore(store);
-    } else {
-      const fallback = findMasterStoreByCodeOrName(agenda.title);
-      if (fallback) addStore(fallback);
+    const titleClean = agenda.title.trim();
+    if (
+      titleClean &&
+      !/^(off|libur|cuti|sakit|izin|weekend|standby|wfh)(\s*[\/\-]\s*|$)/i.test(titleClean)
+    ) {
+      const { store } = matchStoreFromLocationPart(agenda.title, stores);
+      if (store) {
+        addStore(store);
+      } else {
+        const fallback = findMasterStoreByCodeOrName(agenda.title);
+        if (fallback) addStore(fallback);
+      }
     }
   }
 

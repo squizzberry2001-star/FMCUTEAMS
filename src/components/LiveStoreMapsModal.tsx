@@ -31,6 +31,7 @@ import {
   resolveAgendaGeoPoints,
   calculateHaversineKm,
   buildAdminUserPinpoints,
+  isNonStoreAgenda,
 } from '../utils/mapGeoUtils';
 import {
   UserLivePresence,
@@ -172,6 +173,9 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         // HANYA jadwal actual (hari ini) atau masa depan (kedepan)
         if (!a.date || a.date < todayYmd) return false;
 
+        // SKIP total agenda non-store (OFF / Libur, Cuti, Sakit, dsb.)
+        if (isNonStoreAgenda(a)) return false;
+
         // Filter role / personel
         if (!isAdmin) {
           return isSamePersonName(a.pic, currentUser?.name);
@@ -209,8 +213,8 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             });
           }
         } else {
-          // Jadwal kedepan (masa depan: a.date > todayYmd)
-          if (!seenUpcomingCodes.has(pt.code)) {
+          // Jadwal kedepan (masa depan: a.date > todayYmd) - HANYA toko visit yang sah
+          if (isVisitLike && !seenUpcomingCodes.has(pt.code)) {
             seenUpcomingCodes.add(pt.code);
             upcomingPoints.push({
               ...pt,

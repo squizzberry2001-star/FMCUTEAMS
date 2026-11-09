@@ -206,6 +206,37 @@ export function matchStoreFromLocationPart(
   if (!cleaned || cleaned.length < 2) return { store: null, cleanName: '' };
   const upper = cleaned.toUpperCase();
 
+  // Guard: Abaikan keyword non-store (OFF, LIBUR, CUTI, SAKIT, WEEKEND, WFH, dsb.)
+  const NON_STORE_LOCATION_KEYWORDS = new Set([
+    'OFF',
+    'LIBUR',
+    'OFF/LIBUR',
+    'OFF / LIBUR',
+    'WEEKEND',
+    'WEEKEND/OFF',
+    'WEEKEND / OFF',
+    'CUTI',
+    'SAKIT',
+    'IZIN',
+    'STANDBY',
+    'HOME',
+    'RUMAH',
+    'WFH',
+    'WFO',
+    'HO',
+    'HEAD OFFICE',
+    'OFFICE',
+    'REST',
+    'DAY OFF',
+  ]);
+
+  if (
+    NON_STORE_LOCATION_KEYWORDS.has(upper) ||
+    /^(OFF|LIBUR|CUTI|SAKIT|IZIN|WEEKEND|STANDBY|WFH)(\s*[\/\-]\s*|$)/i.test(upper)
+  ) {
+    return { store: null, cleanName: '' };
+  }
+
   // 0a. Exact alias match first (so BDG PASKAL [3010] and BDG 23 PASKAL [3005] stay distinct)
   if (EXCEL_STORE_ALIAS_MAP[upper]) {
     const targetVal = EXCEL_STORE_ALIAS_MAP[upper];
@@ -254,23 +285,31 @@ export function matchStoreFromLocationPart(
       .trim();
     if (!stName || stName.length < 3) continue;
     const stNameNoBdg = stName.replace(/^BDG\s+/, '');
+
+    // Whole word match jika query berada di dalam nama toko (hindari "OFF" mencocokkan "OFFICE")
+    const isWholeWordInStoreName =
+      upper.length >= 5 &&
+      new RegExp(`\\b${upper.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(stName);
+
     if (
       upper === stName ||
       upper === stNameNoBdg ||
-      upper.includes(stName) ||
-      stName.includes(upper)
+      (stName.length >= 4 && upper.includes(stName)) ||
+      isWholeWordInStoreName
     ) {
       return { store: st, cleanName: st.name };
     }
   }
 
   // 4. Token overlap match
+  const STOP_WORDS = new Set([
+    'BDG', 'BANDUNG', 'JAKARTA', 'SURABAYA', 'MALANG', 'BOGOR', 'DEPOK', 'TANGERANG', 'BEKASI',
+    'OFF', 'LIBUR', 'CUTI', 'SAKIT', 'IZIN', 'WEEKEND', 'STANDBY', 'OFFICE', 'STORE', 'TOKO',
+    'CABANG', 'VISIT', 'AUDIT', 'DAN', 'AND', 'THE', 'PARK', 'JALAN', 'RAYA', 'KAV'
+  ]);
   const partTokens = upper
     .split(/[\s\-/,()]+/)
-    .filter(
-      (t) =>
-        t.length >= 3 && !['BDG', 'BANDUNG', 'JAKARTA', 'SURABAYA', 'MALANG'].includes(t)
-    );
+    .filter((t) => t.length >= 4 && !STOP_WORDS.has(t));
   if (partTokens.length > 0) {
     let bestStore: MasterStore | null = null;
     let bestScore = 0;

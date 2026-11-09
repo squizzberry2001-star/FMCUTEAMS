@@ -15942,9 +15942,15 @@ export function findMasterStoreByCodeOrName(query?: string | null): MasterStore 
   if (!query) return null;
   const raw = String(query).trim();
   if (!raw) return null;
+
+  // Immediate guard: abaikan keyword non-toko (OFF, LIBUR, CUTI, SAKIT, dsb.)
+  if (/^(OFF|LIBUR|CUTI|SAKIT|IZIN|WEEKEND|STANDBY|WFH|WFO|HOME|RUMAH|HO|OFFICE|HEAD\s+OFFICE|DAY\s+OFF)(\s*[\/\-]\s*(OFF|LIBUR|CUTI|SAKIT|IZIN|WEEKEND|STANDBY))?$/i.test(raw)) {
+    return null;
+  }
+
   const stores = getMasterStores();
 
-  // 1. Direct code match
+  // 1. Direct code match (exact store code)
   const byCode = stores.find((s) => String(s.code).toUpperCase() === raw.toUpperCase());
   if (byCode) return byCode;
 
@@ -15955,22 +15961,32 @@ export function findMasterStoreByCodeOrName(query?: string | null): MasterStore 
     .replace(/\s*-\s*SENSE\s*OF\s*URGENCY$/i, '')
     .trim();
 
+  if (!norm || /^(OFF|LIBUR|CUTI|SAKIT|IZIN|WEEKEND|STANDBY|WFH|WFO|HOME|RUMAH|HO|OFFICE|HEAD\s+OFFICE|DAY\s+OFF)(\s*[\/\-]\s*(OFF|LIBUR|CUTI|SAKIT|IZIN|WEEKEND|STANDBY))?$/i.test(norm)) {
+    return null;
+  }
+
   const byExactName = stores.find((s) => String(s.name).toUpperCase() === norm);
   if (byExactName) return byExactName;
 
-  // 3. Extract code in parentheses e.g. "(3013)"
-  const codeMatch = raw.match(/\b([A-Z0-9]{4})\b/i);
+  // 3. Extract code in parentheses e.g. "(3013)" or "#3013"
+  const codeMatch = raw.match(/#?([A-Z0-9]{4})\b/i);
   if (codeMatch) {
     const foundCode = stores.find((s) => String(s.code).toUpperCase() === codeMatch[1].toUpperCase());
     if (foundCode) return foundCode;
   }
 
-  // 4. Substring match
-  const byPartial = stores.find(
-    (s) =>
-      String(s.name).toUpperCase().includes(norm) ||
-      norm.includes(String(s.name).toUpperCase())
-  );
+  // 4. Substring match dengan validasi word boundary & panjang minimal (cegah false-positive "OFF" ke "OFFICE")
+  const byPartial = stores.find((s) => {
+    const sName = String(s.name).toUpperCase();
+    if (sName === norm) return true;
+    if (norm.length >= 5 && new RegExp(`\\b${norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(sName)) {
+      return true;
+    }
+    if (sName.length >= 5 && norm.includes(sName)) {
+      return true;
+    }
+    return false;
+  });
   return byPartial || null;
 }
 
