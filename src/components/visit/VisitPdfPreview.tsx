@@ -207,46 +207,85 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const renderGenerationRef = useRef<number>(0);
 
-  // Pinch-to-zoom & Mouse Scroll Zoom State
+  // Stable Content Signature so background GPS/attendance ticks in parent form DO NOT reload the PDF preview
+  const dataSignature = useMemo(() => {
+    return [
+      data.id || '',
+      data.storeCode || '',
+      data.storeName || '',
+      data.visitDate || '',
+      data.visitorName || '',
+      data.storeHead || '',
+      data.areaManager || '',
+      data.regionalManager || '',
+      data.crews?.length || 0,
+      data.observations?.length || 0,
+      data.evidencePhotos?.length || 0,
+      data.qscSheetPhoto ? 1 : 0,
+      data.qscSheetTop ? 1 : 0,
+      data.qscSheetBottom ? 1 : 0,
+      data.assignmentNotes || '',
+    ].join('::');
+  }, [data]);
+
+  // Pinch-to-zoom & Smooth Gestures
   const [zoomScale, setZoomScale] = useState<number>(1);
-  const pinchDistRef = useRef<number | null>(null);
+  const pinchStartDistRef = useRef<number | null>(null);
+  const pinchStartScaleRef = useRef<number>(1);
   const isPinchingRef = useRef<boolean>(false);
+  const lastTapRef = useRef<number>(0);
+  const animFrameRef = useRef<number | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    // 1. Double tap to toggle zoom (100% <-> 175%)
+    if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - lastTapRef.current < 280) {
+        setZoomScale((prev) => (prev > 1.15 ? 1 : 1.75));
+        lastTapRef.current = 0;
+        return;
+      }
+      lastTapRef.current = now;
+    }
+
+    // 2. Pinch start with 2 fingers
     if (e.touches.length === 2) {
       isPinchingRef.current = true;
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
-      pinchDistRef.current = dist;
+      pinchStartDistRef.current = dist;
+      pinchStartScaleRef.current = zoomScale;
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && pinchDistRef.current !== null) {
+    if (e.touches.length === 2 && pinchStartDistRef.current !== null) {
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
-      const factor = dist / pinchDistRef.current;
-      if (Math.abs(factor - 1) > 0.02) {
-        setZoomScale((prev) => Math.min(2.8, Math.max(0.6, prev * (factor > 1 ? 1.03 : 0.97))));
-        pinchDistRef.current = dist;
-      }
+      const ratio = dist / pinchStartDistRef.current;
+      const targetScale = Math.min(3.0, Math.max(0.65, pinchStartScaleRef.current * ratio));
+
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = requestAnimationFrame(() => {
+        setZoomScale(Number(targetScale.toFixed(2)));
+      });
     }
   };
 
   const handleTouchEnd = () => {
     isPinchingRef.current = false;
-    pinchDistRef.current = null;
+    pinchStartDistRef.current = null;
   };
 
   const handleWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoomScale((prev) => Math.min(2.8, Math.max(0.6, Number((prev + delta).toFixed(2)))));
+      setZoomScale((prev) => Math.min(3.0, Math.max(0.65, Number((prev + delta).toFixed(2)))));
     }
   };
 
@@ -370,7 +409,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [data, refreshKey]);
+  }, [dataSignature, refreshKey]);
 
   const handleRefresh = () => {
     setRefreshKey((prev) => prev + 1);
@@ -674,11 +713,11 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
           >
             <div
               style={{
-                transform: `scale(${zoomScale})`,
-                transformOrigin: zoomScale > 1 ? 'top left' : 'top center',
-                transition: isPinchingRef.current ? 'none' : 'transform 0.15s ease-out',
+                transform: `scale(${zoomScale}) translateZ(0)`,
+                transformOrigin: 'top center',
+                transition: isPinchingRef.current ? 'none' : 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
-              className="space-y-6 max-w-5xl mx-auto w-full transition-transform"
+              className="space-y-6 max-w-5xl mx-auto w-full transition-transform will-change-transform"
             >
               {Array.from({ length: totalPagesCount }, (_, i) => i + 1).map((pageNum) => (
                 <PdfCanvasPage

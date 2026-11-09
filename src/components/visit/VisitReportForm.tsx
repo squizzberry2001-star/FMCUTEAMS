@@ -2282,169 +2282,114 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       <div className="space-y-5">
         {/* ============================================================
-            TOP GEOFENCE & ACTUAL IN/OUT BANNER
-            HANYA MUNCUL DI SECTION 1 (INFO) & TANPA TEXT LIVE GPS KOORDINAT
+            TOP GEOFENCE & ACTUAL IN/OUT COMPACT EXECUTIVE BANNER
+            HANYA MUNCUL DI SECTION 1 (INFO) — Ramping, Minimalis & Hemat Ruang
             ============================================================ */}
         {activeSection === 1 && (
           <div
             style={{
               background: 'linear-gradient(135deg, #022c22 0%, #042f2e 50%, #0f172a 100%)',
-              border: '1px solid rgba(52, 211, 153, 0.3)',
+              border: '1px solid rgba(52, 211, 153, 0.25)',
             }}
-            className="rounded-2xl p-4 sm:p-5 text-white shadow-lg space-y-3"
+            className="rounded-2xl p-3 sm:p-4 text-white shadow-md space-y-2.5 animate-in fade-in"
           >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              {/* Left: Store Badge, Progress Ring & Title */}
-              <div className="space-y-2 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                    Audit Toko FMCU
-                  </span>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-white/10 text-teal-200 border border-white/15">
-                    Kode Toko: {formData.storeCode || '3013'}
-                  </span>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-white/10 text-slate-300">
-                    Tipe: {formData.storeType}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {/* Progress Ring */}
-                  <div className="relative w-11 h-11 flex items-center justify-center shrink-0">
-                    <svg className="w-11 h-11 -rotate-90">
-                      <circle cx="22" cy="22" r="17" stroke="rgba(255,255,255,0.15)" strokeWidth="4" fill="transparent" />
-                      <circle
-                        cx="22"
-                        cy="22"
-                        r="17"
-                        stroke="#34d399"
-                        strokeWidth="4"
-                        fill="transparent"
-                        strokeDasharray="106.8"
-                        strokeDashoffset={106.8 - (106.8 * progressPercent) / 100}
-                        className="transition-all duration-500"
-                      />
-                    </svg>
-                    <span className="absolute text-[10px] font-black text-white">{progressPercent}%</span>
-                  </div>
-
-                  <div>
-                    <h2 className="text-base sm:text-lg font-black tracking-tight text-white leading-tight">
-                      FMCU Visit Store Report — {formData.storeName.toUpperCase()}
-                    </h2>
-                    {/* Live GPS Koordinat Text disembunyikan sesuai instruksi */}
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300 mt-1">
-                      <span className="flex items-center gap-1 text-[10.5px] font-bold text-teal-200 bg-white/10 px-2.5 py-0.5 rounded-full border border-white/15">
-                        <Cloud className="w-3 h-3 text-emerald-400" />
-                        <span>Auto-Sync GDrive (GAS) Aktif</span>
-                      </span>
-                      <span className="flex items-center gap-1 text-[10.5px] font-bold text-emerald-200 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
-                        <span>Otomatis Sistem (Radius 1–50m)</span>
-                      </span>
-                      {isOfflineOrWeakSignal && (
-                        <span className="flex items-center gap-1 text-[10.5px] font-bold text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-400/30">
-                          <WifiOff className="w-3 h-3 text-amber-300" />
-                          <span>Offline Auto-Detect</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+            {/* Row 1: Toko, Kode, Tipe & Progress Pill */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+                <h2 className="text-xs sm:text-sm font-black text-white truncate">
+                  {formData.storeName || 'Store FamilyMart'}
+                </h2>
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-white/10 text-teal-200 border border-white/15 shrink-0">
+                  {formData.storeCode || '3013'}
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-slate-300 shrink-0">
+                  {formData.storeType}
+                </span>
               </div>
 
-              {/* Right: Read-Only Automatic System Actual In / Actual Out Cards (Strictly 1-50m Radius) */}
-              <div className="w-full lg:max-w-md space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Read-Only System Auto Actual In Card */}
-                  <div className="rounded-xl p-2.5 bg-white/10 border border-emerald-400/30 flex flex-col justify-between">
-                    <div className="flex items-center justify-between text-[10px] uppercase font-black text-emerald-300">
-                      <span>Actual In (Auto)</span>
-                      <Clock className="w-3 h-3 text-emerald-400 animate-pulse" />
-                    </div>
-                    <div className="font-black text-sm text-white my-1 truncate">
-                      {formData.actualIn ||
-                        (isWithin50mRadius ? systemDetectedTimeStr : 'Menunggu Radius 1–50m')}
-                    </div>
-                    <span className="text-[9px] text-emerald-200/80">
-                      {formData.actualIn || isWithin50mRadius
-                        ? 'Terekam Otomatis (Radius 1–50m)'
-                        : 'Wajib Radius 1–50m Koordinat Toko'}
-                    </span>
-                  </div>
-
-                  {/* Read-Only System Auto Actual Out Card */}
-                  <div className="rounded-xl p-2.5 bg-white/10 border border-amber-400/30 flex flex-col justify-between">
-                    <div className="flex items-center justify-between text-[10px] uppercase font-black text-amber-300">
-                      <span>Actual Out (Auto)</span>
-                      <Clock className="w-3 h-3 text-amber-400" />
-                    </div>
-                    <div className="font-black text-sm text-white my-1 truncate">
-                      {formData.actualOut || 'Otomatis Saat Selesai'}
-                    </div>
-                    <span className="text-[9px] text-amber-200/80">
-                      Terekam Otomatis (Radius 1–50m)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Automatic Geofence 1-50m Status Bar (No Manual IN/OUT Button) */}
-                <div className="rounded-xl p-2 bg-emerald-950/70 border border-emerald-500/40 flex items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`w-2 h-2 rounded-full shrink-0 ${
-                        isWithin50mRadius || Boolean(formData.actualIn)
-                          ? 'bg-emerald-400 animate-ping'
-                          : 'bg-amber-400 animate-pulse'
-                      }`}
-                    />
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-black text-emerald-200 leading-none truncate">
-                        {isWithin50mRadius || Boolean(formData.actualIn)
-                          ? 'Posisi Terverifikasi Dalam Radius 1–50m Toko'
-                          : liveDistanceMeters !== undefined
-                          ? `Posisi Di Luar Radius 1–50m Toko (${liveDistanceMeters}m)`
-                          : 'Sistem Mendeteksi Radius 1–50m Koordinat Toko'}
-                      </div>
-                      <div className="text-[9.5px] text-emerald-300/80 leading-none mt-1 truncate">
-                        {formData.actualIn
-                          ? `Otomatis Sistem: IN ${formData.actualIn}${
-                              formData.actualOut ? ` • OUT ${formData.actualOut}` : ''
-                            }`
-                          : 'Actual IN/OUT otomatis terekam saat berada 1–50m di toko'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleRefreshGps}
-                      disabled={isGpsRefreshing}
-                      className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
-                      title="Segarkan Deteksi Sistem (Radius 1–50m)"
-                    >
-                      <RotateCw className={`w-3 h-3 ${isGpsRefreshing ? 'animate-spin' : ''}`} />
-                    </button>
-                  </div>
-                </div>
+              {/* Progress Pill Minimalis */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shrink-0">
+                <span className="text-[10.5px] font-black">{progressPercent}%</span>
+                <span className="text-[9.5px] font-bold text-emerald-200/80">Selesai</span>
               </div>
+            </div>
+
+            {/* Row 2: Actual IN & OUT Compact 2-Column Strip */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Actual IN */}
+              <div className="px-2.5 py-1.5 rounded-xl bg-white/10 border border-emerald-400/25 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="block text-[9px] font-black text-emerald-300 uppercase leading-none">
+                    Actual IN (Auto)
+                  </span>
+                  <span className="block text-xs font-black text-white truncate mt-0.5">
+                    {formData.actualIn ||
+                      (isWithin50mRadius ? systemDetectedTimeStr : 'Menunggu 1–50m')}
+                  </span>
+                </div>
+                <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              </div>
+
+              {/* Actual OUT */}
+              <div className="px-2.5 py-1.5 rounded-xl bg-white/10 border border-amber-400/25 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="block text-[9px] font-black text-amber-300 uppercase leading-none">
+                    Actual OUT (Auto)
+                  </span>
+                  <span className="block text-xs font-black text-white truncate mt-0.5">
+                    {formData.actualOut || 'Saat Selesai'}
+                  </span>
+                </div>
+                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              </div>
+            </div>
+
+            {/* Row 3: Compact Geofence Radius Status Bar */}
+            <div className="px-2.5 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/30 flex items-center justify-between gap-2 text-[10.5px]">
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    isWithin50mRadius || Boolean(formData.actualIn)
+                      ? 'bg-emerald-400'
+                      : 'bg-amber-400'
+                  }`}
+                />
+                <span className="font-semibold text-emerald-200 truncate">
+                  {isWithin50mRadius || Boolean(formData.actualIn)
+                    ? 'Terverifikasi Dalam Radius 1–50m Toko'
+                    : liveDistanceMeters !== undefined
+                    ? `Di Luar Radius 1–50m Toko (${liveDistanceMeters}m)`
+                    : 'Deteksi Otomatis Radius 1–50m Toko'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefreshGps}
+                disabled={isGpsRefreshing}
+                className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition cursor-pointer shrink-0"
+                title="Segarkan Lokasi Toko"
+              >
+                <RotateCw className={`w-3 h-3 ${isGpsRefreshing ? 'animate-spin' : ''}`} />
+              </button>
             </div>
           </div>
         )}
 
         {/* ============================================================
-            SECTION 1: GENERAL INFO & QSC (GABUNGAN SLIDE 1, 2 & 3)
+            SECTION 1: GENERAL INFO & QSC (COMPACT & ULTRA-MINIMALIST)
             ============================================================ */}
         {activeSection === 1 && (
-          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-6 animate-in fade-in">
-            <div className="border-b border-slate-100 pb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-soft-card border border-slate-200/80 space-y-4 animate-in fade-in">
+            {/* Header Card Section 1 */}
+            <div className="border-b border-slate-100 pb-2.5 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-black text-base sm:text-lg text-slate-900">
-                  General Info & QSC
+                <h3 className="font-black text-sm sm:text-base text-slate-900">
+                  General Info &amp; QSC
                 </h3>
                 {currentStoreBestieOwner && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-extrabold">
-                    <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-extrabold">
+                    <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-500" />
                     <span>Kepemilikan: {currentStoreBestieOwner}</span>
                   </span>
                 )}
@@ -2454,43 +2399,43 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowStorePickerBar((v) => !v)}
-                  className="px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[11px] font-extrabold transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10.5px] font-extrabold transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Store className="w-3.5 h-3.5 text-teal-600" />
-                  <span>{showStorePickerBar ? 'Tutup Pemilih Toko' : 'Pilih dari 610 Master Toko'}</span>
+                  <Store className="w-3 h-3 text-teal-600" />
+                  <span>{showStorePickerBar ? 'Tutup Pemilih Toko' : 'Ganti Toko (610)'}</span>
                 </button>
               )}
             </div>
 
             {Boolean(user?.isAdmin) && showStorePickerBar && (
-              <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-2.5 animate-in fade-in">
+              <div className="p-3 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-2 animate-in fade-in">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[11px] font-black text-emerald-900 uppercase">
-                    Database 610 Master Toko & Kepemilikan Bestie
+                  <span className="text-[10px] font-black text-emerald-900 uppercase">
+                    Database 610 Master Toko &amp; Kepemilikan Bestie
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => setStorePickerScope('ALL')}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer ${
+                      className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold transition cursor-pointer ${
                         storePickerScope === 'ALL'
                           ? 'bg-emerald-600 text-white'
                           : 'bg-white text-slate-600 border border-slate-200'
                       }`}
                     >
-                      Semua Master Toko (610)
+                      Semua (610)
                     </button>
                     <button
                       type="button"
                       onClick={() => setStorePickerScope('OWNED')}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer ${
+                      className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold transition flex items-center gap-1 cursor-pointer ${
                         storePickerScope === 'OWNED'
                           ? 'bg-amber-500 text-white'
                           : 'bg-white text-amber-800 border border-amber-300'
                       }`}
                     >
-                      <Star className="w-2.5 h-2.5 fill-current" />
-                      <span>Toko Kepemilikan Saya</span>
+                      <Star className="w-2 h-2 fill-current" />
+                      <span>Kepemilikan Saya</span>
                     </button>
                   </div>
                 </div>
@@ -2498,19 +2443,17 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="text"
-                    placeholder="Cari kode toko (3013) atau nama cabang..."
+                    placeholder="Cari kode atau nama cabang..."
                     value={storePickerSearch}
                     onChange={(e) => setStorePickerSearch(e.target.value)}
-                    className="w-full h-10 bg-white border border-emerald-200 rounded-xl px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                    className="w-full h-9 bg-white border border-emerald-200 rounded-xl px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
                   />
                   <select
                     value={formData.storeCode}
                     onChange={(e) => handleApplyMasterStore(e.target.value)}
-                    className="w-full h-10 bg-white border border-emerald-200 rounded-xl px-3 text-xs font-extrabold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                    className="w-full h-9 bg-white border border-emerald-200 rounded-xl px-2.5 text-xs font-extrabold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
                   >
-                    <option value="">
-                      -- Pilih dari {pickableStoresForVisitor.length} Toko --
-                    </option>
+                    <option value="">-- Pilih Toko ({pickableStoresForVisitor.length}) --</option>
                     {pickableStoresForVisitor.map((st) => (
                       <option key={st.code} value={st.code}>
                         {st.isOwnedByBestie ? '★ ' : ''}
@@ -2522,77 +2465,39 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </div>
             )}
 
-            {/* Sub-bagian 1A: Data Identitas Toko & Manajemen (Simetris 100% di Mobile & Terkunci untuk 4 Field Utama) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* 1. Nama Store (LOCKED / TIDAK BISA DI-EDIT) */}
-              <div className="min-w-0">
-                <label className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase mb-1.5">
-                  <span>Nama Store *</span>
-                  <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                    <Lock className="w-2.5 h-2.5" /> Terkunci
+            {/* 1. Verified Locked Metadata Strip (Pengganti 4 Field Besar yang Terkunci) */}
+            <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Store className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  <span className="font-black text-slate-800 truncate">
+                    {formData.storeName || 'FamilyMart'}
                   </span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={formData.storeName}
-                    readOnly
-                    disabled
-                    className="w-full h-11 bg-slate-100/90 border border-slate-200 rounded-xl px-3.5 text-xs font-black uppercase text-slate-600 cursor-not-allowed select-none outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* 2. Kode Toko & Tipe Toko (LOCKED / TIDAK BISA DI-EDIT) */}
-              <div className="grid grid-cols-2 gap-2.5 min-w-0">
-                <div className="min-w-0">
-                  <label className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    <span>Kode Toko</span>
-                    <Lock className="w-3 h-3 text-slate-400" />
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.storeCode}
-                    readOnly
-                    disabled
-                    className="w-full h-11 bg-slate-100/90 border border-slate-200 rounded-xl px-3 text-xs font-mono font-black text-slate-600 cursor-not-allowed select-none outline-none"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <label className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase mb-1.5">
-                    <span>Tipe Toko</span>
-                    <Lock className="w-3 h-3 text-slate-400" />
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.storeType}
-                    readOnly
-                    disabled
-                    className="w-full h-11 bg-slate-100/90 border border-slate-200 rounded-xl px-3 text-xs font-black text-slate-600 cursor-not-allowed select-none outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* 3. Nama Visitor (LOCKED / TIDAK BISA DI-EDIT) */}
-              <div className="min-w-0">
-                <label className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase mb-1.5">
-                  <span>Nama Visitor *</span>
-                  <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                    <Lock className="w-2.5 h-2.5" /> Terkunci
+                  <span className="font-extrabold text-[10.5px] text-teal-800 bg-teal-100/80 px-1.5 py-0.2 rounded shrink-0">
+                    {formData.storeCode}
                   </span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.visitorName}
-                  readOnly
-                  disabled
-                  className="w-full h-11 bg-slate-100/90 border border-slate-200 rounded-xl px-3.5 text-xs font-bold text-slate-600 cursor-not-allowed select-none outline-none"
-                />
+                  <span className="text-[10.5px] font-bold text-slate-500 shrink-0">
+                    ({formData.storeType})
+                  </span>
+                </div>
+                <span className="text-slate-300 hidden sm:inline">•</span>
+                <div className="flex items-center gap-1 text-slate-600 truncate">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                    Visitor:
+                  </span>
+                  <span className="font-bold text-slate-800 truncate">{formData.visitorName}</span>
+                </div>
               </div>
+              <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-slate-400 bg-white border border-slate-200/80 px-2 py-0.5 rounded-full shrink-0">
+                <Lock className="w-2.5 h-2.5 text-slate-400" /> Terkunci
+              </span>
+            </div>
 
-              {/* 4. Tanggal Visit */}
-              <div className="min-w-0 w-full">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+            {/* 2. Compact Form Inputs Grid: 2 Kolom Ramping */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+              {/* Tanggal Visit */}
+              <div className="min-w-0">
+                <label className="block text-[10.5px] font-extrabold text-slate-600 uppercase mb-1">
                   Tanggal Visit *
                 </label>
                 <div className="relative w-full min-w-0 flex items-center">
@@ -2600,18 +2505,15 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     type="date"
                     value={formData.visitDate}
                     onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })}
-                    style={{ minHeight: '44px' }}
-                    className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl pl-3.5 pr-10 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition text-left cursor-pointer flex items-center [color-scheme:light]"
+                    className="w-full h-9 sm:h-10 bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition cursor-pointer [color-scheme:light]"
                   />
-                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 flex items-center justify-center">
-                    <Calendar className="w-4 h-4 text-slate-400" />
-                  </div>
+                  <Calendar className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
-              {/* 5. Store Head */}
+              {/* Store Head */}
               <div className="min-w-0">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-[10.5px] font-extrabold text-slate-600 uppercase mb-1">
                   Store Head *
                 </label>
                 <input
@@ -2623,42 +2525,42 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     if (updatedCrews[0]) updatedCrews[0].name = val;
                     setFormData({ ...formData, storeHead: val, crews: updatedCrews });
                   }}
-                  placeholder="Nama Store Head"
-                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition"
+                  placeholder="Nama Store Head..."
+                  className="w-full h-9 sm:h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition"
                 />
               </div>
 
-              {/* 6. Area Manager */}
+              {/* Area Manager */}
               <div className="min-w-0">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-[10.5px] font-extrabold text-slate-600 uppercase mb-1">
                   Area Manager *
                 </label>
                 <input
                   type="text"
                   value={formData.areaManager}
                   onChange={(e) => setFormData({ ...formData, areaManager: e.target.value })}
-                  placeholder="Nama Area Manager"
-                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition"
+                  placeholder="Nama Area Manager..."
+                  className="w-full h-9 sm:h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition"
                 />
               </div>
 
-              {/* 7. Regional Manager */}
+              {/* Regional Manager */}
               <div className="min-w-0">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-[10.5px] font-extrabold text-slate-600 uppercase mb-1">
                   Regional Manager *
                 </label>
                 <input
                   type="text"
                   value={formData.regionalManager}
                   onChange={(e) => setFormData({ ...formData, regionalManager: e.target.value })}
-                  placeholder="Nama Regional Manager"
-                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition"
+                  placeholder="Nama Regional Manager..."
+                  className="w-full h-9 sm:h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition"
                 />
               </div>
 
-              {/* 8. Email Toko */}
+              {/* Email Toko (Opsional) */}
               <div className="min-w-0">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-[10.5px] font-extrabold text-slate-600 uppercase mb-1">
                   Email Toko (Opsional)
                 </label>
                 <input
@@ -2666,13 +2568,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   value={formData.storeEmail || ''}
                   onChange={(e) => setFormData({ ...formData, storeEmail: e.target.value })}
                   placeholder="store@familymartindonesia.com"
-                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-xs font-medium text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition"
+                  className="w-full h-9 sm:h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-medium text-slate-900 focus:bg-white focus:border-teal-500 outline-none transition"
                 />
               </div>
 
-              {/* 9. Link Spreadsheet Form CA Toko */}
+              {/* Link Spreadsheet Form CA Toko */}
               <div className="min-w-0">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                <label className="block text-[10.5px] font-extrabold text-slate-600 uppercase mb-1">
                   Link Spreadsheet Form CA Toko
                 </label>
                 <input
@@ -2680,186 +2582,150 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   value={formData.spreadsheetUrl}
                   onChange={(e) => setFormData({ ...formData, spreadsheetUrl: e.target.value })}
                   placeholder="https://tinyurl.com/store-caassignment"
-                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-xs font-mono text-slate-700 focus:bg-white focus:border-teal-500 outline-none transition"
+                  className="w-full h-9 sm:h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-mono text-slate-700 focus:bg-white focus:border-teal-500 outline-none transition"
                 />
               </div>
             </div>
 
-            {/* Sub-bagian 1B: Tim Store yang Bertugas (Zero-Swipe Mobile Card Layout — Tanpa Geser Tabel) */}
-            <div className="pt-4 border-t border-slate-100 space-y-3">
-              <div>
-                <h4 className="font-black text-sm text-slate-800">Tim Store yang Bertugas</h4>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Store Head (Auto-fill), Shift Leader, dan seluruh Crew Store on-duty
-                </p>
+            {/* 3. Tim Store yang Bertugas (Single-Row Streamlined Crew Cards) */}
+            <div className="pt-3 border-t border-slate-100 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-black text-xs sm:text-sm text-slate-800">
+                    Tim Store yang Bertugas
+                  </h4>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    Store Head, Shift Leader &amp; Crew On-Duty
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddCrew}
+                  className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-extrabold text-[10.5px] transition flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3 h-3 stroke-[2.5]" />
+                  <span>Tambah Crew</span>
+                </button>
               </div>
 
-              {/* Zero-Swipe Responsive Crew Grid/List */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Single-Row Compact Crew List */}
+              <div className="space-y-1.5">
                 {formData.crews.map((c, idx) => {
                   const isCoreLeader = idx < 2;
                   return (
                     <div
                       key={c.id || idx}
-                      className="bg-slate-50/90 border border-slate-200/90 hover:border-teal-300 rounded-2xl p-3 space-y-2 transition"
+                      className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-1.5 sm:p-2 flex items-center gap-1.5 sm:gap-2 transition hover:border-teal-300"
                     >
-                      {/* Top Row: Role Badge & Delete Button */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <span className="w-6 h-6 rounded-lg bg-teal-600 text-white font-black text-[11px] flex items-center justify-center shrink-0">
-                            {idx + 1}
-                          </span>
-                          {isCoreLeader ? (
-                            <span className="text-xs font-black text-teal-900 bg-teal-100/80 border border-teal-200 px-2.5 py-0.5 rounded-lg truncate">
-                              {c.role}
-                            </span>
-                          ) : (
-                            <input
-                              type="text"
-                              value={c.role}
-                              onChange={(e) => handleUpdateCrew(idx, 'role', e.target.value)}
-                              className="bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs font-extrabold text-slate-700 focus:border-teal-500 outline-none w-full max-w-[150px]"
-                              placeholder="Jabatan Crew"
-                            />
-                          )}
-                        </div>
-
-                        {idx >= 2 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveCrew(idx)}
-                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center transition shrink-0 cursor-pointer"
-                            title="Hapus Crew"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Bottom Row: Full Name Fill & Level Selector Side-by-Side (Tanpa Swipe) */}
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 min-w-0">
-                          <input
-                            type="text"
-                            value={c.name}
-                            onChange={(e) => handleUpdateCrew(idx, 'name', e.target.value)}
-                            placeholder="Ketik Nama Lengkap..."
-                            className="w-full h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-900 focus:border-teal-500 outline-none transition"
-                          />
-                        </div>
-                        <div className="w-[104px] shrink-0">
-                          <div className="relative">
-                            <select
-                              value={c.jobLevel}
-                              onChange={(e) => handleUpdateCrew(idx, 'jobLevel', e.target.value)}
-                              className="w-full h-10 bg-teal-50 border border-teal-200 rounded-xl px-2.5 text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 outline-none cursor-pointer"
-                              title="Pilih Job Level"
-                            >
-                              <option value="">-- Level --</option>
-                              {['1A', 'NS3', 'NS2', 'NS1', 'MG3', 'MG2', 'MG1', 'OJT'].map(
-                                (lvl) => (
-                                  <option key={lvl} value={lvl}>
-                                    Lvl: {lvl}
-                                  </option>
-                                )
-                              )}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
+                      <span className="w-5 h-5 rounded-md bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      {isCoreLeader ? (
+                        <span className="text-[10.5px] font-black text-teal-900 bg-teal-100/80 border border-teal-200 px-2 py-0.5 rounded-lg shrink-0 max-w-[95px] truncate">
+                          {c.role}
+                        </span>
+                      ) : (
+                        <input
+                          type="text"
+                          value={c.role}
+                          onChange={(e) => handleUpdateCrew(idx, 'role', e.target.value)}
+                          className="bg-white border border-slate-200 rounded-lg px-1.5 py-0.5 text-[11px] font-bold text-slate-700 w-20 sm:w-24 shrink-0 focus:border-teal-500 outline-none"
+                          placeholder="Jabatan"
+                        />
+                      )}
+                      <input
+                        type="text"
+                        value={c.name}
+                        onChange={(e) => handleUpdateCrew(idx, 'name', e.target.value)}
+                        placeholder="Nama Lengkap..."
+                        className="flex-1 min-w-0 h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs font-bold text-slate-900 focus:border-teal-500 outline-none"
+                      />
+                      <select
+                        value={c.jobLevel}
+                        onChange={(e) => handleUpdateCrew(idx, 'jobLevel', e.target.value)}
+                        className="w-18 sm:w-20 h-8 bg-teal-50 border border-teal-200 rounded-lg px-1 text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 outline-none shrink-0 cursor-pointer"
+                        title="Pilih Job Level"
+                      >
+                        <option value="">Lvl</option>
+                        {['1A', 'NS3', 'NS2', 'NS1', 'MG3', 'MG2', 'MG1', 'OJT'].map((lvl) => (
+                          <option key={lvl} value={lvl}>
+                            {lvl}
+                          </option>
+                        ))}
+                      </select>
+                      {idx >= 2 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCrew(idx)}
+                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition shrink-0 cursor-pointer"
+                          title="Hapus Crew"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
               </div>
-
-              {/* Tombol Tambah Crew Pindah Posisi Tepat di Bawah Card Crew */}
-              <button
-                type="button"
-                onClick={handleAddCrew}
-                className="w-full py-2.5 rounded-2xl border-2 border-dashed border-teal-300 hover:border-teal-500 bg-teal-50/60 hover:bg-teal-100/70 text-teal-800 font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] shadow-2xs"
-              >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>+ Tambah Crew Store yang Bertugas</span>
-              </button>
             </div>
 
-            {/* Sub-bagian 1C: Evidence Form QSC / FamiTrack Result (Slide 2 PDF) */}
-            <div className="pt-4 border-t border-slate-100 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            {/* 4. Evidence Form QSC / FamiTrack Result (Auto-Split Kompak) */}
+            <div className="pt-3 border-t border-slate-100 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                 <div>
-                  <h4 className="font-black text-sm text-slate-800">
+                  <h4 className="font-black text-xs sm:text-sm text-slate-800">
                     Evidence Form QSC / FamiTrack Result
                   </h4>
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    Upload 1 foto fisik formulir QSC/FamiTrack. Sistem akan otomatis membagi (auto-split) foto menjadi Lembar Bagian Atas &amp; Bagian Bawah.
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    1x upload formulir QSC fisik. Sistem otomatis membagi 50% Atas &amp; 50% Bawah.
                   </p>
                 </div>
-                <div className="text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 self-start sm:self-auto shrink-0">
-                  <Cloud className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>1x Upload &amp; Auto Split</span>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                  <input
+                    type="file"
+                    ref={qscSingleInputRef}
+                    accept="image/*"
+                    onChange={handleSingleQscUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={isUploadingPhoto}
+                    onClick={() => qscSingleInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>
+                      {formData.qscSheetPhoto || formData.qscSheetTop
+                        ? 'Ganti Foto QSC'
+                        : 'Upload Foto QSC'}
+                    </span>
+                  </button>
+                  {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteQsc}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition cursor-pointer"
+                      title="Hapus Foto QSC"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Hidden File Input for Single QSC Sheet Upload */}
-              <input
-                type="file"
-                ref={qscSingleInputRef}
-                accept="image/*"
-                onChange={handleSingleQscUpload}
-                className="hidden"
-              />
-
-              {/* Single Main Upload & Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  disabled={isUploadingPhoto}
-                  onClick={() => qscSingleInputRef.current?.click()}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs sm:text-sm shadow-xs transition flex items-center gap-2 cursor-pointer"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>
-                    {formData.qscSheetPhoto || formData.qscSheetTop
-                      ? 'Ganti / Upload Ulang Foto Lembar QSC'
-                      : 'Upload Foto Lembar QSC (Auto Split)'}
-                  </span>
-                </button>
-
-                {(formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) && (
-                  <button
-                    type="button"
-                    onClick={handleDeleteQsc}
-                    className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 font-bold text-xs border border-rose-200 transition flex items-center gap-1.5 cursor-pointer"
-                    title="Hapus foto lembar QSC"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                    <span>Hapus Foto</span>
-                  </button>
-                )}
-              </div>
-
-              {/* 2 Auto-Split Result Cards (Bagian Atas & Bagian Bawah) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {/* 2 Auto-Split Result Cards (Kompak & Hemat Ruang) */}
+              <div className="grid grid-cols-2 gap-2.5">
                 {/* Slot 1: Lembar QSC Bagian Atas */}
-                <div className="border border-slate-200 rounded-2xl p-3.5 sm:p-4 bg-white space-y-3 shadow-2xs">
-                  <div className="flex items-center justify-between text-xs font-black text-slate-800">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <span>Lembar QSC #1 (Bagian Atas)</span>
-                    </div>
-                    {formData.qscSheetTop ? (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        Auto-Split Siap
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                        Belum Diunggah
-                      </span>
+                <div className="border border-slate-200 rounded-xl p-2 bg-white space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-[11px] font-black text-slate-800">
+                    <span className="truncate">Lembar QSC #1 (Atas)</span>
+                    {formData.qscSheetTop && (
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                     )}
                   </div>
-
-                  <div className="h-52 sm:h-64 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
+                  <div className="h-32 sm:h-40 bg-slate-100 rounded-lg overflow-hidden relative flex items-center justify-center border border-slate-200 group">
                     {formData.qscSheetTop ? (
                       <>
                         <img
@@ -2867,54 +2733,34 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                           alt="Lembar QSC Bagian Atas"
                           className="w-full h-full object-contain cursor-zoom-in"
                           onClick={() =>
-                            handleOpenSinglePhotoZoom(formData.qscSheetTop, 'Lembar QSC Bagian Atas (Auto Split)')
+                            handleOpenSinglePhotoZoom(formData.qscSheetTop, 'Lembar QSC Bagian Atas')
                           }
                         />
-                        <div
-                          className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
-                        >
-                          <span className="bg-slate-900/85 text-white text-[11px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md">
-                            <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
-                            <span>Perbesar Bagian Atas</span>
+                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none">
+                          <span className="bg-slate-900/85 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+                            <Maximize2 className="w-3 h-3 text-teal-300" />
+                            <span>Perbesar</span>
                           </span>
                         </div>
                       </>
                     ) : (
-                      <div className="text-center p-4 space-y-1.5">
-                        <div className="w-10 h-10 rounded-xl bg-slate-200/80 text-slate-400 flex items-center justify-center mx-auto">
-                          <Camera className="w-5 h-5" />
-                        </div>
-                        <span className="text-xs text-slate-600 font-bold block">
-                          Lembar Bagian Atas
-                        </span>
-                        <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
-                          Otomatis terisi dari hasil auto-split foto lembar QSC
-                        </p>
+                      <div className="text-center p-2 text-slate-400">
+                        <Camera className="w-5 h-5 mx-auto mb-1 opacity-60" />
+                        <span className="text-[10px] font-semibold block">Bagian Atas</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Slot 2: Lembar QSC Bagian Bawah */}
-                <div className="border border-slate-200 rounded-2xl p-3.5 sm:p-4 bg-white space-y-3 shadow-2xs">
-                  <div className="flex items-center justify-between text-xs font-black text-slate-800">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-teal-500" />
-                      <span>Lembar QSC #2 (Bagian Bawah)</span>
-                    </div>
-                    {formData.qscSheetBottom ? (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        Auto-Split Siap
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                        Belum Diunggah
-                      </span>
+                <div className="border border-slate-200 rounded-xl p-2 bg-white space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between text-[11px] font-black text-slate-800">
+                    <span className="truncate">Lembar QSC #2 (Bawah)</span>
+                    {formData.qscSheetBottom && (
+                      <CheckCircle2 className="w-3 h-3 text-teal-600 shrink-0" />
                     )}
                   </div>
-
-                  <div className="h-52 sm:h-64 bg-slate-100 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200 group">
+                  <div className="h-32 sm:h-40 bg-slate-100 rounded-lg overflow-hidden relative flex items-center justify-center border border-slate-200 group">
                     {formData.qscSheetBottom ? (
                       <>
                         <img
@@ -2922,29 +2768,20 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                           alt="Lembar QSC Bagian Bawah"
                           className="w-full h-full object-contain cursor-zoom-in"
                           onClick={() =>
-                            handleOpenSinglePhotoZoom(formData.qscSheetBottom, 'Lembar QSC Bagian Bawah (Auto Split)')
+                            handleOpenSinglePhotoZoom(formData.qscSheetBottom, 'Lembar QSC Bagian Bawah')
                           }
                         />
-                        <div
-                          className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
-                        >
-                          <span className="bg-slate-900/85 text-white text-[11px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md">
-                            <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
-                            <span>Perbesar Bagian Bawah</span>
+                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none">
+                          <span className="bg-slate-900/85 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+                            <Maximize2 className="w-3 h-3 text-teal-300" />
+                            <span>Perbesar</span>
                           </span>
                         </div>
                       </>
                     ) : (
-                      <div className="text-center p-4 space-y-1.5">
-                        <div className="w-10 h-10 rounded-xl bg-slate-200/80 text-slate-400 flex items-center justify-center mx-auto">
-                          <Camera className="w-5 h-5" />
-                        </div>
-                        <span className="text-xs text-slate-600 font-bold block">
-                          Lembar Bagian Bawah
-                        </span>
-                        <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
-                          Otomatis terisi dari hasil auto-split foto lembar QSC
-                        </p>
+                      <div className="text-center p-2 text-slate-400">
+                        <Camera className="w-5 h-5 mx-auto mb-1 opacity-60" />
+                        <span className="text-[10px] font-semibold block">Bagian Bawah</span>
                       </div>
                     )}
                   </div>
@@ -2953,13 +2790,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             </div>
 
             {/* Footer Navigation Section 1 */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => handleSwitchSection(2)}
-                className="px-6 py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs sm:text-sm shadow-sm transition flex items-center gap-2 cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-xs transition flex items-center gap-2 cursor-pointer"
               >
-                <span>Lanjut ke Section 2: Observation (OPI & QSC)</span>
+                <span>Lanjut ke Section 2: Observation (OPI &amp; QSC)</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

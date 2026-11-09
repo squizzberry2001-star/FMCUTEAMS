@@ -1743,29 +1743,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="p-5 rounded-2xl bg-white">
-                  <span className="text-xs text-slate-400 block">Total Kategori</span>
-                  <span className="text-2xl font-bold text-slate-900 mt-1 block">
-                    {holdingStandards.categories.length} Kategori
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
+                <div className="p-3.5 sm:p-5 rounded-2xl bg-white shadow-2xs border border-slate-100 flex flex-col justify-between">
+                  <span className="text-[10.5px] sm:text-xs font-semibold text-slate-400 block">Total Kategori</span>
+                  <span className="text-base sm:text-2xl font-black text-slate-900 mt-1 block">
+                    {holdingStandards.categories.length} <span className="text-xs sm:text-sm font-semibold text-slate-500">Kategori</span>
                   </span>
                 </div>
-                <div className="p-5 rounded-2xl bg-white">
-                  <span className="text-xs text-slate-400 block">Total Produk</span>
-                  <span className="text-2xl font-bold text-slate-900 mt-1 block">
-                    {holdingStandards.categories.reduce((a, c) => a + c.items.length, 0)} Produk
+                <div className="p-3.5 sm:p-5 rounded-2xl bg-white shadow-2xs border border-slate-100 flex flex-col justify-between">
+                  <span className="text-[10.5px] sm:text-xs font-semibold text-slate-400 block">Total Produk</span>
+                  <span className="text-base sm:text-2xl font-black text-slate-900 mt-1 block">
+                    {holdingStandards.categories.reduce((a, c) => a + c.items.length, 0)} <span className="text-xs sm:text-sm font-semibold text-slate-500">Produk</span>
                   </span>
                 </div>
-                <div className="p-5 rounded-2xl bg-white">
-                  <span className="text-xs text-slate-400 block">Divisi Pengesah</span>
-                  <span className="text-sm font-bold text-slate-900 mt-1.5 block truncate">
+                <div className="p-3.5 sm:p-5 rounded-2xl bg-white shadow-2xs border border-slate-100 flex flex-col justify-between">
+                  <span className="text-[10.5px] sm:text-xs font-semibold text-slate-400 block">Divisi Pengesah</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-900 mt-1 block line-clamp-2 leading-snug">
                     {holdingStandards.department}
                   </span>
                 </div>
-                <div className="p-5 rounded-2xl bg-white">
-                  <span className="text-xs text-slate-400 block">Aturan Food Safety</span>
-                  <span className="text-2xl font-bold text-slate-900 mt-1 block">
-                    {holdingStandards.generalRules.length} Ketentuan
+                <div className="p-3.5 sm:p-5 rounded-2xl bg-white shadow-2xs border border-slate-100 flex flex-col justify-between">
+                  <span className="text-[10.5px] sm:text-xs font-semibold text-slate-400 block">Aturan Food Safety</span>
+                  <span className="text-base sm:text-2xl font-black text-slate-900 mt-1 block">
+                    {holdingStandards.generalRules.length} <span className="text-xs sm:text-sm font-semibold text-slate-500">Ketentuan</span>
                   </span>
                 </div>
               </div>
