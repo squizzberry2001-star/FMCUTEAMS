@@ -145,12 +145,12 @@
 }
 
 /* ==========================================================================
-   AUTHENTIC APPLE LIQUID GLASS SYSTEM (iOS Refraction, Fresnel Specular & Prism Rim)
-   Accurately matches Apple iOS Liquid Glass (Control Center & Floating Docks):
+   AUTHENTIC APPLE LIQUID GLASS SYSTEM (iOS 18 Refraction, Fresnel Specular & Prism Rim)
+   Accurately matches Apple iOS 18 Control Center & Floating Dynamic Capsule Docks:
    - High Translucency Optical Mineral Glass with True Refractive Backdrop Diffusion
    - Fresnel Bevel Reflection: Crisp Top Specular White Hairline + Bottom Ambient Light Catch
    - Volumetric Depth Elevation: Multi-stage Ambient Occlusion and Realistic 3D Levitation
-   - Milky Convex Active Lens Pill with High-Contrast Deep Black Iconography
+   - High-Contrast Apple Dark Lens Capsule Pill with High-Definition Iconography (Image 1 Aesthetic)
    ========================================================================== */
 
 /* 1. Main Floating iPhone Glass Dock */
@@ -158,96 +158,112 @@
   width: 100% !important;
   max-width: 440px !important;
   padding: 6px !important;
-  border-radius: 36px !important;
+  border-radius: 9999px !important;
   transform: scale(1) translateZ(0) !important;
   background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.58) 0%,
-    rgba(255, 255, 255, 0.28) 45%,
-    rgba(255, 255, 255, 0.42) 100%
+    135deg,
+    rgba(255, 255, 255, 0.78) 0%,
+    rgba(255, 255, 255, 0.48) 50%,
+    rgba(255, 255, 255, 0.68) 100%
   ) !important;
-  backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.04);
-  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.04);
-  border: 0.75px solid rgba(255, 255, 255, 0.55) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(28px) saturate(190%) contrast(102%) brightness(1.02);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(102%) brightness(1.02);
+  border: 0.5px solid rgba(255, 255, 255, 0.80) !important;
   box-shadow: 
-    0 20px 48px -8px rgba(15, 23, 42, 0.16),
-    0 8px 20px -4px rgba(15, 23, 42, 0.08),
+    0 20px 48px -6px rgba(15, 23, 42, 0.16),
+    0 8px 20px -3px rgba(15, 23, 42, 0.08),
     0 2px 6px -1px rgba(15, 23, 42, 0.04),
     /* Fresnel Top & Bottom Specular Insets */
-    inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 1.25px 0.75px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -0.75px 0.75px 0 rgba(255, 255, 255, 0.35),
     /* Internal Volumetric Glass Diffusion */
     inset 0 0 16px 0 rgba(255, 255, 255, 0.15) !important;
   isolation: isolate;
   contain: paint;
 }
 
-/* 2. Auto-Shrinking Scrolled State (scale 0.88 with smooth GPU transform & deeper depth) */
+/* 2. Auto-Shrinking Scrolled State (scale 0.90 with smooth GPU transform & deeper depth) */
 .iphone-glass-dock-scrolled {
   width: 100% !important;
   max-width: 440px !important;
   padding: 6px !important;
-  border-radius: 36px !important;
+  border-radius: 9999px !important;
   background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.68) 0%,
-    rgba(255, 255, 255, 0.38) 45%,
-    rgba(255, 255, 255, 0.52) 100%
+    135deg,
+    rgba(255, 255, 255, 0.86) 0%,
+    rgba(255, 255, 255, 0.58) 50%,
+    rgba(255, 255, 255, 0.76) 100%
   ) !important;
-  backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
-  -webkit-backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
-  border: 0.75px solid rgba(255, 255, 255, 0.65) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.04);
+  -webkit-backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.90) !important;
   box-shadow: 
-    0 24px 54px -8px rgba(15, 23, 42, 0.20),
-    0 10px 24px -4px rgba(15, 23, 42, 0.10),
+    0 24px 54px -6px rgba(15, 23, 42, 0.20),
+    0 10px 24px -3px rgba(15, 23, 42, 0.10),
     0 2px 8px -1px rgba(15, 23, 42, 0.06),
-    inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.98),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 1.25px 0.75px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -0.75px 0.75px 0 rgba(255, 255, 255, 0.35),
     inset 0 0 18px 0 rgba(255, 255, 255, 0.20) !important;
   isolation: isolate;
   contain: paint;
 }
 
-/* 3. Sliding Floating Convex Lens Pill on Active Tab (Liquid Glass Lens, Authentic Apple Pill) */
+/* 3. Sliding Floating Convex Lens Pill on Active Tab (High-Contrast Apple Dark Liquid Glass Lens, Authentic iOS 18) */
 .iphone-glass-pill {
+  border-radius: 9999px !important;
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.96) 0%,
-    rgba(255, 255, 255, 0.84) 50%,
-    rgba(255, 255, 255, 0.94) 100%
+    rgba(30, 41, 59, 0.98) 0%,
+    rgba(15, 23, 42, 0.98) 100%
   ) !important;
-  border: 0.75px solid rgba(255, 255, 255, 0.95) !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.25) !important;
+  border-top: 0.75px solid rgba(255, 255, 255, 0.45) !important;
+  box-shadow: 
+    0 6px 18px -2px rgba(15, 23, 42, 0.40),
+    0 2px 6px -1px rgba(15, 23, 42, 0.25),
+    /* Convex Lens Top Specular Edge */
+    inset 0 1.25px 0.75px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -0.5px 0.5px 0 rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(24px) saturate(200%) contrast(108%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%) contrast(108%);
+}
+
+/* Light Variant Lens Pill (for dark backgrounds) */
+.iphone-glass-pill-light {
+  border-radius: 9999px !important;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 255, 255, 0.88) 50%,
+    rgba(255, 255, 255, 0.96) 100%
+  ) !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.95) !important;
   box-shadow: 
     0 4px 16px -2px rgba(15, 23, 42, 0.12),
     0 1px 4px -1px rgba(15, 23, 42, 0.08),
-    /* Convex Lens Top Specular Edge */
-    inset 0 1.25px 1.5px 0 rgba(255, 255, 255, 1),
-    inset 0 -0.5px 1px 0 rgba(255, 255, 255, 0.40) !important;
-  backdrop-filter: blur(28px) saturate(210%) contrast(110%) brightness(1.10);
-  -webkit-backdrop-filter: blur(28px) saturate(210%) contrast(110%) brightness(1.10);
+    inset 0 1.25px 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -0.5px 0.5px 0 rgba(255, 255, 255, 0.40) !important;
+  backdrop-filter: blur(28px) saturate(210%) contrast(110%);
+  -webkit-backdrop-filter: blur(28px) saturate(210%) contrast(110%);
 }
 
 /* 4. Authentic Apple Glass Floating Icon Button with 3D Depth Elevation (Control Center Round Tiles) */
 .iphone-glass-icon-btn {
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.65) 0%,
-    rgba(255, 255, 255, 0.35) 50%,
-    rgba(255, 255, 255, 0.50) 100%
+    rgba(255, 255, 255, 0.82) 0%,
+    rgba(255, 255, 255, 0.48) 50%,
+    rgba(255, 255, 255, 0.68) 100%
   ) !important;
-  backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.05);
-  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.05);
-  border: 0.75px solid rgba(255, 255, 255, 0.65) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.03);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.03);
+  border: 0.5px solid rgba(255, 255, 255, 0.80) !important;
   box-shadow: 
-    0 10px 24px -4px rgba(15, 23, 42, 0.12),
-    0 3px 8px -2px rgba(15, 23, 42, 0.06),
-    inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -0.75px 1px 0 rgba(255, 255, 255, 0.30),
-    inset 0 0 10px 0 rgba(255, 255, 255, 0.12) !important;
-  /* 60fps Hardware Acceleration & Compositor Isolation (Zero Glitch on Transform) */
+    0 12px 30px -4px rgba(15, 23, 42, 0.14),
+    0 4px 10px -2px rgba(15, 23, 42, 0.06),
+    inset 0 1.25px 0.75px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -0.75px 0.75px 0 rgba(255, 255, 255, 0.35),
+    inset 0 0 12px 0 rgba(255, 255, 255, 0.15) !important;
   isolation: isolate;
   contain: paint;
   transform: translate3d(0, 0, 0);
@@ -260,20 +276,19 @@
 .iphone-glass-mini-dock {
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.68) 0%,
-    rgba(255, 255, 255, 0.38) 50%,
-    rgba(255, 255, 255, 0.55) 100%
+    rgba(255, 255, 255, 0.82) 0%,
+    rgba(255, 255, 255, 0.50) 50%,
+    rgba(255, 255, 255, 0.70) 100%
   ) !important;
-  backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.05);
-  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.05);
-  border: 0.75px solid rgba(255, 255, 255, 0.70) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.03);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.03);
+  border: 0.5px solid rgba(255, 255, 255, 0.80) !important;
   box-shadow: 
-    0 12px 28px -4px rgba(15, 23, 42, 0.14),
-    0 3px 8px -2px rgba(15, 23, 42, 0.06),
-    inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -0.75px 1px 0 rgba(255, 255, 255, 0.30),
-    inset 0 0 12px 0 rgba(255, 255, 255, 0.12) !important;
+    0 12px 30px -4px rgba(15, 23, 42, 0.14),
+    0 4px 10px -2px rgba(15, 23, 42, 0.06),
+    inset 0 1.25px 0.75px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -0.75px 0.75px 0 rgba(255, 255, 255, 0.35),
+    inset 0 0 12px 0 rgba(255, 255, 255, 0.15) !important;
   isolation: isolate;
   contain: paint;
   transform: translate3d(0, 0, 0);
@@ -286,17 +301,17 @@
 .iphone-glass-top-navbar {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.75) 0%,
-    rgba(248, 249, 253, 0.45) 50%,
-    rgba(255, 255, 255, 0.60) 100%
+    rgba(255, 255, 255, 0.82) 0%,
+    rgba(248, 249, 253, 0.55) 50%,
+    rgba(255, 255, 255, 0.72) 100%
   ) !important;
-  backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
-  -webkit-backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
-  border-bottom: 0.75px solid rgba(255, 255, 255, 0.80) !important;
+  backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.04);
+  -webkit-backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.04);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.85) !important;
   box-shadow: 
     0 16px 40px -6px rgba(15, 23, 42, 0.10),
     0 4px 14px -2px rgba(15, 23, 42, 0.05),
-    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.98),
     inset 0 -0.5px 0.75px 0 rgba(255, 255, 255, 0.35) !important;
 }
 

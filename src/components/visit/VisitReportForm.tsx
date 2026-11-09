@@ -2228,13 +2228,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={onBack}
             title="Kembali ke Beranda"
-            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-95 transition-transform duration-150 cursor-pointer shrink-0 pointer-events-auto"
+            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-95 transition-transform duration-150 cursor-pointer shrink-0 pointer-events-auto shadow-md"
           >
             <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
           </button>
 
           {/* Tengah: Floating Liquid Glass Title Capsule */}
-          <div className="iphone-glass-mini-dock px-3.5 sm:px-4 py-1.5 rounded-full text-center min-w-0 max-w-[210px] sm:max-w-xs truncate pointer-events-auto">
+          <div className="iphone-glass-mini-dock h-11 px-4 rounded-full text-center min-w-0 max-w-[210px] sm:max-w-xs flex flex-col justify-center pointer-events-auto shadow-md">
             <span className="text-[9px] font-black text-teal-800 uppercase tracking-wider flex items-center justify-center gap-1 leading-none">
               <Cloud className="w-2.5 h-2.5 text-emerald-600 inline shrink-0" />
               <span>Realtime Cross-Device</span>
@@ -2245,18 +2245,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           </div>
 
           {/* Right Floating Dock: HT/R23 & PDF Buttons in Authentic Liquid Glass */}
-          <div className="iphone-glass-mini-dock flex items-center gap-1 p-1 rounded-full shrink-0 pointer-events-auto">
+          <div className="iphone-glass-mini-dock h-11 flex items-center gap-1 px-1.5 rounded-full shrink-0 pointer-events-auto shadow-md">
             {/* Tombol HT (Besar di atas) & R23 (Kecil di bawah) */}
             <button
               type="button"
               onClick={() => setShowR23Modal(true)}
               title="Standar Holding Time Resmi (STD/FMI/PD-QC/001/R23)"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-emerald-500/15 text-emerald-950 flex flex-col items-center justify-center active:scale-95 transition-transform duration-150 cursor-pointer group"
+              className="w-9 h-9 rounded-full hover:bg-emerald-500/15 text-emerald-950 flex flex-col items-center justify-center active:scale-95 transition-transform duration-150 cursor-pointer group"
             >
-              <span className="text-[11px] sm:text-xs font-black tracking-tight leading-none text-emerald-950 group-hover:text-emerald-800">
+              <span className="text-[11px] font-black tracking-tight leading-none text-emerald-950 group-hover:text-emerald-800">
                 HT
               </span>
-              <span className="text-[7.5px] sm:text-[8px] font-black tracking-tighter leading-none text-emerald-700 group-hover:text-emerald-900 mt-[1.5px]">
+              <span className="text-[7.5px] font-black tracking-tighter leading-none text-emerald-700 group-hover:text-emerald-900 mt-[1px]">
                 R23
               </span>
             </button>
@@ -2269,10 +2269,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               type="button"
               onClick={() => setShowPreview(true)}
               title="Pratinjau & Cetak Laporan PDF"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-black/5 flex flex-col items-center justify-center text-slate-800 active:scale-95 transition-transform duration-150 cursor-pointer group"
+              className="w-9 h-9 rounded-full hover:bg-black/5 flex flex-col items-center justify-center text-slate-800 active:scale-95 transition-transform duration-150 cursor-pointer group"
             >
-              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.3] text-slate-800 group-hover:text-black" />
-              <span className="text-[7px] sm:text-[7.5px] font-black tracking-wider leading-none text-slate-700 group-hover:text-black mt-[1.5px]">
+              <FileText className="w-3.5 h-3.5 stroke-[2.3] text-slate-800 group-hover:text-black" />
+              <span className="text-[7px] font-black tracking-wider leading-none text-slate-700 group-hover:text-black mt-[1px]">
                 PDF
               </span>
             </button>
@@ -3737,15 +3737,15 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {/* ============================================================
           BOTTOM NAVBAR FORM VISIT (3 SECTION: INFO, OBSERVASI, BUKTI)
-          Ala Glass iPhone dengan Smooth Sliding Lens Pill
+          Ala Glass iPhone dengan Smooth Sliding Lens Pill (Image 1 Aesthetic)
           ============================================================ */}
-      <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
+      <div className="fixed bottom-4 sm:bottom-5 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
         <div
           onClick={handleResetScale}
           style={{
-            transform: isScrolled ? 'scale(0.88)' : 'scale(1)',
+            transform: isScrolled ? 'scale(0.90)' : 'scale(1)',
           }}
-          className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] ${
+          className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-full ${
             isScrolled ? 'iphone-glass-dock-scrolled' : 'iphone-glass-dock'
           }`}
         >
@@ -3755,17 +3755,17 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           {/* Ambient Bottom Refraction Rim */}
           <div className="pointer-events-none absolute inset-x-12 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-60 z-10" />
 
-          {/* SLIDING ACTIVE GLASS LENS PILL */}
+          {/* SLIDING ACTIVE GLASS LENS PILL (High-Contrast Apple Dark Lens, Image 1 Aesthetic) */}
           <div
-            className="absolute top-1.5 bottom-1.5 rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0"
+            className="absolute top-1.5 bottom-1.5 rounded-full iphone-glass-pill pointer-events-none dock-pill-transition z-0"
             style={{
               width: 'calc((100% - 12px) / 3)',
               transform: `translateX(calc(${activeSection - 1} * 100%))`,
               left: '6px',
             }}
           >
-            <div className="pointer-events-none absolute inset-x-3 top-0 h-[1px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
-            <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+            <div className="pointer-events-none absolute inset-x-4 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-95" />
+            <div className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/10 via-transparent to-transparent" />
           </div>
 
           {/* Section 1 = INFO */}
@@ -3776,22 +3776,22 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               handleSwitchSection(1);
               handleResetScale();
             }}
-            className="relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none py-2 sm:py-2.5 px-1.5 gap-1"
+            className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
           >
             <div className="relative flex items-center justify-center">
               <Store
                 className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 1
-                    ? 'scale-115 text-black stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
-                    : 'scale-100 stroke-[2] text-black/70 group-hover:text-black group-hover:scale-105'
+                    ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                    : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                 }`}
               />
             </div>
             <span
               className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
                 activeSection === 1
-                  ? 'text-black font-black scale-[1.03]'
-                  : 'text-black/70 font-bold group-hover:text-black'
+                  ? 'text-white font-black scale-[1.02]'
+                  : 'text-slate-600 font-bold group-hover:text-black'
               }`}
             >
               INFO
@@ -3806,19 +3806,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               handleSwitchSection(2);
               handleResetScale();
             }}
-            className="relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none py-2 sm:py-2.5 px-1.5 gap-1"
+            className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
           >
             <div className="relative flex items-center justify-center">
               <ClipboardCheck
                 className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 2
-                    ? 'scale-115 text-black stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
-                    : 'scale-100 stroke-[2] text-black/70 group-hover:text-black group-hover:scale-105'
+                    ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                    : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                 }`}
               />
 
               {formData.observations.length > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-white text-teal-800 px-1.5 py-0.2 rounded-full shadow-sm border border-slate-200/90 leading-none">
+                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-[#FF3B30] text-white px-1.5 py-0.2 rounded-full shadow-sm ring-2 ring-white leading-none">
                   {formData.observations.length}
                 </span>
               )}
@@ -3826,8 +3826,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             <span
               className={`tracking-tight leading-none text-[10px] transition-all duration-300 ${
                 activeSection === 2
-                  ? 'text-black font-black scale-[1.03]'
-                  : 'text-black/70 font-bold group-hover:text-black'
+                  ? 'text-white font-black scale-[1.02]'
+                  : 'text-slate-600 font-bold group-hover:text-black'
               }`}
             >
               Observasi
@@ -3842,19 +3842,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               handleSwitchSection(3);
               handleResetScale();
             }}
-            className="relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none py-2 sm:py-2.5 px-1.5 gap-1"
+            className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
           >
             <div className="relative flex items-center justify-center">
               <Camera
                 className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 3
-                    ? 'scale-115 text-black stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
-                    : 'scale-100 stroke-[2] text-black/70 group-hover:text-black group-hover:scale-105'
+                    ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                    : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                 }`}
               />
 
               {formData.evidencePhotos.length + (formData.caPhotos?.length || 0) > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-white text-amber-700 px-1.5 py-0.2 rounded-full shadow-sm border border-slate-200/90 leading-none">
+                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-[#FF3B30] text-white px-1.5 py-0.2 rounded-full shadow-sm ring-2 ring-white leading-none">
                   {formData.evidencePhotos.length + (formData.caPhotos?.length || 0)}
                 </span>
               )}
@@ -3862,8 +3862,8 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             <span
               className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
                 activeSection === 3
-                  ? 'text-black font-black scale-[1.03]'
-                  : 'text-black/70 font-bold group-hover:text-black'
+                  ? 'text-white font-black scale-[1.02]'
+                  : 'text-slate-600 font-bold group-hover:text-black'
               }`}
             >
               BUKTI

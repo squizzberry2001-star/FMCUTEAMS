@@ -34,18 +34,18 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
   const activeIndex = Math.max(0, navItems.findIndex((item) => item.id === activeTab));
 
   return (
-    <div className="fixed bottom-3.5 sm:bottom-4 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
+    <div className="fixed bottom-4 sm:bottom-5 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
       {/* 
         Floating iPhone Glass Dock with Optical Refraction & Visual Distortion
         Menyudut tetap center (origin-center, tidak menyusut ke bawah)
-        Super smooth deliberate transition (800ms) & auto-upscale on press
+        Super smooth deliberate transition & auto-upscale on press
       */}
       <div
         onClick={onResetScale}
         style={{
-          transform: isScrolled ? 'scale(0.88)' : 'scale(1)',
+          transform: isScrolled ? 'scale(0.90)' : 'scale(1)',
         }}
-        className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] ${
+        className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-full ${
           isScrolled ? 'iphone-glass-dock-scrolled' : 'iphone-glass-dock'
         }`}
       >
@@ -56,10 +56,10 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
         <div className="pointer-events-none absolute inset-x-12 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-60 z-10" />
 
         {/* 
-          SLIDING ACTIVE GLASS LENS PILL (White Liquid Glass, Seamless Apple Rim)
+          SLIDING ACTIVE GLASS LENS PILL (High-Contrast Apple Dark Lens, Image 1 Aesthetic)
         */}
         <div
-          className="absolute top-1.5 bottom-1.5 rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0"
+          className="absolute top-1.5 bottom-1.5 rounded-full iphone-glass-pill pointer-events-none dock-pill-transition z-0"
           style={{
             width: 'calc((100% - 12px) / 4)',
             transform: `translateX(calc(${activeIndex} * 100%))`,
@@ -67,8 +67,8 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
           }}
         >
           {/* Top specular hairline inside the pill */}
-          <div className="pointer-events-none absolute inset-x-3 top-0 h-[1px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+          <div className="pointer-events-none absolute inset-x-4 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-95" />
+          <div className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/10 via-transparent to-transparent" />
         </div>
 
         {/* Tab Items Buttons */}
@@ -83,15 +83,15 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
                 if (onResetScale) onResetScale();
               }}
               onClick={() => handleTabClick(item.id)}
-              className="relative z-10 flex-1 rounded-[24px] flex flex-col items-center justify-center dock-btn-transition active:scale-90 group cursor-pointer focus:outline-none py-2 sm:py-2.5 px-1.5 gap-1"
+              className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
             >
               {/* Icon Container dengan Micro-Spring Damping */}
               <div className="relative flex items-center justify-center">
                 <Icon
                   className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                     isActive
-                      ? 'scale-115 text-black stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
-                      : 'scale-100 stroke-[2] text-black/70 group-hover:text-black group-hover:scale-105'
+                      ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                      : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                   }`}
                 />
               </div>
@@ -100,8 +100,8 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
               <span
                 className={`text-[10px] tracking-tight leading-none transition-all duration-300 ${
                   isActive
-                    ? 'text-black font-black scale-[1.03]'
-                    : 'text-black/70 font-bold group-hover:text-black'
+                    ? 'text-white font-black scale-[1.02]'
+                    : 'text-slate-600 font-bold group-hover:text-black'
                 }`}
               >
                 {item.label}
