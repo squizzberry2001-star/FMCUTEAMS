@@ -46,6 +46,8 @@ import {
   ChevronDown,
   CheckCircle,
   HelpCircle,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ScheduleAgenda, ScheduleCategory, User, VisitReportData } from '../../types';
@@ -565,6 +567,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // 4. 'monitoring' -> Audit Presensi Kunjungan & Laporan QSC
   // 5. 'datahub' -> Pusat Sinkronisasi Excel & Master Toko
   const [activeTab, setActiveTab] = useState<'table' | 'calendar' | 'analytics' | 'monitoring' | 'datahub'>('table');
+
+  // View Mode: 'table' (Spreadsheet View) vs 'cards' (Kartu Ramping Terpadu)
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -1371,8 +1376,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </button>
                 </div>
 
-                {/* Right: PIC Dropdown & Download Button */}
-                <div className="flex items-center gap-2">
+                {/* Right: View Mode Toggle, PIC Dropdown & Download Button */}
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  {/* Sakelar Toggle (Tabel ↔ Kartu) */}
+                  <div className="flex items-center p-0.5 rounded-xl bg-slate-100 border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('table')}
+                      title="Tampilan Tabel Spreadsheet"
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                        viewMode === 'table'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <List className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Tabel</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('cards')}
+                      title="Tampilan Kartu Ringkasan (Card View)"
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                        viewMode === 'cards'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Kartu</span>
+                    </button>
+                  </div>
+
                   {/* PIC Dropdown */}
                   <select
                     value={filterPic}
@@ -1401,209 +1436,357 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             </div>
 
-            {/* SPREADSHEET HIGH-DENSITY DATA TABLE */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-black tracking-wider">
-                      <th className="py-2.5 px-3 text-center w-10">No</th>
-                      <th className="py-2.5 px-3 w-28">Tanggal & Jam</th>
-                      <th className="py-2.5 px-3 w-36">Personil (PIC)</th>
-                      <th className="py-2.5 px-3 w-32">Jenis Kegiatan</th>
-                      <th className="py-2.5 px-4 min-w-[200px]">Judul Agenda & Deskripsi</th>
-                      <th className="py-2.5 px-3 min-w-[160px]">Lokasi / Toko</th>
-                      <th className="py-2.5 px-3 w-36">Status Pelaksanaan</th>
-                      <th className="py-2.5 px-3 w-28 text-center">Laporan QSC</th>
-                      <th className="py-2.5 px-3 w-20 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredClassifiedAgendas.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="py-12 text-center text-slate-400">
-                          <Info className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                          <p className="font-bold text-sm text-slate-600">Tidak ada agenda yang cocok dengan filter</p>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            Coba ubah tanggal preset, kata kunci pencarian, atau jenis kegiatan
-                          </p>
-                        </td>
+            {/* VIEW MODE: SPREADSHEET TABLE VIEW */}
+            {viewMode === 'table' && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-black tracking-wider">
+                        <th className="py-2.5 px-3 text-center w-10">No</th>
+                        <th className="py-2.5 px-3 w-28">Tanggal & Jam</th>
+                        <th className="py-2.5 px-3 w-36">Personil (PIC)</th>
+                        <th className="py-2.5 px-3 w-32">Jenis Kegiatan</th>
+                        <th className="py-2.5 px-4 min-w-[200px]">Judul Agenda & Deskripsi</th>
+                        <th className="py-2.5 px-3 min-w-[160px]">Lokasi / Toko</th>
+                        <th className="py-2.5 px-3 w-36">Status Pelaksanaan</th>
+                        <th className="py-2.5 px-3 w-28 text-center">Laporan QSC</th>
+                        <th className="py-2.5 px-3 w-20 text-center">Aksi</th>
                       </tr>
-                    ) : (
-                      filteredClassifiedAgendas.map((item, idx) => {
-                        const ag = item.agenda;
-                        const hasStore = Boolean(ag.storeCode || ag.storeName);
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredClassifiedAgendas.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="py-12 text-center text-slate-400">
+                            <Info className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                            <p className="font-bold text-sm text-slate-600">Tidak ada agenda yang cocok dengan filter</p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Coba ubah tanggal preset, kata kunci pencarian, atau jenis kegiatan
+                            </p>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredClassifiedAgendas.map((item, idx) => {
+                          const ag = item.agenda;
+                          const hasStore = Boolean(ag.storeCode || ag.storeName);
 
-                        return (
-                          <tr
-                            key={ag.id}
-                            className={`hover:bg-slate-50/80 transition-colors ${
-                              idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'
-                            }`}
-                          >
-                            {/* No */}
-                            <td className="py-2 px-3 text-center font-bold text-slate-400">
-                              {idx + 1}
-                            </td>
+                          return (
+                            <tr
+                              key={ag.id}
+                              className={`hover:bg-slate-50/80 transition-colors ${
+                                idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'
+                              }`}
+                            >
+                              {/* No */}
+                              <td className="py-2 px-3 text-center font-bold text-slate-400">
+                                {idx + 1}
+                              </td>
 
-                            {/* Tanggal & Jam */}
-                            <td className="py-2 px-3 whitespace-nowrap">
-                              <span className="font-black text-slate-900 block leading-tight">
-                                {ag.date}
-                              </span>
-                              <span className="text-[10px] font-bold text-slate-500 block leading-tight mt-0.5">
-                                {ag.time || '08:00'} - {ag.endTime || '17:00'} WIB
-                              </span>
-                            </td>
-
-                            {/* PIC */}
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                                  {ag.pic ? ag.pic.charAt(0).toUpperCase() : '?'}
-                                </div>
-                                <span className="font-bold text-slate-800 truncate" title={ag.pic}>
-                                  {ag.pic || 'Unassigned'}
+                              {/* Tanggal & Jam */}
+                              <td className="py-2 px-3 whitespace-nowrap">
+                                <span className="font-black text-slate-900 block leading-tight">
+                                  {ag.date}
                                 </span>
-                              </div>
-                            </td>
+                                <span className="text-[10px] font-bold text-slate-500 block leading-tight mt-0.5">
+                                  {ag.time || '08:00'} - {ag.endTime || '17:00'} WIB
+                                </span>
+                              </td>
 
-                            {/* Jenis Kegiatan Badge */}
-                            <td className="py-2 px-3 whitespace-nowrap">
-                              <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
-                              >
-                                {item.isExplicitVisit && <Store className="w-3 h-3 shrink-0" />}
-                                {item.kind === 'MEETING' && <Building2 className="w-3 h-3 shrink-0" />}
-                                {item.kind === 'TRAINING' && <BookOpen className="w-3 h-3 shrink-0" />}
-                                {item.kind === 'LEAVE' && <Coffee className="w-3 h-3 shrink-0" />}
-                                <span>{item.badge.label}</span>
-                              </span>
-                            </td>
+                              {/* PIC */}
+                              <td className="py-2 px-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                                    {ag.pic ? ag.pic.charAt(0).toUpperCase() : '?'}
+                                  </div>
+                                  <span className="font-bold text-slate-800 truncate" title={ag.pic}>
+                                    {ag.pic || 'Unassigned'}
+                                  </span>
+                                </div>
+                              </td>
 
-                            {/* Judul & Deskripsi */}
-                            <td className="py-2 px-4">
-                              <p className="font-black text-slate-900 leading-tight">
-                                {ag.title}
-                              </p>
-                              {ag.description && (
-                                <p className="text-[11px] font-medium text-slate-500 line-clamp-1 mt-0.5">
-                                  {ag.description}
+                              {/* Jenis Kegiatan Badge */}
+                              <td className="py-2 px-3 whitespace-nowrap">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
+                                >
+                                  {item.isExplicitVisit && <Store className="w-3 h-3 shrink-0" />}
+                                  {item.kind === 'MEETING' && <Building2 className="w-3 h-3 shrink-0" />}
+                                  {item.kind === 'TRAINING' && <BookOpen className="w-3 h-3 shrink-0" />}
+                                  {item.kind === 'LEAVE' && <Coffee className="w-3 h-3 shrink-0" />}
+                                  <span>{item.badge.label}</span>
+                                </span>
+                              </td>
+
+                              {/* Judul & Deskripsi */}
+                              <td className="py-2 px-4">
+                                <p className="font-black text-slate-900 leading-tight">
+                                  {ag.title}
                                 </p>
-                              )}
-                            </td>
+                                {ag.description && (
+                                  <p className="text-[11px] font-medium text-slate-500 line-clamp-1 mt-0.5">
+                                    {ag.description}
+                                  </p>
+                                )}
+                              </td>
 
-                            {/* Lokasi / Toko */}
-                            <td className="py-2 px-3">
-                              {hasStore ? (
-                                <div>
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    {ag.storeCode && (
-                                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">
-                                        {ag.storeCode}
+                              {/* Lokasi / Toko */}
+                              <td className="py-2 px-3">
+                                {hasStore ? (
+                                  <div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {ag.storeCode && (
+                                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">
+                                          {ag.storeCode}
+                                        </span>
+                                      )}
+                                      <span className="font-black text-slate-800 text-xs">
+                                        {ag.storeName || ag.location}
+                                      </span>
+                                    </div>
+                                    {!item.isExplicitVisit && (
+                                      <span className="text-[9.5px] font-bold text-slate-400 block mt-0.5">
+                                        (Lokasi Toko, Agenda Non-Visit)
                                       </span>
                                     )}
-                                    <span className="font-black text-slate-800 text-xs">
-                                      {ag.storeName || ag.location}
-                                    </span>
                                   </div>
-                                  {!item.isExplicitVisit && (
-                                    <span className="text-[9.5px] font-bold text-slate-400 block mt-0.5">
-                                      (Lokasi Toko, Agenda Non-Visit)
-                                    </span>
-                                  )}
+                                ) : (
+                                  <span className="font-medium text-slate-700">
+                                    {ag.location || 'Kantor / Daring'}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Status Pelaksanaan */}
+                              <td className="py-2 px-3 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-2 h-2 rounded-full ${item.status.dot} shrink-0`} />
+                                  <span
+                                    className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${item.status.bg} ${item.status.color} ${item.status.border}`}
+                                  >
+                                    {item.status.label}
+                                  </span>
                                 </div>
-                              ) : (
-                                <span className="font-medium text-slate-700">
-                                  {ag.location || 'Kantor / Daring'}
-                                </span>
-                              )}
-                            </td>
+                                {/* Actual In/Out info for visit */}
+                                {item.isExplicitVisit && (ag.actualIn || item.report?.actualIn) && (
+                                  <span className="text-[9.5px] font-bold text-slate-500 block mt-0.5">
+                                    IN: {ag.actualIn || item.report?.actualIn}{' '}
+                                    {ag.actualOut || item.report?.actualOut ? `• OUT: ${ag.actualOut || item.report?.actualOut}` : ''}
+                                  </span>
+                                )}
+                              </td>
 
-                            {/* Status Pelaksanaan */}
-                            <td className="py-2 px-3 whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <span className={`w-2 h-2 rounded-full ${item.status.dot} shrink-0`} />
-                                <span
-                                  className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${item.status.bg} ${item.status.color} ${item.status.border}`}
-                                >
-                                  {item.status.label}
-                                </span>
-                              </div>
-                              {/* Actual In/Out info for visit */}
-                              {item.isExplicitVisit && (ag.actualIn || item.report?.actualIn) && (
-                                <span className="text-[9.5px] font-bold text-slate-500 block mt-0.5">
-                                  IN: {ag.actualIn || item.report?.actualIn}{' '}
-                                  {ag.actualOut || item.report?.actualOut ? `• OUT: ${ag.actualOut || item.report?.actualOut}` : ''}
-                                </span>
-                              )}
-                            </td>
+                              {/* Laporan QSC */}
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                {item.isExplicitVisit ? (
+                                  item.report ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewingReport(item.report!)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition cursor-pointer shadow-xs active:scale-95"
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      <span>Lihat PDF</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                      Menunggu
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="text-[11px] font-bold text-slate-300">—</span>
+                                )}
+                              </td>
 
-                            {/* Laporan QSC */}
-                            <td className="py-2 px-3 text-center whitespace-nowrap">
-                              {item.isExplicitVisit ? (
-                                item.report ? (
+                              {/* Aksi */}
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <div className="flex items-center justify-center gap-1">
                                   <button
                                     type="button"
-                                    onClick={() => setPreviewingReport(item.report!)}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition cursor-pointer shadow-xs active:scale-95"
+                                    onClick={() => {
+                                      setEditingAgenda(ag);
+                                      setIsAgendaModalOpen(true);
+                                    }}
+                                    title="Edit Agenda"
+                                    className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
                                   >
-                                    <FileText className="w-3 h-3" />
-                                    <span>Lihat PDF</span>
+                                    <Edit3 className="w-3.5 h-3.5" />
                                   </button>
-                                ) : (
-                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                    Menunggu
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeletingAgenda(ag)}
+                                    title="Hapus Agenda"
+                                    className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Table Footer: Summary Count */}
+                <div className="bg-slate-50 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between text-xs text-slate-500 font-bold">
+                  <span>
+                    Menampilkan <strong className="text-slate-800">{filteredClassifiedAgendas.length}</strong> dari{' '}
+                    <strong className="text-slate-800">{allClassifiedAgendas.length}</strong> total agenda
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    FamilyMart Operations Data Engine
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW MODE: KARTU RAMPING TERPADU (Card Grid View) */}
+            {viewMode === 'cards' && (
+              <div className="space-y-3">
+                {filteredClassifiedAgendas.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-xs">
+                    <Info className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                    <p className="font-bold text-sm text-slate-600">Tidak ada agenda yang cocok dengan filter</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Coba ubah tanggal preset, kata kunci pencarian, atau jenis kegiatan
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {filteredClassifiedAgendas.map((item) => {
+                      const ag = item.agenda;
+                      const hasStore = Boolean(ag.storeCode || ag.storeName);
+
+                      return (
+                        <div
+                          key={ag.id}
+                          className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow p-3.5 flex flex-col justify-between space-y-3"
+                        >
+                          {/* 1. Header Kartu: Tanggal, Jam & Badge Jenis Kegiatan */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="text-xs font-black text-slate-900 block leading-tight">
+                                📅 {ag.date}
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-500 block mt-0.5">
+                                ⏰ {ag.time || '08:00'} - {ag.endTime || '17:00'} WIB
+                              </span>
+                            </div>
+
+                            <span
+                              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
+                            >
+                              {item.isExplicitVisit && <Store className="w-3 h-3 shrink-0" />}
+                              {item.kind === 'MEETING' && <Building2 className="w-3 h-3 shrink-0" />}
+                              {item.kind === 'TRAINING' && <BookOpen className="w-3 h-3 shrink-0" />}
+                              {item.kind === 'LEAVE' && <Coffee className="w-3 h-3 shrink-0" />}
+                              <span>{item.badge.label}</span>
+                            </span>
+                          </div>
+
+                          {/* 2. Baris Tengah: Judul Agenda & Nama Toko/Lokasi */}
+                          <div className="space-y-1.5 py-1 border-y border-slate-100">
+                            <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-snug">
+                              {ag.title}
+                            </h4>
+
+                            {hasStore ? (
+                              <div className="flex items-center gap-1.5 text-xs text-slate-700 font-bold">
+                                <span>📍</span>
+                                {ag.storeCode && (
+                                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 shrink-0">
+                                    {ag.storeCode}
                                   </span>
-                                )
-                              ) : (
-                                <span className="text-[11px] font-bold text-slate-300">—</span>
-                              )}
-                            </td>
-
-                            {/* Aksi */}
-                            <td className="py-2 px-3 text-center whitespace-nowrap">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingAgenda(ag);
-                                    setIsAgendaModalOpen(true);
-                                  }}
-                                  title="Edit Agenda"
-                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeletingAgenda(ag)}
-                                  title="Hapus Agenda"
-                                  className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                )}
+                                <span className="font-black text-slate-900 truncate">
+                                  {ag.storeName || ag.location}
+                                </span>
                               </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                            ) : (
+                              <p className="text-xs font-medium text-slate-600 truncate">
+                                📍 {ag.location || 'Kantor / Daring'}
+                              </p>
+                            )}
 
-              {/* Table Footer: Summary Count */}
-              <div className="bg-slate-50 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between text-xs text-slate-500 font-bold">
-                <span>
-                  Menampilkan <strong className="text-slate-800">{filteredClassifiedAgendas.length}</strong> dari{' '}
-                  <strong className="text-slate-800">{allClassifiedAgendas.length}</strong> total agenda
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  FamilyMart Operations Data Engine
-                </span>
+                            {ag.description && (
+                              <p className="text-[11px] text-slate-500 line-clamp-2">
+                                {ag.description}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* 3. Footer Kartu: PIC, Status & Tombol Aksi Cepat */}
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            {/* PIC & Status */}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                                {ag.pic ? ag.pic.charAt(0).toUpperCase() : '?'}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="block text-[11px] font-black text-slate-800 truncate" title={ag.pic}>
+                                  {ag.pic || 'Unassigned'}
+                                </span>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${item.status.dot} shrink-0`} />
+                                  <span className="text-[10px] font-bold text-slate-500 truncate">
+                                    {item.status.label}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Tombol Aksi */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {item.isExplicitVisit && item.report && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewingReport(item.report!)}
+                                  title="Pratinjau Laporan PDF"
+                                  className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer active:scale-95"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingAgenda(ag);
+                                  setIsAgendaModalOpen(true);
+                                }}
+                                title="Edit Agenda"
+                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer active:scale-95"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingAgenda(ag)}
+                                title="Hapus Agenda"
+                                className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition cursor-pointer active:scale-95"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Card View Footer Summary */}
+                <div className="p-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between text-xs text-slate-500 font-bold">
+                  <span>
+                    Menampilkan <strong className="text-slate-800">{filteredClassifiedAgendas.length}</strong> kartu agenda
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Mode Kartu Ramping Terpadu
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
