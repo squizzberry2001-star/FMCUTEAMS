@@ -351,8 +351,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         </div>
       </div>
 
-      {/* Operational Toolbar (HANYA MUNCUL DI SISI ADMIN / EXECUTIVE VIEWER - DI SISI USER BIASA DIHILANGKAN TOTAL) */}
-      {(user?.isAdmin || isReadOnly || user?.isExecutiveViewer || user?.accessLevel === 'EXECUTIVE_VIEWER') && (
+      {/* Operational Toolbar (HANYA MUNCUL DI SISI ADMIN - DI SISI USER BIASA DIHILANGKAN TOTAL) */}
+      {Boolean(user?.isAdmin) && (
         <div className="flex items-center justify-between flex-wrap gap-2.5 mb-4 bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-100 shadow-soft-card">
           <div className="flex items-center gap-2">
             <span

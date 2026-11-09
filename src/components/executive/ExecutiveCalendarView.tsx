@@ -157,6 +157,7 @@ export const ExecutiveCalendarView: React.FC<ExecutiveCalendarViewProps> = ({
     const verified = findVerifiedGDriveReport({
       storeCode: agenda.storeCode,
       storeName: agenda.storeName || agenda.location,
+      pic: agenda.pic,
       agendaId: agenda.id,
       visitDate: agenda.date,
       cloudReports,
@@ -497,6 +498,7 @@ export const ExecutiveCalendarView: React.FC<ExecutiveCalendarViewProps> = ({
                 ? findVerifiedGDriveReport({
                     storeCode: item.storeCode,
                     storeName: item.storeName || item.location,
+                    pic: item.pic,
                     agendaId: item.id,
                     visitDate: item.date,
                     cloudReports,

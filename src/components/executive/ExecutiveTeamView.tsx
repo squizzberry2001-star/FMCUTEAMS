@@ -23,7 +23,12 @@ import { getLocalDateYmd } from '../../utils/mapGeoUtils';
 import { getMondayOfWeek, getFullWeekDays } from '../../services/scheduleExcelService';
 import { resolveVisitedStoreReportData } from '../HistoryView';
 import { getGDriveReportRegistryEntry } from '../../services/pdfGeneratorService';
-import { findVerifiedGDriveReport, VerifiedGDriveReportMeta } from '../../services/gdriveReportLiveService';
+import { findVerifiedGDriveReport, verifiedItemToMeta, VerifiedGDriveReportMeta } from '../../services/gdriveReportLiveService';
+import {
+  GDRIVE_VERIFIED_REPORTS,
+  GDriveVerifiedReportItem,
+  getVerifiedGDriveReports,
+} from '../../data/gdriveVerifiedReportsData';
 
 interface ExecutiveTeamViewProps {
   currentUser: User;
@@ -53,12 +58,14 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [modalMainTab, setModalMainTab] = useState<'GDRIVE_REPORTS' | 'AGENDAS'>('GDRIVE_REPORTS');
   const [modalPeriodFilter, setModalPeriodFilter] = useState<'WEEK' | 'MONTH' | 'ALL'>('WEEK');
   const [modalCategoryFilter, setModalCategoryFilter] = useState<string>('ALL');
   const [modalMonthOffset, setModalMonthOffset] = useState<number>(0);
 
   const todayYmd = useMemo(() => getLocalDateYmd(), []);
   const fieldUsers = useMemo(() => users.filter((u) => !u.isAdmin), [users]);
+  const allVerifiedReports = useMemo(() => getVerifiedGDriveReports(), []);
 
   // Map of online presences
   const now = Date.now();
@@ -80,6 +87,7 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
       {
         totalVisitsThisMonth: number;
         ownedStoresCount: number;
+        gdriveReportsCount: number;
         isOnline: boolean;
         currentCoords?: { lat: number; lng: number };
       }
@@ -100,16 +108,21 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
         (s) => s.ownerBestieName && isSamePersonName(s.ownerBestieName, u.name)
       ).length;
 
+      const gdriveCount = allVerifiedReports.filter((r) =>
+        isSamePersonName(r.personnelName, u.name)
+      ).length;
+
       map.set(u.name, {
         totalVisitsThisMonth: monthVisits,
         ownedStoresCount: owned,
+        gdriveReportsCount: gdriveCount,
         isOnline: Boolean(online),
         currentCoords: online ? { lat: online.lat, lng: online.lng } : undefined,
       });
     });
 
     return map;
-  }, [fieldUsers, onlinePresenceMap, agendas, stores, todayYmd]);
+  }, [fieldUsers, onlinePresenceMap, agendas, stores, todayYmd, allVerifiedReports]);
 
   // Filtered users by search
   const filteredUsers = useMemo(() => {
@@ -155,10 +168,19 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
       });
   }, [selectedUser, agendas, modalPeriodFilter, modalMonthOffset, modalCategoryFilter, todayYmd]);
 
+  // Verified GDrive reports for selected user in modal
+  const selectedUserGdriveReports = useMemo(() => {
+    if (!selectedUser) return [];
+    return allVerifiedReports
+      .filter((rep) => isSamePersonName(rep.personnelName, selectedUser.name))
+      .sort((a, b) => b.visitDate.localeCompare(a.visitDate));
+  }, [selectedUser, allVerifiedReports]);
+
   const handlePreviewReport = (agenda: ScheduleAgenda) => {
     const verified = findVerifiedGDriveReport({
       storeCode: agenda.storeCode,
       storeName: agenda.storeName || agenda.location,
+      pic: agenda.pic || selectedUser?.name,
       agendaId: agenda.id,
       visitDate: agenda.date,
       cloudReports,
@@ -173,6 +195,18 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
       storeFolderName: verified.storeFolderName,
       pdfFileName: verified.pdfFileName,
       gdriveSavedDate: verified.gdriveSavedDate,
+    });
+  };
+
+  const handlePreviewGdriveReport = (item: GDriveVerifiedReportItem) => {
+    const meta = verifiedItemToMeta(item);
+    onOpenReportPreview({
+      reportData: meta.reportData,
+      gdrivePdfUrl: meta.gdrivePdfUrl,
+      gdriveEmbedUrl: meta.gdriveEmbedUrl,
+      storeFolderName: meta.storeFolderName,
+      pdfFileName: meta.pdfFileName,
+      gdriveSavedDate: meta.gdriveSavedDate,
     });
   };
 
@@ -219,6 +253,7 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
             const stats = userStatsMap.get(u.name) || {
               totalVisitsThisMonth: 0,
               ownedStoresCount: 0,
+              gdriveReportsCount: 0,
               isOnline: false,
             };
 
@@ -274,9 +309,11 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
                   {/* Stat chips */}
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[10px]">
                     <div className="p-2 bg-white rounded-xl border border-slate-200/60">
-                      <span className="text-slate-400 font-bold block">Visit Bulan Ini</span>
-                      <span className="text-xs font-black text-emerald-800 mt-0.5 block">
-                        {stats.totalVisitsThisMonth} Kunjungan
+                      <span className="text-slate-400 font-bold block">Laporan GDrive</span>
+                      <span className={`text-xs font-black mt-0.5 block ${
+                        stats.gdriveReportsCount > 0 ? 'text-emerald-700' : 'text-slate-500'
+                      }`}>
+                        {stats.gdriveReportsCount} Laporan
                       </span>
                     </div>
 
@@ -345,181 +382,304 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
               </button>
             </div>
 
-            {/* Filter Bar: Minggu Ini vs Bulan Ini vs Semua + Category Filters */}
-            <div className="py-3.5 border-b border-slate-100 space-y-2.5 shrink-0">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                {/* Period Filter */}
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl">
-                  <button
-                    type="button"
-                    onClick={() => setModalPeriodFilter('WEEK')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
-                      modalPeriodFilter === 'WEEK'
-                        ? 'bg-[#3A657C] text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Minggu Ini
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModalPeriodFilter('MONTH')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
-                      modalPeriodFilter === 'MONTH'
-                        ? 'bg-[#3A657C] text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Bulan Ini
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModalPeriodFilter('ALL')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
-                      modalPeriodFilter === 'ALL'
-                        ? 'bg-[#3A657C] text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Semua
-                  </button>
-                </div>
+            {/* Top View Selector: Laporan di GDrive vs Agenda Terjadwal */}
+            <div className="pt-3 pb-2 flex items-center gap-2 border-b border-slate-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setModalMainTab('GDRIVE_REPORTS')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  modalMainTab === 'GDRIVE_REPORTS'
+                    ? 'bg-[#10B981] text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Laporan di GDrive ({selectedUserGdriveReports.length})</span>
+              </button>
 
-                {/* Month Picker if MONTH view */}
-                {modalPeriodFilter === 'MONTH' && (
-                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl">
-                    <button
-                      type="button"
-                      onClick={() => setModalMonthOffset((v) => v - 1)}
-                      className="w-6 h-6 rounded-lg bg-white text-slate-600 hover:text-slate-900 flex items-center justify-center transition cursor-pointer"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="px-2 text-xs font-black text-slate-800 capitalize">
-                      {modalMonthLabel}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setModalMonthOffset((v) => v + 1)}
-                      className="w-6 h-6 rounded-lg bg-white text-slate-600 hover:text-slate-900 flex items-center justify-center transition cursor-pointer"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Category Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                {(
-                  [
-                    { id: 'ALL', label: 'Semua Kategori' },
-                    { id: 'VISIT', label: 'Store Visit' },
-                    { id: 'TRAINING', label: 'Training' },
-                    { id: 'MEETING', label: 'Meeting' },
-                    { id: 'OFF', label: 'Libur (OFF)' },
-                  ] as const
-                ).map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setModalCategoryFilter(c.id)}
-                    className={`px-2.5 py-1 rounded-xl text-[10.5px] font-bold whitespace-nowrap transition cursor-pointer border ${
-                      modalCategoryFilter === c.id
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setModalMainTab('AGENDAS')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  modalMainTab === 'AGENDAS'
+                    ? 'bg-[#3A657C] text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Agenda Terjadwal ({selectedUserAgendas.length})</span>
+              </button>
             </div>
 
-            {/* Modal Body: Personnel Agendas List */}
-            <div className="flex-1 overflow-y-auto no-scrollbar py-3 space-y-2.5 pr-1">
-              {selectedUserAgendas.length === 0 ? (
-                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs font-semibold">
-                  Tidak ada agenda untuk personel ini pada filter yang dipilih.
-                </div>
-              ) : (
-                selectedUserAgendas.map((item) => {
-                  const isVisit =
-                    item.category === 'VISIT' ||
-                    item.category === 'NSO' ||
-                    Boolean(item.storeCode);
-
-                  const verifiedReport = isVisit
-                    ? findVerifiedGDriveReport({
-                        storeCode: item.storeCode,
-                        storeName: item.storeName || item.location,
-                        agendaId: item.id,
-                        visitDate: item.date,
-                        cloudReports,
-                      })
-                    : null;
-
-                  return (
+            {modalMainTab === 'GDRIVE_REPORTS' ? (
+              <div className="flex-1 overflow-y-auto no-scrollbar py-3 space-y-2.5 pr-1">
+                {selectedUserGdriveReports.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs font-semibold">
+                    Belum ada dokumen laporan yang tersimpan di folder Google Drive personel ini.
+                  </div>
+                ) : (
+                  selectedUserGdriveReports.map((rep) => (
                     <div
-                      key={item.id}
+                      key={rep.id}
                       className="p-3.5 rounded-2xl bg-[#F8FAFC] hover:bg-white border border-slate-200/80 hover:border-slate-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-slate-200 text-slate-800">
-                            {item.category || 'OPERATION'}
+                          <span
+                            className={`text-[9.5px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tight border ${
+                              rep.format === 'PDF'
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : rep.format === 'PPTX'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : rep.format === 'DOCX'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-purple-50 text-purple-700 border-purple-200'
+                            }`}
+                          >
+                            {rep.format}
                           </span>
+
+                          <span
+                            className={`text-[9.5px] font-black px-2 py-0.5 rounded-md ${
+                              rep.category === 'NSO'
+                                ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}
+                          >
+                            {rep.category === 'NSO' ? 'NSO OPENING' : 'STORE VISIT'}
+                          </span>
+
                           <h5 className="text-xs sm:text-sm font-black text-slate-900 truncate">
-                            {item.title}
+                            {rep.storeName}
                           </h5>
-                          {item.storeCode && (
+
+                          {rep.storeCode && rep.storeCode !== 'STORE' && (
                             <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
-                              #{item.storeCode}
+                              #{rep.storeCode}
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 font-semibold flex-wrap">
-                          <span>
-                            {item.date} • {item.time || '08:30'} WIB
+                        <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                          File: <span className="text-slate-700 font-semibold">{rep.fileName}</span>
+                        </p>
+
+                        <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
+                          <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
+                            Tgl Kunjungan: {rep.visitDate}
                           </span>
-                          {item.location && item.location !== 'OFF / LIBUR' && (
-                            <>
-                              <span>•</span>
-                              <span className="text-slate-600 truncate max-w-[220px]">
-                                {item.location}
-                              </span>
-                            </>
+                          {rep.subFolderName && (
+                            <span className="text-slate-500">
+                              Folder: {rep.subFolderName}
+                            </span>
                           )}
                         </div>
-
-                        {verifiedReport && verifiedReport.gdriveSavedDate && (
-                          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-emerald-600 font-semibold">
-                            <span>GDrive: {verifiedReport.gdriveSavedDate}</span>
-                          </div>
-                        )}
                       </div>
 
-                      {/* Preview Laporan Action (ONLY IF VERIFIED IN GDRIVE) */}
-                      {isVisit && verifiedReport && (
-                        <div className="shrink-0 self-end sm:self-center">
-                          <button
-                            type="button"
-                            onClick={() => handlePreviewReport(item)}
-                            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#0D9488] hover:brightness-110 text-white text-xs font-black flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
-                            title="Buka pratinjau dokumen laporan PDF dari Google Drive"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span>Preview Laporan</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewGdriveReport(rep)}
+                          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#0D9488] hover:brightness-110 text-white text-xs font-black flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Preview Laporan</span>
+                        </button>
+
+                        <a
+                          href={rep.gdriveViewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 transition cursor-pointer"
+                          title="Buka langsung di Google Drive"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Filter Bar: Minggu Ini vs Bulan Ini vs Semua + Category Filters */}
+                <div className="py-3.5 border-b border-slate-100 space-y-2.5 shrink-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {/* Period Filter */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl">
+                      <button
+                        type="button"
+                        onClick={() => setModalPeriodFilter('WEEK')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+                          modalPeriodFilter === 'WEEK'
+                            ? 'bg-[#3A657C] text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Minggu Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModalPeriodFilter('MONTH')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+                          modalPeriodFilter === 'MONTH'
+                            ? 'bg-[#3A657C] text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Bulan Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModalPeriodFilter('ALL')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+                          modalPeriodFilter === 'ALL'
+                            ? 'bg-[#3A657C] text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Semua
+                      </button>
+                    </div>
+
+                    {/* Month Picker if MONTH view */}
+                    {modalPeriodFilter === 'MONTH' && (
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl">
+                        <button
+                          type="button"
+                          onClick={() => setModalMonthOffset((v) => v - 1)}
+                          className="w-6 h-6 rounded-lg bg-white text-slate-600 hover:text-slate-900 flex items-center justify-center transition cursor-pointer"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="px-2 text-xs font-black text-slate-800 capitalize">
+                          {modalMonthLabel}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setModalMonthOffset((v) => v + 1)}
+                          className="w-6 h-6 rounded-lg bg-white text-slate-600 hover:text-slate-900 flex items-center justify-center transition cursor-pointer"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    {(
+                      [
+                        { id: 'ALL', label: 'Semua Kategori' },
+                        { id: 'VISIT', label: 'Store Visit' },
+                        { id: 'TRAINING', label: 'Training' },
+                        { id: 'MEETING', label: 'Meeting' },
+                        { id: 'OFF', label: 'Libur (OFF)' },
+                      ] as const
+                    ).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setModalCategoryFilter(c.id)}
+                        className={`px-2.5 py-1 rounded-xl text-[10.5px] font-bold whitespace-nowrap transition cursor-pointer border ${
+                          modalCategoryFilter === c.id
+                            ? 'bg-slate-900 text-white border-slate-900'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Modal Body: Personnel Agendas List */}
+                <div className="flex-1 overflow-y-auto no-scrollbar py-3 space-y-2.5 pr-1">
+                  {selectedUserAgendas.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs font-semibold">
+                      Tidak ada agenda untuk personel ini pada filter yang dipilih.
+                    </div>
+                  ) : (
+                    selectedUserAgendas.map((item) => {
+                      const isVisit =
+                        item.category === 'VISIT' ||
+                        item.category === 'NSO' ||
+                        Boolean(item.storeCode);
+
+                      const verifiedReport = isVisit
+                        ? findVerifiedGDriveReport({
+                            storeCode: item.storeCode,
+                            storeName: item.storeName || item.location,
+                            pic: item.pic || selectedUser.name,
+                            agendaId: item.id,
+                            visitDate: item.date,
+                            cloudReports,
+                          })
+                        : null;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="p-3.5 rounded-2xl bg-[#F8FAFC] hover:bg-white border border-slate-200/80 hover:border-slate-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-slate-200 text-slate-800">
+                                {item.category || 'OPERATION'}
+                              </span>
+                              <h5 className="text-xs sm:text-sm font-black text-slate-900 truncate">
+                                {item.title}
+                              </h5>
+                              {item.storeCode && (
+                                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                                  #{item.storeCode}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 font-semibold flex-wrap">
+                              <span>
+                                {item.date} • {item.time || '08:30'} WIB
+                              </span>
+                              {item.location && item.location !== 'OFF / LIBUR' && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-slate-600 truncate max-w-[220px]">
+                                    {item.location}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            {verifiedReport && verifiedReport.gdriveSavedDate && (
+                              <div className="mt-1 flex items-center gap-1.5 text-[10px] text-emerald-600 font-semibold">
+                                <span>GDrive: {verifiedReport.gdriveSavedDate}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Preview Laporan Action (ONLY IF VERIFIED IN GDRIVE) */}
+                          {isVisit && verifiedReport && (
+                            <div className="shrink-0 self-end sm:self-center">
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewReport(item)}
+                                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#0D9488] hover:brightness-110 text-white text-xs font-black flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+                                title="Buka pratinjau dokumen laporan PDF dari Google Drive"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>Preview Laporan</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Modal Footer */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-500 shrink-0">

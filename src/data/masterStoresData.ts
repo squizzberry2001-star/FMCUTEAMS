@@ -15888,6 +15888,14 @@ export function isSamePersonName(nameA?: string | null, nameB?: string | null): 
   const tokensB = normB.split(' ').filter((t) => t.length >= 3);
   if (tokensA.length >= 2 && tokensB.length >= 2) {
     if (tokensA[0] === tokensB[0] && tokensA[1] === tokensB[1]) return true;
+    // Token overlap: if first name matches and at least 2 tokens match total
+    if (tokensA[0] === tokensB[0]) {
+      let matches = 0;
+      for (const t of tokensA) {
+        if (tokensB.includes(t)) matches++;
+      }
+      if (matches >= 2) return true;
+    }
   }
   return false;
 }

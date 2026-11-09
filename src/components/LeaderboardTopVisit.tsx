@@ -18,6 +18,8 @@ import { isSamePersonName, getStoresWithOwnership } from '../data/masterStoresDa
 import { getMondayOfWeek, getFullWeekDays } from '../services/scheduleExcelService';
 import { fetchAllVisitReportsFromCloud } from '../services/crossDeviceVisitSyncService';
 import { VisitReportData } from '../types/visitReport';
+import { getVerifiedGDriveReports } from '../data/gdriveVerifiedReportsData';
+import { verifiedItemToMeta } from '../services/gdriveReportLiveService';
 import {
   CustomUserAvatar,
   getLocalCustomAvatars,
@@ -58,7 +60,6 @@ const LeaderboardAvatar: React.FC<{
         src={avatar}
         alt={alt || name}
         className={className}
-        crossOrigin="anonymous"
         onError={() => setHasError(true)}
       />
     );
@@ -122,7 +123,27 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
   const loadGdriveReports = async () => {
     setIsSyncingGdrive(true);
     try {
+      const reportMap = new Map<string, VisitReportData & { updatedAtMs?: number }>();
+
+      // 1. Masukkan 333 laporan terverifikasi aktual dari folder Google Drive 17tAUOQ81qtIDz5SlFMRu0VE9SLBkuHmj
+      const verifiedList = getVerifiedGDriveReports();
+      verifiedList.forEach((item) => {
+        const meta = verifiedItemToMeta(item);
+        reportMap.set(item.fileId || item.id, {
+          ...meta.reportData,
+          spreadsheetUrl: meta.gdrivePdfUrl,
+          updatedAtMs: meta.gdriveSavedTimestamp,
+        } as any);
+      });
+
+      // 2. Sinkronkan dengan laporan live cloud
       const cloudReports = await fetchAllVisitReportsFromCloud(true);
+      (cloudReports || []).forEach((r) => {
+        const id = r.agendaId || r.id;
+        if (id) reportMap.set(id, r);
+      });
+
+      // 3. Sinkronkan dengan laporan lokal
       const localReports: (VisitReportData & { updatedAtMs?: number })[] = [];
       if (typeof window !== 'undefined') {
         for (let i = 0; i < localStorage.length; i++) {
@@ -142,13 +163,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
           }
         }
       }
-
-      const reportMap = new Map<string, VisitReportData & { updatedAtMs?: number }>();
       localReports.forEach((r) => {
-        const id = r.agendaId || r.id;
-        if (id) reportMap.set(id, r);
-      });
-      (cloudReports || []).forEach((r) => {
         const id = r.agendaId || r.id;
         if (id) reportMap.set(id, r);
       });
@@ -187,6 +202,39 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       unsub();
     };
   }, []);
+
+  // Update avatar map immediately when active user profile updates
+  useEffect(() => {
+    if (user?.name && isCustomOrRealAvatar(user?.avatar)) {
+      setCustomAvatarMap((prev) => ({
+        ...prev,
+        [user.name.trim().toLowerCase()]: {
+          userName: user.name,
+          userEmail: user.email,
+          avatar: user.avatar!,
+          updatedAtMs: Date.now(),
+        },
+      }));
+    }
+  }, [user?.name, user?.avatar]);
+
+  // Sync any real uploaded user photos from users list
+  useEffect(() => {
+    const newFromUsers: Record<string, CustomUserAvatar> = {};
+    users.forEach((u) => {
+      if (u.name && isCustomOrRealAvatar(u.avatar)) {
+        newFromUsers[u.name.trim().toLowerCase()] = {
+          userName: u.name,
+          userEmail: u.email,
+          avatar: u.avatar!,
+          updatedAtMs: Date.now(),
+        };
+      }
+    });
+    if (Object.keys(newFromUsers).length > 0) {
+      setCustomAvatarMap((prev) => ({ ...prev, ...newFromUsers }));
+    }
+  }, [users]);
 
   // 3. Efek Animasi Confetti (Celebration)
   const fireConfetti = () => {
@@ -326,12 +374,13 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
       // Prioritas foto profil:
       // 1. Jika user aktif saat ini dan user.avatar adalah foto real (bukan cartoon DiceBear), gunakan foto real user
       // 2. Jika ada foto profil kustom yang diunggah di local / Cloud Vault, gunakan foto kustom tersebut
-      // 3. Fallback ke avatar bawaan / initial
+      // 3. Fallback: jika bukan foto real/kustom, jangan gunakan cartoon DiceBear! Gunakan string kosong agar LeaderboardAvatar menampilkan monogram initials yang elegan & profesional!
       let avatarUrl = '';
       if (isCurrentUser && isCustomOrRealAvatar(user?.avatar)) {
         avatarUrl = user?.avatar || '';
       } else {
-        avatarUrl = resolveCustomOrFallbackAvatar(staff.name, staff.avatar, customAvatarMap);
+        const resolved = resolveCustomOrFallbackAvatar(staff.name, staff.avatar, customAvatarMap);
+        avatarUrl = isCustomOrRealAvatar(resolved) ? resolved : '';
       }
 
       return {
