@@ -1881,10 +1881,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // If in PDF Preview mode, render VisitPdfPreview
   if (showPreview) {
     return (
-      <>
+      <div className="flex-1 w-full h-full overflow-hidden flex flex-col bg-slate-950">
         <PageTransitionLoader visible={isSectionTransitioning} />
         <VisitPdfPreview data={formData} onBack={() => setShowPreview(false)} />
-      </>
+      </div>
     );
   }
 

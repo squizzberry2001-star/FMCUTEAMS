@@ -499,7 +499,10 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-900/95 text-slate-800 print:bg-white print:text-black py-4 sm:py-6 px-3 sm:px-6">
+    <div
+      className="flex-1 w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-950 text-slate-800 print:bg-white print:text-black py-3 sm:py-6 px-2.5 sm:px-6 relative select-none"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 right-5 z-[100] max-w-md animate-in fade-in slide-in-from-top-4 duration-200">
@@ -522,148 +525,124 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
+      <div className="max-w-6xl mx-auto space-y-4">
         {/* ================================================================== */}
-        {/* TOP PDF CONTROL BAR                                               */}
+        {/* UNIFIED TOP CONTROL & STATUS BANNER (Sleek, Responsive & Modern)   */}
         {/* ================================================================== */}
-        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl p-3.5 sm:p-5 flex flex-col gap-3.5 sm:gap-4 print:hidden">
-          {/* Row 1: Header Info & Active Report Details */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg sm:text-xl shrink-0 shadow-xs border border-rose-100">
-                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-rose-600" />
-              </div>
-              <div className="min-w-0">
+        <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl border border-white/60 shadow-xl p-3 sm:p-4.5 print:hidden transition-all">
+          {/* Row 1: Left Back + Store & Visit Metadata | Right Status & Page Count */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+            {/* Left: Back Button + Store Name & Date Info */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <button
+                type="button"
+                onClick={handleBackToForm}
+                className="h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs transition flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+                title="Kembali ke Form Visit"
+              >
+                <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
+                <span className="text-xs">Kembali</span>
+              </button>
+
+              <div className="min-w-0 flex flex-col">
                 <div className="flex items-center gap-2">
-                  <h2 className="font-black text-sm sm:text-lg text-slate-900 truncate">
-                    Preview Dokumen PDF Asli
-                  </h2>
-                  <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 shrink-0">
-                    PDF Render Asli (Semua Halaman)
+                  <span className="font-black text-xs sm:text-sm text-slate-900 truncate">
+                    {data.storeName || 'Store FamilyMart'}
+                  </span>
+                  <span className="text-[10.5px] font-extrabold text-slate-500 tabular-nums shrink-0">
+                    ({data.storeCode || '-'})
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[9px] font-black border border-emerald-200/80 shrink-0">
+                    {data.storeType || 'CVS'}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500 font-medium truncate">
-                  Dokumen dirender langsung dari berkas asli 16:9 Landscape sesuai cetakan resmi FamilyMart.
-                </p>
+                <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-slate-500 font-medium truncate mt-0.5">
+                  <span className="text-slate-600 font-semibold">{formatIndonesianDate(data.visitDate, true)}</span>
+                  <span>•</span>
+                  <span className="text-teal-700 font-extrabold truncate">
+                    {totalPagesCount > 0 ? `${totalPagesCount} Halaman Landscape` : '16:9 Landscape'}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Store & Visit Metadata Card */}
-            <div className="w-full sm:w-auto shrink-0 bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2 flex items-center justify-between sm:justify-start gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Store className="w-4 h-4 text-[#0099A6] shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-[11px] font-extrabold text-slate-900 truncate">
-                    {data.storeName || 'Store FamilyMart'} ({data.storeCode || '-'})
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-medium">
-                    {formatIndonesianDate(data.visitDate, true)}
-                  </div>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
-                {data.storeType || 'CVS'}
+            {/* Right: PDF Render Indicator & File Name */}
+            <div className="hidden sm:flex items-center gap-2 shrink-0">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-[10.5px] font-semibold border border-slate-200/80">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-bold text-slate-800">Render PDF Asli</span>
+                <span className="text-slate-400">•</span>
+                <span className="text-slate-500 max-w-[150px] truncate">{pdfFileName}</span>
               </span>
             </div>
           </div>
 
-          {/* Row 2: Actions - Unduh PDF, Cetak, Muat Ulang & Simpan */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToForm}
-                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
-                title="Kembali ke Editor Form"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Kembali</span>
-              </button>
-
+          {/* Row 2: Action Buttons (Organized, Proportional, Symmetric & Responsive) */}
+          <div className="flex items-center justify-between gap-2 pt-2.5 flex-wrap sm:flex-nowrap">
+            {/* Left Utilities: Refresh, New Tab, Print */}
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={handleRefresh}
-                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
-                title="Render Ulang Dokumen PDF Asli"
+                className="h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                title="Muat Ulang Render Dokumen"
               >
-                <RotateCcw className="w-4 h-4" />
-                <span>Muat Ulang</span>
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Muat Ulang</span>
               </button>
 
               {pdfBlobUrl && (
                 <button
                   type="button"
                   onClick={() => window.open(pdfBlobUrl, '_blank')}
-                  className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                  className="h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 shrink-0"
                   title="Buka Berkas PDF di Tab Baru"
                 >
-                  <ExternalLink className="w-4 h-4 text-teal-600" />
-                  <span className="hidden sm:inline">Buka Tab Baru</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-teal-600" />
+                  <span className="hidden md:inline">Tab Baru</span>
                 </button>
               )}
-            </div>
 
-            <div className="flex items-center gap-2 flex-1 sm:flex-initial">
-              {/* Print Button */}
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                className="h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 shrink-0"
                 title="Cetak Dokumen"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Cetak</span>
               </button>
+            </div>
 
+            {/* Right Core Actions: Download PDF & Simpan Laporan */}
+            <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
               {/* Unduh PDF Button */}
               <button
                 type="button"
                 onClick={handleDownloadPdf}
                 disabled={isGeneratingPdf}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#009944] hover:bg-emerald-600 text-white font-black text-xs sm:text-sm transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 shrink-0"
                 title="Unduh Berkas PDF Lengkap (16:9 Landscape)"
               >
                 {isGeneratingPdf ? (
-                  <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
                 ) : (
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5 text-slate-200" />
                 )}
-                <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh PDF'}</span>
+                <span>{isGeneratingPdf ? 'Membuat...' : 'Unduh PDF'}</span>
               </button>
 
               {/* SIMPAN LAPORAN Button */}
               <button
                 type="button"
                 onClick={handleOpenGdriveSync}
-                className="flex-1 sm:flex-initial px-6 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-[#009944] hover:brightness-105 text-white font-black text-xs sm:text-sm tracking-wide transition flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95"
+                className="h-9 sm:h-10 px-3.5 sm:px-5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-[#009944] hover:brightness-105 text-white font-black text-xs tracking-wide transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md hover:shadow-lg active:scale-95 shrink-0"
                 title="Simpan Laporan & Sinkronisasikan ke Google Drive Toko"
               >
-                <CloudUpload className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-200" />
-                <span>SIMPAN LAPORAN</span>
+                <CloudUpload className="w-4 h-4 text-emerald-100" />
+                <span className="whitespace-nowrap">SIMPAN LAPORAN</span>
               </button>
             </div>
-          </div>
-        </div>
-
-        {/* ================================================================== */}
-        {/* DOCUMENT HEADER BANNER                                            */}
-        {/* ================================================================== */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-900 text-white rounded-2xl shadow-md border border-slate-800 print:hidden">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                PDF Render Asli (Direct Binary Output — Semua Halaman)
-              </div>
-              <div className="text-xs sm:text-sm font-extrabold text-white truncate mt-0.5">
-                Berkas PDF: {pdfFileName}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="px-3 py-1 rounded-lg bg-teal-800/80 text-teal-200 text-xs font-black border border-teal-600/60 shadow-xs">
-              {totalPagesCount > 0 ? `${totalPagesCount} Halaman (16:9 Landscape)` : '16:9 Landscape'}
-            </span>
           </div>
         </div>
 
