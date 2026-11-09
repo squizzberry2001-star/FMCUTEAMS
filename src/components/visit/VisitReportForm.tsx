@@ -1050,8 +1050,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     });
   };
 
-  // Helper: Stamp Floating Minimalist Timestamp Watermark TANPA Background Bar (NO fillRect)
-  const stampMinimalistTimestamp = async (cleanBase64Url: string): Promise<string> => {
+  // Helper: Stamp Floating Minimalist Timestamp Watermark (Sleek Compact Badge, TIDAK Memanjang & TIDAK Terlalu Besar)
+  const stampMinimalistTimestamp = async (
+    cleanBase64Url: string,
+    customTimeStr?: string
+  ): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -1066,28 +1069,85 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
           ctx.drawImage(img, 0, 0, w, h);
 
-          // Timestamp & Verified Store Info Minimalist Floating Text (No Black Box)
+          // 1. Timestamp Ringkas (Format: DD Mon YYYY • HH:mm WIB)
           const now = new Date();
           const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-          const timeStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
-          const statusStr = 'Check-In Verified';
-          const textStr = `${(formData.storeName || 'STORE').toUpperCase()} (${formData.storeCode || '-'})  •  ${timeStr}  •  ${statusStr}`;
+          const timeFormatted =
+            customTimeStr ||
+            `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} • ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
 
-          const fontSize = Math.max(11, Math.round(h * 0.024));
-          const padX = Math.max(14, Math.round(w * 0.022));
-          const padY = Math.max(16, Math.round(h * 0.028));
+          // 2. Format Nama Toko & Kode Toko (Kompak & Dibatasi Maksimal 26 Karakter agar TIDAK memanjang)
+          const rawStore = (formData.storeName || 'FamilyMart').trim();
+          const shortStore = rawStore.length > 26 ? rawStore.substring(0, 24).trim() + '...' : rawStore;
+          const storeCodePart = formData.storeCode ? ` (${formData.storeCode})` : '';
+          const line1Text = `${shortStore}${storeCodePart}`.toUpperCase();
+          const line2Text = timeFormatted;
+
+          // 3. Skala Font & Metrik Sleek Minimalis (Ukuran Kecil & Proporsional Sesuai Dimensi Terkecil Foto)
+          const baseDim = Math.min(w, h);
+          const fontSize = Math.max(10, Math.min(16, Math.round(baseDim * 0.0135)));
+          const subFontSize = Math.max(9, Math.min(13, Math.round(fontSize * 0.84)));
+          const lineGap = Math.max(2, Math.round(fontSize * 0.22));
+
+          const padX = Math.max(12, Math.round(w * 0.018));
+          const padY = Math.max(12, Math.round(h * 0.018));
+          const badgePadX = Math.max(7, Math.round(fontSize * 0.65));
+          const badgePadY = Math.max(5, Math.round(fontSize * 0.45));
+          const radius = Math.max(4, Math.round(fontSize * 0.45));
 
           ctx.save();
-          ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-          ctx.shadowBlur = Math.max(4, Math.round(fontSize * 0.45));
-          ctx.shadowOffsetX = 1.5;
-          ctx.shadowOffsetY = 1.5;
+          // Hitung lebar teks untuk bounding box badge yang kompak (Hanya membungkus teks, TIDAK melebar)
+          ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          const line1Width = ctx.measureText(line1Text).width;
+
+          ctx.font = `500 ${subFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          const line2Width = ctx.measureText(line2Text).width;
+
+          const maxContentWidth = Math.max(line1Width, line2Width);
+          const badgeW = maxContentWidth + badgePadX * 2;
+          const badgeH = fontSize + subFontSize + lineGap + badgePadY * 2;
+
+          const badgeX = padX;
+          const badgeY = h - padY - badgeH;
+
+          // 4. Gambar Kapsul / Badge Kaca Gelap Minimalis Transparan (Kontras di Dokumen Putih / Foto Gelap)
+          const r = Math.min(radius, badgeW / 2, badgeH / 2);
+          ctx.beginPath();
+          ctx.moveTo(badgeX + r, badgeY);
+          ctx.lineTo(badgeX + badgeW - r, badgeY);
+          ctx.arcTo(badgeX + badgeW, badgeY, badgeX + badgeW, badgeY + r, r);
+          ctx.lineTo(badgeX + badgeW, badgeY + badgeH - r);
+          ctx.arcTo(badgeX + badgeW, badgeY + badgeH, badgeX + badgeW - r, badgeY + badgeH, r);
+          ctx.lineTo(badgeX + r, badgeY + badgeH);
+          ctx.arcTo(badgeX, badgeY + badgeH, badgeX, badgeY + badgeH - r, r);
+          ctx.lineTo(badgeX, badgeY + r);
+          ctx.arcTo(badgeX, badgeY, badgeX + r, badgeY, r);
+          ctx.closePath();
+
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.62)';
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+          ctx.lineWidth = 0.75;
+          ctx.stroke();
+
+          // 5. Render Baris 1: Nama & Kode Toko
+          ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
           ctx.fillStyle = '#FFFFFF';
-          ctx.fillText(textStr, padX, h - padY);
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+          ctx.shadowBlur = 2;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 1;
+          ctx.fillText(line1Text, badgeX + badgePadX, badgeY + badgePadY + fontSize * 0.88);
+
+          // 6. Render Baris 2: Timestamp Ringkas
+          ctx.font = `500 ${subFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
+          ctx.fillText(line2Text, badgeX + badgePadX, badgeY + badgePadY + fontSize + lineGap + subFontSize * 0.88);
+
           ctx.restore();
 
-          resolve(canvas.toDataURL('image/jpeg', 0.78));
+          resolve(canvas.toDataURL('image/jpeg', 0.82));
         } catch (err) {
           console.warn('stampMinimalistTimestamp error:', err);
           resolve(cleanBase64Url);
