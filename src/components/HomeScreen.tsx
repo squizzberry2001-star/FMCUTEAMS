@@ -331,6 +331,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       }
     };
 
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', onScroll, { passive: true });
+    }
     window.addEventListener('scroll', onScroll, { passive: true, capture: true });
     document.addEventListener('scroll', onScroll, { passive: true, capture: true });
     window.addEventListener('touchmove', onScroll, { passive: true });
@@ -339,6 +343,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onScroll();
 
     return () => {
+      if (container) {
+        container.removeEventListener('scroll', onScroll);
+      }
       window.removeEventListener('scroll', onScroll, true);
       document.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('touchmove', onScroll);

@@ -950,31 +950,65 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                   <p className="text-[11px] text-slate-600 mb-2.5">
                     Buka formulir inspeksi toko, input QSC FamiTrack, data crew, observasi, dan bukti foto.
                   </p>
-                  {selectedAgenda.date > todayYmd && !user.isAdmin ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-none"
-                      title={`Form Visit terkunci. Kunjungan ke depan baru dapat dibuka saat tanggal ${selectedAgenda.date} tiba.`}
-                    >
-                      <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>Form Visit Terkunci (Hari H)</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
-                      className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>Buka Form Visit Report</span>
-                    </button>
-                  )}
-                  {selectedAgenda.date > todayYmd && !user.isAdmin && (
-                    <p className="text-[9.5px] text-center font-medium text-slate-400 mt-2">
-                      Jadwal kunjungan ke depan terkunci ({selectedAgenda.date}). Jadwal hari ini atau yang sudah lewat dapat dibuka.
-                    </p>
-                  )}
+                  {(() => {
+                    const picName = (selectedAgenda.pic || '').trim();
+                    const currentName = (user?.name || '').trim();
+                    const isAssigned =
+                      !picName ||
+                      (currentName &&
+                        (isSamePersonName(picName, currentName) ||
+                          picName.toLowerCase().includes(currentName.toLowerCase()) ||
+                          currentName.toLowerCase().includes(picName.toLowerCase())));
+
+                    if (!isAssigned) {
+                      return (
+                        <div className="space-y-1.5">
+                          <button
+                            type="button"
+                            disabled
+                            className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-none"
+                            title={`Form Visit khusus untuk ${selectedAgenda.pic}.`}
+                          >
+                            <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>Khusus untuk {selectedAgenda.pic}</span>
+                          </button>
+                          <p className="text-[9.5px] text-center font-medium text-amber-600 bg-amber-50 py-1 px-2 rounded-lg border border-amber-200/80">
+                            🔒 Form visit hanya dapat dibuka oleh personel yang dijadwalkan ({selectedAgenda.pic}).
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    if (selectedAgenda.date > todayYmd) {
+                      return (
+                        <div className="space-y-1.5">
+                          <button
+                            type="button"
+                            disabled
+                            className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-none"
+                            title={`Form Visit terkunci. Kunjungan ke depan baru dapat dibuka saat tanggal ${selectedAgenda.date} tiba.`}
+                          >
+                            <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>Form Visit Terkunci (Hari H)</span>
+                          </button>
+                          <p className="text-[9.5px] text-center font-medium text-slate-400 mt-2">
+                            Jadwal kunjungan ke depan terkunci ({selectedAgenda.date}). Jadwal hari ini atau yang sudah lewat dapat dibuka.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => onOpenVisitForm && onOpenVisitForm(selectedAgenda)}
+                        className="w-full py-2.5 rounded-xl bg-[#00A389] text-white text-xs font-extrabold shadow-pill-teal hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Buka Form Visit Report</span>
+                      </button>
+                    );
+                  })()}
                 </div>
               )}
 

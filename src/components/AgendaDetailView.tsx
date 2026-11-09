@@ -30,6 +30,7 @@ import {
   resolveAgendaGeoPoints,
   resolvePrimaryAgendaGeoPoint,
 } from '../utils/mapGeoUtils';
+import { isSamePersonName } from '../data/masterStoresData';
 import {
   getDailyStoreSequenceInfo,
   performSilentActualCheckIn,
@@ -126,14 +127,35 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
     return Boolean(agenda.date && agenda.date > todayYmd);
   }, [agenda.date, todayYmd]);
 
-  // Form visit boleh dibuka jika: hari ini, sudah lewat (masa lalu), ATAU user adalah Admin
+  // Cek apakah user yang login adalah PIC yang dijadwalkan pada agenda ini
+  const isAssignedPerson = useMemo(() => {
+    const picName = (agenda.pic || '').trim();
+    if (!picName) return true; // jika tidak ditentukan pic khusus, fallback
+    const currentName = (currentUser?.name || '').trim();
+    if (!currentName) return false;
+    return (
+      isSamePersonName(picName, currentName) ||
+      picName.toLowerCase().includes(currentName.toLowerCase()) ||
+      currentName.toLowerCase().includes(picName.toLowerCase())
+    );
+  }, [agenda.pic, currentUser?.name]);
+
+  // Form visit HANYA boleh dibuka jika:
+  // 1. User yang login adalah personel yang dijadwalkan (PIC)
+  // 2. Kunjungan bukan di masa depan (hari ini atau masa lalu)
   const isVisitOpenable = useMemo(() => {
     if (!isVisitAgenda) return true;
-    if (currentUser?.isAdmin) return true;
+    if (!isAssignedPerson) return false;
     return !isFutureVisit;
-  }, [isVisitAgenda, isFutureVisit, currentUser?.isAdmin]);
+  }, [isVisitAgenda, isAssignedPerson, isFutureVisit]);
 
   const handleOpenVisitFormWithAutoIn = async () => {
+    if (!isAssignedPerson) {
+      alert(
+        `Akses Ditolak: Form visit ini khusus untuk ${agenda.pic || 'personel yang dijadwalkan'}. Akun Anda (${currentUser?.name || 'User'}) tidak dijadwalkan pada kunjungan ini.`
+      );
+      return;
+    }
     if (!isVisitOpenable) {
       alert(`Form Visit terkunci. Jadwal kunjungan ke depan (${agenda.date}) belum tiba.`);
       return;
@@ -718,6 +740,16 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
                   <span className="truncate">BUKA FORM VISIT REPORT</span>
                   <ArrowRight className="w-4 h-4 stroke-[2.5] shrink-0" />
                 </button>
+              ) : !isAssignedPerson ? (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-3 px-3 rounded-2xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-none truncate"
+                  title={`Form visit khusus untuk ${agenda.pic}. Akun Anda (${currentUser?.name || 'User'}) tidak dijadwalkan.`}
+                >
+                  <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">KHUSUS UNTUK {agenda.pic?.toUpperCase() || 'PERSONEL TERJADWAL'}</span>
+                </button>
               ) : (
                 <button
                   type="button"
@@ -732,11 +764,15 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             </div>
           </div>
 
-          {!isVisitOpenable && (
+          {!isAssignedPerson ? (
+            <p className="text-[10px] text-center font-semibold text-amber-700 bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200/80">
+              🔒 Form visit ini hanya dapat dibuka & diisi oleh personel yang dijadwalkan ({agenda.pic}).
+            </p>
+          ) : !isVisitOpenable ? (
             <p className="text-[10px] text-center font-semibold text-slate-400">
               Jadwal visit ke depan terkunci hingga tanggal kunjungan ({agenda.date}). Jadwal hari ini atau yang sudah lewat dapat dibuka.
             </p>
-          )}
+          ) : null}
         </div>
       )}
     </div>

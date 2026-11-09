@@ -30,6 +30,7 @@ import {
   flushOfflineAttendanceQueue,
 } from './services/actualAttendanceService';
 import { exportScheduleToTemplateExcel } from './services/scheduleExcelService';
+import { isSamePersonName } from './data/masterStoresData';
 import {
   startLivePresenceHeartbeat,
   stopLivePresenceHeartbeat,
@@ -420,6 +421,27 @@ export const App: React.FC = () => {
     );
   };
 
+  // Guard: Form visit HANYA boleh dibuka oleh personel yang dijadwalkan
+  useEffect(() => {
+    if (mobileScreen === 'visit-form' && selectedAgenda) {
+      const picName = (selectedAgenda.pic || '').trim();
+      const currentName = (user?.name || '').trim();
+      const isAssigned =
+        !picName ||
+        (currentName &&
+          (isSamePersonName(picName, currentName) ||
+            picName.toLowerCase().includes(currentName.toLowerCase()) ||
+            currentName.toLowerCase().includes(picName.toLowerCase())));
+
+      if (!isAssigned) {
+        alert(
+          `Akses Ditolak: Form visit hanya dapat dibuka oleh personel yang dijadwalkan (${picName}).`
+        );
+        setMobileScreen('main');
+      }
+    }
+  }, [mobileScreen, selectedAgenda, user?.name]);
+
   // Handlers for Agenda Management
   const handleSelectAgenda = (agenda: ScheduleAgenda) => {
     setSelectedAgenda(agenda);
@@ -633,8 +655,8 @@ export const App: React.FC = () => {
 
       {/* Main Content: Responsive Desktop or Native Mobile */}
       {mobileScreen === 'visit-form' && selectedAgenda ? (
-        /* Full UI/UX FORM VISIT (KHUSUS AGENDA VISIT) - Full scrollable container */
-        <div className="flex-1 w-full h-full overflow-y-auto bg-[#F8F9FD]">
+        /* Full UI/UX FORM VISIT (KHUSUS AGENDA VISIT) */
+        <div className="flex-1 w-full h-full bg-[#F8F9FD] flex flex-col overflow-hidden">
           <Suspense fallback={<PageTransitionLoader visible={true} />}>
             <VisitReportForm
               agenda={selectedAgenda}

@@ -43,21 +43,20 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
       <div
         onClick={onResetScale}
         style={{
-          transform: isScrolled ? 'scale(0.86)' : 'scale(1)',
+          transform: isScrolled ? 'scale(0.88)' : 'scale(1)',
         }}
         className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] ${
-          isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
+          isScrolled ? 'iphone-glass-dock-scrolled' : 'iphone-glass-dock'
         }`}
       >
         {/* Top Prismatic Hairline Reflection (Apple iPhone Glass Specular) */}
-        <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-50 z-0" />
+        <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-80 z-10" />
 
         {/* Ambient bottom light refraction rim */}
-        <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-30 z-0" />
+        <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 z-10" />
 
         {/* 
-          SLIDING ACTIVE GLASS LENS PILL (White Liquid Glass, No Border, +5% Transparency)
-          Lens kaca putih meluncur anggun tanpa border
+          SLIDING ACTIVE GLASS LENS PILL (White Liquid Glass, Seamless Apple Rim)
         */}
         <div
           className="absolute top-1.5 bottom-1.5 rounded-[24px] iphone-glass-pill pointer-events-none dock-pill-transition z-0"
@@ -68,8 +67,8 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
           }}
         >
           {/* Top specular hairline inside the pill */}
-          <div className="pointer-events-none absolute inset-x-2.5 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-60" />
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+          <div className="pointer-events-none absolute inset-x-2.5 top-0 h-[0.75px] bg-gradient-to-r from-transparent via-white to-transparent opacity-90" />
+          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/50 via-transparent to-white/20" />
         </div>
 
         {/* Tab Items Buttons */}

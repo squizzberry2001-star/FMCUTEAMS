@@ -938,12 +938,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           Ukuran diperpendek ramping (Compact & Short)
           ============================================================ */}
       <div className="fixed bottom-3 sm:bottom-3.5 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
-        <div className="w-full max-w-[210px] sm:max-w-[225px] flex items-center pointer-events-auto origin-center relative overflow-hidden select-none p-1 rounded-[26px] iphone-glass-dock shadow-xl">
+        <div className="w-full max-w-[210px] sm:max-w-[225px] flex items-center pointer-events-auto origin-center relative overflow-hidden select-none p-1 rounded-[26px] iphone-glass-dock">
           {/* Top specular hairline */}
-          <div className="pointer-events-none absolute inset-x-4 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-50 z-0" />
+          <div className="pointer-events-none absolute inset-x-4 top-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-80 z-10" />
 
           {/* Ambient bottom light refraction rim */}
-          <div className="pointer-events-none absolute inset-x-6 bottom-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-30 z-0" />
+          <div className="pointer-events-none absolute inset-x-6 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 z-10" />
 
           {/* Sliding Glass Lens Pill */}
           <div
@@ -954,8 +954,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               left: '4px',
             }}
           >
-            <div className="pointer-events-none absolute inset-x-2 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-60" />
-            <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
+            <div className="pointer-events-none absolute inset-x-2 top-0 h-[0.75px] bg-gradient-to-r from-transparent via-white to-transparent opacity-90" />
+            <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-gradient-to-b from-white/50 via-transparent to-white/20" />
           </div>
 
           {/* Tab 1: Coverage Store */}

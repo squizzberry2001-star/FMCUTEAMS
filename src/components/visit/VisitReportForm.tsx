@@ -1898,7 +1898,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   return (
     <div
       ref={formScrollContainerRef}
-      className="flex flex-col min-h-full bg-[#F8F9FD] select-none px-4 sm:px-6 pt-16 pb-36 max-w-6xl mx-auto w-full relative"
+      className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar bg-[#F8F9FD] select-none px-4 sm:px-6 pt-16 pb-36 max-w-6xl mx-auto relative flex flex-col"
     >
       {/* Section / Sub-Tab Blur + Silhouette + Mini "FMCU....." Bouncing Loader */}
       <PageTransitionLoader visible={isSectionTransitioning} />
@@ -2168,13 +2168,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={onBack}
             title="Kembali ke Beranda"
-            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-95 transition-transform duration-150 shadow-lg cursor-pointer shrink-0 pointer-events-auto border border-white/60"
+            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-95 transition-transform duration-150 cursor-pointer shrink-0 pointer-events-auto"
           >
             <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
           </button>
 
           {/* Tengah: Floating Liquid Glass Title Capsule */}
-          <div className="iphone-glass-mini-dock px-3.5 sm:px-4 py-1.5 rounded-full shadow-lg border border-white/50 text-center min-w-0 max-w-[210px] sm:max-w-xs truncate pointer-events-auto">
+          <div className="iphone-glass-mini-dock px-3.5 sm:px-4 py-1.5 rounded-full text-center min-w-0 max-w-[210px] sm:max-w-xs truncate pointer-events-auto">
             <span className="text-[9px] font-black text-teal-800 uppercase tracking-wider flex items-center justify-center gap-1 leading-none">
               <Cloud className="w-2.5 h-2.5 text-emerald-600 inline shrink-0" />
               <span>Realtime Cross-Device</span>
@@ -2185,7 +2185,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           </div>
 
           {/* Right Floating Dock: HT/R23 & PDF Buttons in Authentic Liquid Glass */}
-          <div className="iphone-glass-mini-dock flex items-center gap-1 p-1 rounded-full shadow-lg shrink-0 pointer-events-auto border border-white/50">
+          <div className="iphone-glass-mini-dock flex items-center gap-1 p-1 rounded-full shrink-0 pointer-events-auto">
             {/* Tombol HT (Besar di atas) & R23 (Kecil di bawah) */}
             <button
               type="button"
@@ -3763,11 +3763,15 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           ===================================================================== */}
       {activeSection === 2 && isCurrentObsSubTabEnabled && (
         <div
-          className="fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none pointer-events-auto transition-transform duration-200"
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            isScrolled
+              ? 'translate-y-28 opacity-0 pointer-events-none scale-90'
+              : 'translate-y-0 opacity-100 pointer-events-auto scale-100'
+          }`}
         >
           {/* Quick Prev / Next Card Navigation Pill with Liquid Glass */}
           {currentObsList.length > 0 && (
-            <div className="h-11 px-2.5 rounded-full iphone-glass-mini-dock text-slate-800 shadow-lg flex items-center gap-1 border border-white/40">
+            <div className="h-11 px-2.5 rounded-full iphone-glass-mini-dock text-slate-800 flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => handleJumpToObsCard(activeObsIdx - 1, currentObsList)}
@@ -3797,7 +3801,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={() => handleAddObservation(obsSubTab.toUpperCase() as 'QSC' | 'OPI')}
             title={`Tambah Temuan ${obsSubTab.toUpperCase()} Baru`}
-            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-800 hover:text-teal-950 active:scale-95 transition-transform duration-150 shadow-lg cursor-pointer"
+            className="w-11 h-11 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-800 hover:text-teal-950 active:scale-95 transition-transform duration-150 cursor-pointer"
           >
             <Plus className="w-5 h-5 stroke-[2.8]" />
           </button>
@@ -3806,14 +3810,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {activeSection === 3 && (
         <div
-          className="fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none pointer-events-auto transition-transform duration-200"
+          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            isScrolled
+              ? 'translate-y-28 opacity-0 pointer-events-none scale-90'
+              : 'translate-y-0 opacity-100 pointer-events-auto scale-100'
+          }`}
         >
           {/* Button Icon Gallery with Liquid Glass */}
           <button
             type="button"
             onClick={() => evidenceGalleryInputRef.current?.click()}
             title="Pilih Foto dari Galeri"
-            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-95 transition-transform duration-150 shadow-lg cursor-pointer"
+            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-slate-800 hover:text-black active:scale-95 transition-transform duration-150 cursor-pointer"
           >
             <ImageIcon className="w-5 h-5 stroke-[2.2]" />
           </button>
@@ -3823,7 +3831,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             type="button"
             onClick={() => evidenceCameraInputRef.current?.click()}
             title="Ambil Foto dengan Kamera"
-            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-700 hover:text-teal-900 active:scale-95 transition-transform duration-150 shadow-lg cursor-pointer"
+            className="w-12 h-12 rounded-full iphone-glass-icon-btn flex items-center justify-center text-teal-700 hover:text-teal-900 active:scale-95 transition-transform duration-150 cursor-pointer"
           >
             <Camera className="w-5 h-5 stroke-[2.4]" />
           </button>
@@ -3838,16 +3846,17 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         <div
           onClick={handleResetScale}
           style={{
-            transform: isScrolled ? 'scale(0.86)' : 'scale(1)',
+            transform: isScrolled ? 'scale(0.88)' : 'scale(1)',
           }}
           className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-[36px] ${
-            isScrolled ? 'iphone-glass-dock-scrolled shadow-xl' : 'iphone-glass-dock shadow-2xl'
+            isScrolled ? 'iphone-glass-dock-scrolled' : 'iphone-glass-dock'
           }`}
         >
           {/* Top Specular Hairline Reflection */}
-          <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-50 z-0" />
+          <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-80 z-10" />
 
           {/* Ambient Bottom Refraction Rim */}
+          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 z-10" />
           <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[0.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-30 z-0" />
 
           {/* SLIDING ACTIVE GLASS LENS PILL */}
