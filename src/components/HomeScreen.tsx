@@ -384,7 +384,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
       <div
-        className={`sticky top-0 z-20 bg-[#F8F9FD] pt-[max(0.75rem,env(safe-area-inset-top,14px))] pb-3 mb-3 -mx-4 px-4 sm:-mx-6 sm:px-6 transition-all before:content-[''] before:absolute before:-top-40 before:inset-x-0 before:h-40 before:bg-[#F8F9FD] before:pointer-events-none ${
+        className={`sticky top-0 z-20 bg-[#F8F9FD] pt-[max(0.75rem,env(safe-area-inset-top,14px))] pb-3 mb-3 -mx-4 px-4 sm:-mx-6 sm:px-6 transition-all ${
           isScrolled ? 'border-b border-slate-200/60 shadow-xs' : ''
         }`}
       >

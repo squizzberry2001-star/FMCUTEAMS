@@ -26,6 +26,8 @@ export interface CalendarDayItem {
   isCurrentSunday?: boolean;
   isActualWeek?: boolean;
   isActualWeekStart?: boolean;
+  weekMonday?: string;
+  isWeekStart?: boolean;
 }
 
 const formatYmd = (d: Date): string => {
@@ -38,7 +40,7 @@ const formatYmd = (d: Date): string => {
 /**
  * Multi-week scrollable days generator:
  * Generates ~8 weeks of date pills (3 weeks before base Monday, current week, and 4 weeks after).
- * This enables fluid horizontal scrolling across weeks while auto-centering on the selected date.
+ * This enables fluid horizontal scrolling across weeks while keeping each week properly aligned from Monday to Sunday.
  */
 export const getScrollableCalendarDays = (referenceDateStr?: string): {
   days: CalendarDayItem[];
@@ -85,6 +87,7 @@ export const getScrollableCalendarDays = (referenceDateStr?: string): {
     const dateStr = formatYmd(d);
     const dow = d.getDay();
     const isActualWeek = dateStr >= actualWeekStartStr && dateStr <= actualWeekEndStr;
+    const weekMon = getMondayOfWeek(dateStr);
 
     days.push({
       dateObj: d,
@@ -99,6 +102,8 @@ export const getScrollableCalendarDays = (referenceDateStr?: string): {
       isCurrentSunday: isActualSunday && dateStr === todayStr,
       isActualWeek,
       isActualWeekStart: dateStr === actualWeekStartStr,
+      weekMonday: weekMon,
+      isWeekStart: dow === 1,
     });
 
     cursor.setDate(cursor.getDate() + 1);
@@ -122,31 +127,39 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   focusTrigger,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  // Multi-week horizontal scrollable days (centered on active/selected date)
+  // Multi-week horizontal scrollable days
   const { days, isEightPillsActualWeek } = useMemo(
     () => getScrollableCalendarDays(baseDate),
     [baseDate]
   );
 
-  // Helper untuk memastikan tanggal terpilih atau aktual dalam fokus
-  const focusOnDatePill = (smooth: boolean, preferSelected: boolean = true) => {
+  // Helper untuk memastikan minggu aktif sejajar dari hari Senin di sisi kiri layar
+  const focusOnWeekStart = (smooth: boolean, preferSelected: boolean = true) => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    let targetEl: HTMLElement | null = null;
-    if (preferSelected && selectedDate) {
-      targetEl = container.querySelector(`[data-date="${selectedDate}"]`) as HTMLElement | null;
-    }
-    if (!targetEl) {
-      targetEl = container.querySelector('[data-splash-target="actual-date-pill"]') as HTMLElement | null;
-    }
-    if (!targetEl) {
-      targetEl = container.querySelector('[data-actual-week-start="true"]') as HTMLElement | null;
+    const now = new Date();
+    const todayStr = formatYmd(now);
+    const isActualSunday = now.getDay() === 0;
+
+    const targetDate = preferSelected && selectedDate ? selectedDate : baseDate || todayStr;
+    const targetMon = getMondayOfWeek(targetDate);
+
+    let startEl: HTMLElement | null = null;
+    // Jika hari Minggu dan melihat minggu aktual, sejajarkan dari Minggu
+    if (isActualSunday && (targetDate === todayStr || targetMon === getMondayOfWeek(todayStr))) {
+      startEl = container.querySelector(`[data-date="${todayStr}"]`) as HTMLElement | null;
     }
 
-    if (targetEl) {
-      const targetLeft = targetEl.offsetLeft - (container.clientWidth - targetEl.clientWidth) / 2;
-      const scrollPos = Math.max(0, targetLeft);
+    if (!startEl) {
+      startEl = container.querySelector(`[data-date="${targetMon}"]`) as HTMLElement | null;
+    }
+    if (!startEl) {
+      startEl = container.querySelector('[data-actual-week-start="true"]') as HTMLElement | null;
+    }
+
+    if (startEl) {
+      const scrollPos = Math.max(0, startEl.offsetLeft);
       if (smooth) {
         container.scrollTo({ left: scrollPos, behavior: 'smooth' });
       } else {
@@ -156,9 +169,9 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
   };
 
   useEffect(() => {
-    focusOnDatePill(false);
-    const rafId = window.requestAnimationFrame(() => focusOnDatePill(false));
-    const timerId = window.setTimeout(() => focusOnDatePill(false), 80);
+    focusOnWeekStart(false);
+    const rafId = window.requestAnimationFrame(() => focusOnWeekStart(false));
+    const timerId = window.setTimeout(() => focusOnWeekStart(false), 80);
     return () => {
       window.cancelAnimationFrame(rafId);
       window.clearTimeout(timerId);
@@ -167,11 +180,12 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
 
   useEffect(() => {
     if (!focusTrigger) return;
-    focusOnDatePill(true, focusTrigger.mode === 'today');
+    focusOnWeekStart(true, focusTrigger.mode === 'today');
   }, [focusTrigger]);
 
   useEffect(() => {
-    focusOnDatePill(true, true);
+    // Saat tanggal berubah, sejajarkan ke Senin minggu tanggal tersebut
+    focusOnWeekStart(true, true);
   }, [selectedDate]);
 
   return (
