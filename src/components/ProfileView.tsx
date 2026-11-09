@@ -207,7 +207,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-4 sm:px-6 lg:px-8 pt-3 pb-16 max-w-xl lg:max-w-5xl mx-auto w-full select-none">
+    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-4 sm:px-6 md:px-8 pt-3 pb-24 max-w-xl md:max-w-4xl lg:max-w-5xl mx-auto w-full select-none">
       <PageTransitionLoader visible={isUploadingAvatar} delayMs={0} />
       {/* Hidden File Input for Avatar Photo */}
       <input
@@ -245,12 +245,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       )}
 
-      {/* Responsive Grid: 1 Kolom di Mobile, 2 Kolom Executive di Layar Desktop */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      {/* Responsive Grid: 1 Kolom di Mobile, 2 Kolom Executive di Layar Tablet & Desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
         {/* ===================================================================
             KOLOM KIRI: Kartu Profil, Avatar, & Informasi Akun
             =================================================================== */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="md:col-span-5 space-y-4">
           {/* Profile Card with Avatar & Pencil Icon Overlay */}
           <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card flex flex-col items-center text-center relative border border-slate-100">
             {/* Avatar Container with Interactive Pencil Overlay */}
@@ -370,7 +370,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         {/* ===================================================================
             KOLOM KANAN: Form Ubah Sandi (Langsung Tampak & Fit di Layar) & Logout
             =================================================================== */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="md:col-span-7 space-y-4">
           {/* SECTION UBAH SANDI (CHANGE PASSWORD) */}
           <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-100">
             <div className="flex items-center gap-2.5 mb-2">

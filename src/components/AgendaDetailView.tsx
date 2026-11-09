@@ -357,7 +357,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col justify-between h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#F8F9FD] px-4 sm:px-5 pt-[max(0.75rem,env(safe-area-inset-top,14px))] pb-[max(0.75rem,env(safe-area-inset-bottom,14px))] max-w-xl mx-auto w-full select-none gap-2.5">
+    <div className="flex flex-col justify-between h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#F8F9FD] px-4 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top,14px))] pb-[max(0.75rem,env(safe-area-inset-bottom,14px))] w-full max-w-xl sm:max-w-2xl md:max-w-3xl mx-auto select-none gap-2.5">
       {/* 1. Compact Top Header */}
       <div className="flex items-center justify-between shrink-0">
         <button

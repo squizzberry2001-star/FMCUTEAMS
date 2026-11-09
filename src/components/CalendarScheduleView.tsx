@@ -437,10 +437,10 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         </div>
       </div>
 
-      {/* Responsive Content Grid: Mobile (1 Col Stack) vs Desktop (2 Col Expansive) */}
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      {/* Responsive Content Grid: Mobile (1 Col Stack) vs Tablet/Desktop (2 Col Expansive) */}
+      <div className="flex flex-col md:flex-row gap-5 lg:gap-6 items-start">
         {/* Left Column: Monthly Calendar Card */}
-        <div className="w-full lg:w-[380px] xl:w-[420px] lg:shrink-0">
+        <div className="w-full md:w-[320px] lg:w-[380px] xl:w-[420px] md:shrink-0">
           <div className="bg-white rounded-3xl p-5 shadow-soft-card mb-4 border border-slate-100">
             {/* Month Selector Bar */}
             <div className="flex items-center justify-between mb-4 px-1">
@@ -526,7 +526,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         </div>
 
         {/* Right Column: Timeline & Agenda List Card */}
-        <div className="w-full lg:flex-1 min-w-0 bg-white rounded-3xl p-4 sm:p-5 shadow-soft-card border border-slate-100">
+        <div className="w-full md:flex-1 min-w-0 bg-white rounded-3xl p-4 sm:p-5 shadow-soft-card border border-slate-100">
           {/* Tab Filter: Tanggal Ini, Semua Tim, & 1 Minggu Penuh */}
           <div className="flex items-center gap-1.5 mb-2.5 bg-slate-100/80 p-1 rounded-2xl">
             <button
@@ -593,7 +593,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
             </div>
 
             {/* Filter Kategori (Sejajar dengan Textbox Search) */}
-            <div className="relative shrink-0 max-w-[130px] sm:max-w-[145px]">
+            <div className="relative shrink-0 max-w-[130px] sm:max-w-[155px] md:max-w-[180px]">
               <Tag className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 value={selectedCategoryDropdown}
@@ -611,7 +611,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
             </div>
 
             {/* Filter Nama Tim */}
-            <div className="relative shrink-0 max-w-[115px] sm:max-w-[130px]">
+            <div className="relative shrink-0 max-w-[115px] sm:max-w-[140px] md:max-w-[165px]">
               <Users className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 value={selectedPersonDropdown}

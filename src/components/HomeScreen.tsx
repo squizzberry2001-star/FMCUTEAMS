@@ -350,7 +350,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     <div
       ref={scrollContainerRef}
       onScroll={checkScroll}
-      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-5 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top,10px))] pb-28 max-w-xl mx-auto w-full relative select-none"
+      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-4 sm:px-6 md:px-8 pt-[max(0.75rem,env(safe-area-inset-top,10px))] pb-28 w-full max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto relative select-none"
     >
       {/* Top Header: Left "Welcome back!, {fullName}", Subtitle Greeting & Right Live Maps Icon */}
       <div className="relative pt-1 pb-1 mb-3 flex items-center justify-between">
@@ -467,7 +467,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
 
             {/* 2. Tombol Filter Kategori Agenda (Sejajar dengan Textbox Search) */}
-            <div className="relative shrink-0 max-w-[130px] sm:max-w-[145px]">
+            <div className="relative shrink-0 max-w-[130px] sm:max-w-[155px] md:max-w-[180px]">
               <Tag className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 value={selectedCategoryDropdown}
@@ -486,7 +486,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
             {/* 3. Dropdown Nama Tim (Hanya jika periode Semua Tim dipilih) */}
             {selectedPeriod === 'AllTeam' && (
-              <div className="relative shrink-0 max-w-[115px] sm:max-w-[130px]">
+              <div className="relative shrink-0 max-w-[115px] sm:max-w-[140px] md:max-w-[165px]">
                 <Users className="w-3 h-3 text-teal-600 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <select
                   value={selectedPersonDropdown}

@@ -599,8 +599,8 @@ export const App: React.FC = () => {
           </Suspense>
         </div>
       ) : isMobileLayout ? (
-        /* Mobile Full-Screen Web App */
-        <div className="flex-1 w-full max-w-md mx-auto min-h-screen bg-[#F8F9FD] flex flex-col relative">
+        /* Mobile & Tablet Adaptive Full-Screen Web App */
+        <div className="flex-1 w-full max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto min-h-screen bg-[#F8F9FD] flex flex-col relative transition-all duration-300">
           {mobileScreen === 'detail' && selectedAgenda ? (
             /* Halaman Detail Agenda */
             <AgendaDetailView

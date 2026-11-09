@@ -25,6 +25,9 @@ import {
   syncStoryReactionToGasGDrive,
   syncStoryViewToGasGDrive,
   deleteStoryFromGasGDrive,
+  isStoryDeleted,
+  recordDeletedStoryId,
+  removeStoryFromIdb,
 } from '../utils/gdriveGasSync';
 import { PageTransitionLoader } from './PageTransitionLoader';
 
@@ -215,7 +218,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   const currentUserAvatar = currentUser?.avatar || '';
   const currentUserId = currentUserName.toLowerCase().replace(/\s+/g, '-');
 
-  // Initialize stories without any dummy seed data & purge expired (>24h) stories
+  // Initialize stories without any dummy seed data & purge expired (>24h) stories & deleted stories
   const [stories, setStories] = useState<StorySlide[]>(() => {
     try {
       localStorage.removeItem(LEGACY_STORAGE_KEY);
@@ -225,7 +228,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         if (Array.isArray(parsed)) {
           const nowMs = Date.now();
           return parsed
-            .filter((s: StorySlide) => isStoryActive24h(s, nowMs))
+            .filter((s: StorySlide) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id))
             .map((s: StorySlide) => ({
               ...s,
               reactions: s.reactions || {},
@@ -268,10 +271,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       const nowMs = Date.now();
       const idbStories = await loadStoriesFromIdb();
       if (mounted && idbStories && idbStories.length > 0) {
-        const validIdb = idbStories.filter((s) => isStoryActive24h(s, nowMs));
+        const validIdb = idbStories.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id));
         setStories((prev) => {
           const map = new Map<string, StorySlide>();
-          prev.filter((s) => isStoryActive24h(s, nowMs)).forEach((s) => map.set(s.id, s));
+          prev.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id)).forEach((s) => map.set(s.id, s));
           validIdb.forEach((item) => {
             const existing = map.get(item.id);
             if (existing) {
@@ -291,10 +294,10 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
       const remoteStories = await fetchActiveStoriesFromGasGDrive();
       if (mounted && remoteStories && remoteStories.length > 0) {
-        const validRemote = remoteStories.filter((s) => isStoryActive24h(s, nowMs));
+        const validRemote = remoteStories.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id));
         setStories((prev) => {
           const map = new Map<string, StorySlide>();
-          prev.filter((s) => isStoryActive24h(s, nowMs)).forEach((s) => map.set(s.id, s));
+          prev.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id)).forEach((s) => map.set(s.id, s));
           validRemote.forEach((item) => {
             const existing = map.get(item.id);
             if (existing) {
@@ -320,7 +323,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       if (typeof document !== 'undefined' && !document.hidden) {
         const nowMs = Date.now();
         setStories((prev) => {
-          const active = prev.filter((s) => isStoryActive24h(s, nowMs));
+          const active = prev.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id));
           return active.length === prev.length ? prev : active;
         });
         loadAndSync();
@@ -362,6 +365,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 : s
             )
           );
+        } else if (event.data?.type === 'STORY_DELETED' && event.data.storyId) {
+          setStories((prev) => prev.filter((s) => s.id !== event.data.storyId));
         }
       };
     } catch {
@@ -1133,6 +1138,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   };
 
   const handleDeleteOwnStory = (storyId: string) => {
+    recordDeletedStoryId(storyId);
+    removeStoryFromIdb(storyId);
     setStories((prev) => prev.filter((s) => s.id !== storyId));
     deleteStoryFromGasGDrive(storyId);
     if (currentViewerSlides.length <= 1) {
