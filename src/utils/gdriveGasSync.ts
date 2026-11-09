@@ -208,26 +208,6 @@ export const uploadStoryToGasGDrive = async (
     // ignore
   }
 
-  // Concurrently push story metadata to Edge Cloud Vault for immediate multi-device visibility
-  (async () => {
-    try {
-      const existing = (await fetchActiveStoriesFromGasGDrive()) || [];
-      const updated = [slide, ...existing.filter((s) => s && s.id !== slide.id && !isStoryDeleted(s.id))];
-      await fetch(GAS_VAULT_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'db_save_collection',
-          collection: 'stories',
-          data: updated,
-        }),
-        keepalive: true,
-      });
-    } catch {
-      // ignore
-    }
-  })();
-
   try {
     const response = await fetch(gasUrl, {
       method: 'POST',
@@ -240,6 +220,38 @@ export const uploadStoryToGasGDrive = async (
     if (response.ok) {
       const data = await response.json();
       if (data && data.ok) {
+        const hostedImageUrl = data.imageUrl || fallbackDriveUrl;
+
+        // Concurrently push lightweight story metadata to Edge Cloud Vault for instant multi-device visibility
+        (async () => {
+          try {
+            const lightweightSlide: StorySlide = {
+              ...slide,
+              imageUrl: hostedImageUrl,
+              driveFileId: data.driveFileId || fallbackFileId,
+              driveUrl: data.driveUrl || fallbackDriveUrl,
+              gdriveSynced: true,
+            };
+            const existing = (await fetchActiveStoriesFromGasGDrive()) || [];
+            const updated = [
+              lightweightSlide,
+              ...existing.filter((s) => s && s.id !== slide.id && !isStoryDeleted(s.id)),
+            ];
+            await fetch(GAS_VAULT_API_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({
+                action: 'db_save_collection',
+                collection: 'stories',
+                data: updated,
+              }),
+              keepalive: true,
+            });
+          } catch {
+            // ignore
+          }
+        })();
+
         return {
           synced: true,
           driveFileId: data.driveFileId || fallbackFileId,
@@ -290,13 +302,19 @@ export const fetchActiveStoriesFromGasGDrive = async (): Promise<StorySlide[] | 
   let fetchSucceeded = false;
 
   try {
-    // 1. Parallel query for tombstones and stories from Cloud Vault
-    const [tombstoneRes, vaultRes] = await Promise.allSettled([
+    // 1. Parallel query:
+    // a. Tombstones (deleted stories) from Cloud Vault
+    // b. Official Google Drive folder stories
+    // c. Edge Cloud Vault stories
+    const [tombstoneRes, driveRes, vaultRes] = await Promise.allSettled([
       fetch(GAS_VAULT_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'db_get_collection', collection: 'deleted_stories' }),
       }).then(async (r) => (r.ok ? r.json() : null)),
+      fetch(
+        `${DEFAULT_GAS_GDRIVE_URL}?action=getActiveStories&folderId=${FMCU_GDRIVE_FOLDER_ID}&t=${nowMs}`
+      ).then(async (r) => (r.ok ? r.json() : null)),
       fetch(GAS_VAULT_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -304,25 +322,65 @@ export const fetchActiveStoriesFromGasGDrive = async (): Promise<StorySlide[] | 
       }).then(async (r) => (r.ok ? r.json() : null)),
     ]);
 
-    // Process tombstones first
+    // Process tombstones first to ensure deleted stories NEVER leak
+    const deletedIds = new Set<string>();
+    getDeletedStoryIds().forEach((id) => deletedIds.add(id));
+
     if (tombstoneRes.status === 'fulfilled' && tombstoneRes.value) {
       const delJson = tombstoneRes.value;
       if (delJson && delJson.status === 'SUCCESS' && Array.isArray(delJson.data)) {
-        const deletedIds = delJson.data.map((item: any) => String(item?.id || item)).filter(Boolean);
-        if (deletedIds.length > 0) {
-          purgeDeletedStoryIds(deletedIds);
+        const fetchedDelIds = delJson.data.map((item: any) => String(item?.id || item)).filter(Boolean);
+        if (fetchedDelIds.length > 0) {
+          purgeDeletedStoryIds(fetchedDelIds);
+          fetchedDelIds.forEach((id: string) => deletedIds.add(id));
         }
       }
     }
 
-    // Process stories
-    if (vaultRes.status === 'fulfilled' && vaultRes.value) {
-      const json = vaultRes.value;
-      if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
+    // Process official Google Drive stories
+    if (driveRes.status === 'fulfilled' && driveRes.value) {
+      const dJson = driveRes.value;
+      if (dJson && dJson.ok && Array.isArray(dJson.stories)) {
         fetchSucceeded = true;
-        json.data.forEach((s: StorySlide) => {
-          if (s && s.id && !isStoryDeleted(s.id) && (s.expiresAtMs ? s.expiresAtMs > nowMs : true)) {
+        dJson.stories.forEach((s: StorySlide) => {
+          if (
+            s &&
+            s.id &&
+            !deletedIds.has(s.id) &&
+            !isStoryDeleted(s.id) &&
+            (s.expiresAtMs ? s.expiresAtMs > nowMs : true)
+          ) {
             storyMap.set(s.id, s);
+          }
+        });
+      }
+    }
+
+    // Merge with Edge Cloud Vault stories
+    if (vaultRes.status === 'fulfilled' && vaultRes.value) {
+      const vJson = vaultRes.value;
+      if (vJson && vJson.status === 'SUCCESS' && Array.isArray(vJson.data)) {
+        fetchSucceeded = true;
+        vJson.data.forEach((s: StorySlide) => {
+          if (
+            s &&
+            s.id &&
+            !deletedIds.has(s.id) &&
+            !isStoryDeleted(s.id) &&
+            (s.expiresAtMs ? s.expiresAtMs > nowMs : true)
+          ) {
+            const existing = storyMap.get(s.id);
+            if (existing) {
+              storyMap.set(s.id, {
+                ...s,
+                ...existing,
+                imageUrl: existing.imageUrl || s.imageUrl,
+                reactions: s.reactions || existing.reactions,
+                views: Array.from(new Set([...(existing.views || []), ...(s.views || [])])),
+              });
+            } else {
+              storyMap.set(s.id, s);
+            }
           }
         });
       }

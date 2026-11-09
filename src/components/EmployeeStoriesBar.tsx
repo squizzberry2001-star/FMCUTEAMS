@@ -301,11 +301,11 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
           setStories((prev) => {
             const map = new Map<string, StorySlide>();
 
-            // Keep local stories ONLY IF they exist in remote OR are in-flight upload by current user (< 15s)
+            // Keep local stories ONLY IF they exist in remote OR are in-flight upload by current user (< 90s)
             prev.forEach((s) => {
               const isMyFreshLocal =
                 (s.userId === currentUserId || s.userName.toLowerCase() === currentUserName.toLowerCase()) &&
-                nowMs - (s.createdAtMs || 0) < 15000;
+                nowMs - (s.createdAtMs || 0) < 90000;
               if (!isStoryDeleted(s.id) && isStoryActive24h(s, nowMs) && (remoteIds.has(s.id) || isMyFreshLocal)) {
                 map.set(s.id, s);
               }
@@ -317,6 +317,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 map.set(item.id, {
                   ...item,
                   ...existing,
+                  imageUrl: item.imageUrl || existing.imageUrl,
                   reactions: mergeStoryReactions(existing.reactions, item.reactions),
                   views: Array.from(new Set([...(existing.views || []), ...(item.views || [])])),
                 });
@@ -341,19 +342,19 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       }
     };
 
-    // Adaptive non-overlapping real-time polling loop (social-media grade)
-    const scheduleNextPoll = (delayMs: number = 2000) => {
+    // Adaptive non-overlapping real-time polling loop (social-media grade: 12s interval)
+    const scheduleNextPoll = (delayMs: number = 12000) => {
       if (!mounted) return;
       clearTimeout(pollTimeout);
       pollTimeout = setTimeout(async () => {
         if (typeof document !== 'undefined' && !document.hidden && navigator.onLine) {
           await loadAndSync();
         }
-        scheduleNextPoll(2000);
+        scheduleNextPoll(12000);
       }, delayMs);
     };
 
-    loadAndSync().finally(() => scheduleNextPoll(2000));
+    loadAndSync().finally(() => scheduleNextPoll(12000));
 
     // Immediate sync on tab focus, network recovery, or visibility change
     const handleImmediateSync = () => {
@@ -1224,6 +1225,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
               driveFileId: gdriveRes.driveFileId,
               driveUrl: gdriveRes.driveUrl,
               gdriveSynced: gdriveRes.synced,
+              imageUrl: gdriveRes.remoteImageUrl || s.imageUrl,
             }
           : s
       )
