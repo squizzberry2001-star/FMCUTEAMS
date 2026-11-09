@@ -18,6 +18,58 @@ import { isSamePersonName, getStoresWithOwnership } from '../data/masterStoresDa
 import { getMondayOfWeek, getFullWeekDays } from '../services/scheduleExcelService';
 import { fetchAllVisitReportsFromCloud } from '../services/crossDeviceVisitSyncService';
 import { VisitReportData } from '../types/visitReport';
+import {
+  CustomUserAvatar,
+  getLocalCustomAvatars,
+  fetchCustomAvatarsFromCloud,
+  subscribeToCustomAvatarUpdates,
+  resolveCustomOrFallbackAvatar,
+  isCustomOrRealAvatar,
+} from '../services/userAvatarSyncService';
+
+/**
+ * Robust Leaderboard Avatar Component
+ * Displays user's actual profile photo with graceful fallback to styled initials if broken/missing.
+ */
+const LeaderboardAvatar: React.FC<{
+  avatar?: string;
+  name: string;
+  className?: string;
+  fallbackClass?: string;
+  alt?: string;
+}> = ({ avatar, name, className = 'w-full h-full object-cover', fallbackClass = '', alt }) => {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [avatar]);
+
+  const initials = useMemo(() => {
+    const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return (name || '').slice(0, 2).toUpperCase() || 'FM';
+  }, [name]);
+
+  if (avatar && !hasError) {
+    return (
+      <img
+        src={avatar}
+        alt={alt || name}
+        className={className}
+        crossOrigin="anonymous"
+        onError={() => setHasError(true)}
+      />
+    );
+  }
+
+  return (
+    <div className={`w-full h-full flex items-center justify-center font-black uppercase select-none ${fallbackClass}`}>
+      {initials}
+    </div>
+  );
+};
 
 export type LeaderboardPeriod = 'Daily' | 'Weekly' | 'Monthly' | 'AllTime';
 
@@ -114,8 +166,26 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
     }
   };
 
+  const [customAvatarMap, setCustomAvatarMap] = useState<Record<string, CustomUserAvatar>>(() => {
+    return getLocalCustomAvatars();
+  });
+
   useEffect(() => {
     loadGdriveReports();
+
+    // Fetch latest user avatars from cloud for cross-device consistency
+    fetchCustomAvatarsFromCloud().then((map) => {
+      setCustomAvatarMap({ ...map });
+    });
+
+    // Listen to local and cross-tab custom avatar uploads
+    const unsub = subscribeToCustomAvatarUpdates((updatedMap) => {
+      setCustomAvatarMap({ ...updatedMap });
+    });
+
+    return () => {
+      unsub();
+    };
   }, []);
 
   // 3. Efek Animasi Confetti (Celebration)
@@ -249,7 +319,20 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         gdriveReportCount: 0,
       };
 
-      const avatarUrl = staff.avatar || '';
+      const isCurrentUser = Boolean(
+        currentUserName && isSamePersonName(staff.name, currentUserName)
+      );
+
+      // Prioritas foto profil:
+      // 1. Jika user aktif saat ini dan user.avatar adalah foto real (bukan cartoon DiceBear), gunakan foto real user
+      // 2. Jika ada foto profil kustom yang diunggah di local / Cloud Vault, gunakan foto kustom tersebut
+      // 3. Fallback ke avatar bawaan / initial
+      let avatarUrl = '';
+      if (isCurrentUser && isCustomOrRealAvatar(user?.avatar)) {
+        avatarUrl = user?.avatar || '';
+      } else {
+        avatarUrl = resolveCustomOrFallbackAvatar(staff.name, staff.avatar, customAvatarMap);
+      }
 
       return {
         rank: 0,
@@ -261,9 +344,7 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
         completedVisits: st.completedCount,
         gdriveReportsCount: st.gdriveReportCount,
         score: st.gdriveReportCount,
-        isCurrentUser: Boolean(
-          currentUserName && isSamePersonName(staff.name, currentUserName)
-        ),
+        isCurrentUser,
       };
     });
 
@@ -289,6 +370,8 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
     weekEndStr,
     currentMonthPrefix,
     currentUserName,
+    user?.avatar,
+    customAvatarMap,
     gdriveReports,
   ]);
 
@@ -417,17 +500,12 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               {/* Avatar + Badge 2 */}
               <div className="relative mb-2 flex flex-col items-center">
                 <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full ring-3 ring-slate-300 shadow-xl overflow-hidden bg-slate-800 flex items-center justify-center">
-                  {rank2.avatar ? (
-                    <img
-                      src={rank2.avatar}
-                      alt={rank2.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-tr from-slate-700 to-slate-900 text-white font-black text-sm flex items-center justify-center uppercase">
-                      {rank2.name.substring(0, 2)}
-                    </div>
-                  )}
+                  <LeaderboardAvatar
+                    avatar={rank2.avatar}
+                    name={rank2.name}
+                    className="w-full h-full object-cover"
+                    fallbackClass="bg-gradient-to-tr from-slate-700 to-slate-900 text-white text-sm"
+                  />
                 </div>
                 {/* Badge Medal 2 */}
                 <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-tr from-slate-300 to-white text-slate-900 font-black text-[11px] flex items-center justify-center shadow-md ring-2 ring-[#6d28d9]">
@@ -470,17 +548,12 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
                 <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-amber-400/40 via-yellow-300/30 to-amber-500/40 blur-sm animate-pulse pointer-events-none" />
 
                 <div className="relative w-16 h-16 sm:w-19 sm:h-19 rounded-full ring-4 ring-amber-400 shadow-2xl overflow-hidden bg-slate-900 flex items-center justify-center">
-                  {rank1.avatar ? (
-                    <img
-                      src={rank1.avatar}
-                      alt={rank1.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-tr from-amber-600 via-amber-700 to-slate-950 text-white font-black text-lg flex items-center justify-center uppercase">
-                      {rank1.name.substring(0, 2)}
-                    </div>
-                  )}
+                  <LeaderboardAvatar
+                    avatar={rank1.avatar}
+                    name={rank1.name}
+                    className="w-full h-full object-cover"
+                    fallbackClass="bg-gradient-to-tr from-amber-600 via-amber-700 to-slate-950 text-white text-lg"
+                  />
                 </div>
                 {/* Crown Interaktif: Klik untuk Confetti! */}
                 <button
@@ -526,17 +599,12 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
               {/* Avatar + Badge 3 */}
               <div className="relative mb-2 flex flex-col items-center">
                 <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full ring-3 ring-amber-600 shadow-xl overflow-hidden bg-slate-800 flex items-center justify-center">
-                  {rank3.avatar ? (
-                    <img
-                      src={rank3.avatar}
-                      alt={rank3.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-tr from-amber-800 to-slate-900 text-white font-black text-sm flex items-center justify-center uppercase">
-                      {rank3.name.substring(0, 2)}
-                    </div>
-                  )}
+                  <LeaderboardAvatar
+                    avatar={rank3.avatar}
+                    name={rank3.name}
+                    className="w-full h-full object-cover"
+                    fallbackClass="bg-gradient-to-tr from-amber-800 to-slate-900 text-white text-sm"
+                  />
                 </div>
                 {/* Badge Medal 3 */}
                 <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-tr from-amber-700 to-amber-500 text-white font-black text-[11px] flex items-center justify-center shadow-md ring-2 ring-[#581c87]">
@@ -634,17 +702,12 @@ export const LeaderboardTopVisit: React.FC<LeaderboardTopVisitProps> = ({
 
                   {/* Avatar */}
                   <div className="w-10 h-10 rounded-full ring-2 ring-slate-200 overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center">
-                    {item.avatar ? (
-                      <img
-                        src={item.avatar}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-tr from-purple-700 to-indigo-800 text-white font-bold text-xs flex items-center justify-center uppercase">
-                        {item.name.substring(0, 2)}
-                      </div>
-                    )}
+                    <LeaderboardAvatar
+                      avatar={item.avatar}
+                      name={item.name}
+                      className="w-full h-full object-cover"
+                      fallbackClass="bg-gradient-to-tr from-purple-700 to-indigo-800 text-white font-bold text-xs"
+                    />
                   </div>
 
                   {/* Nama & Info */}

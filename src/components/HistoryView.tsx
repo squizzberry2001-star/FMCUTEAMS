@@ -598,7 +598,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-28 max-w-6xl mx-auto w-full select-none">
+    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto overflow-x-hidden no-scrollbar px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-28 max-w-6xl mx-auto w-full select-none">
       {activeCoverageTab === 'coverage' ? (
         <>
           {/* Header Section 3: Coverage Store */}

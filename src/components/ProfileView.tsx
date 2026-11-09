@@ -20,6 +20,7 @@ import {
 import confetti from 'canvas-confetti';
 import { User } from '../types';
 import { uploadProfilePhotoToGasGDrive } from '../utils/gdriveGasSync';
+import { saveCustomUserAvatarLocally, pushCustomAvatarToCloud } from '../services/userAvatarSyncService';
 import { PageTransitionLoader } from './PageTransitionLoader';
 import { DeveloperFooter } from './DeveloperFooter';
 
@@ -114,6 +115,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     try {
       const compressedBase64 = await compressAvatarImage(file);
 
+      // Save locally & broadcast immediately
+      saveCustomUserAvatarLocally(user.name, compressedBase64, user.email);
+
       // Update user avatar immediately with compressed 360x360 image (prevents QuotaExceededError / blank page)
       if (onUpdateUser) {
         onUpdateUser({
@@ -122,13 +126,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         });
       }
 
-      // Upload to Google Drive (same root folder 1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a -> new subfolder FMCU_FOTO_PROFIL_USER)
+      // Upload to Google Drive and Cloud Vault (same root folder 1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a -> subfolder FMCU_FOTO_PROFIL_USER)
       await Promise.all([
         uploadProfilePhotoToGasGDrive({
           userName: user.name,
           userEmail: user.email,
           base64Data: compressedBase64,
         }),
+        pushCustomAvatarToCloud(user.name, compressedBase64, user.email),
         new Promise((r) => setTimeout(r, 900)),
       ]);
 
@@ -207,7 +212,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-4 sm:px-6 md:px-8 pt-3 pb-24 max-w-xl md:max-w-4xl lg:max-w-5xl mx-auto w-full select-none">
+    <div className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto overflow-x-hidden no-scrollbar px-4 sm:px-6 md:px-8 pt-3 pb-24 max-w-xl md:max-w-4xl lg:max-w-5xl mx-auto w-full select-none">
       <PageTransitionLoader visible={isUploadingAvatar} delayMs={0} />
       {/* Hidden File Input for Avatar Photo */}
       <input

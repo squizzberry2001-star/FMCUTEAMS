@@ -1184,8 +1184,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       />
 
       {/* Horizontal Instagram-Style Circle Stories Strip (No Left/Right Padding, Latest Upload First from Left) */}
-      <div className={className !== undefined ? className : 'mb-3 -mx-5 sm:-mx-6 px-0'}>
-        <div className="flex items-start gap-2 overflow-x-auto no-scrollbar py-1 px-0">
+      <div className={className !== undefined ? className : 'mb-3 -mx-4 sm:-mx-6 px-0'}>
+        <div className="flex items-start gap-2 overflow-x-auto no-scrollbar py-1 px-4 sm:px-6">
           {/* 1. Leftmost Button: Personal Story Circle (Restored as original without user name) */}
           <div className="flex flex-col items-center flex-shrink-0 w-[68px] pt-[5px]">
             <div className="relative">

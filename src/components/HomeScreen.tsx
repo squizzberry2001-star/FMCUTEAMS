@@ -350,7 +350,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     <div
       ref={scrollContainerRef}
       onScroll={checkScroll}
-      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto no-scrollbar px-4 sm:px-6 md:px-8 pt-[max(0.75rem,env(safe-area-inset-top,10px))] pb-28 w-full max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto relative select-none"
+      className="flex flex-col h-full bg-[#F8F9FD] overflow-y-auto overflow-x-hidden no-scrollbar px-4 sm:px-6 md:px-8 pt-[max(0.75rem,env(safe-area-inset-top,10px))] pb-28 w-full max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto relative select-none"
     >
       {/* Top Header: Left "Welcome back!, {fullName}", Subtitle Greeting & Right Live Maps Icon */}
       <div className="relative pt-1 pb-1 mb-3 flex items-center justify-between">
@@ -380,10 +380,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Section 1 Item 2: Instagram-Style Circle Story Bar Below "Hallo, User!" */}
-      <EmployeeStoriesBar currentUser={user} agendas={agendas} />
+      <EmployeeStoriesBar currentUser={user} agendas={agendas} className="mb-3 -mx-4 sm:-mx-6 px-0" />
 
       {/* Section 1 Item 6: Sticky on top Calendar Strip & Sub section Filter */}
-      <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top,16px))] pb-3 mb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 transition-all">
+      <div className="sticky top-0 z-20 bg-[#F8F9FD]/95 backdrop-blur-md pt-[max(0.5rem,env(safe-area-inset-top,16px))] pb-3 mb-3 -mx-4 px-4 sm:-mx-6 sm:px-6 transition-all">
         {/* Section 1 Item 3: Kalender Mingguan & Badge Bulan Tahun (Tanpa badge lain di sebelahnya) */}
         <div className="flex items-center justify-between mb-2 px-1">
           <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">

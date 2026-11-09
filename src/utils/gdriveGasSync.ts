@@ -1,5 +1,6 @@
 import type { StorySlide } from '../components/EmployeeStoriesBar';
 import { GAS_VAULT_API_URL } from '../services/cloudScheduleSyncService';
+import { pushCustomAvatarToCloud, saveCustomUserAvatarLocally } from '../services/userAvatarSyncService';
 
 export const FMCU_GDRIVE_FOLDER_ID = '1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a';
 export const FMCU_GDRIVE_FOLDER_URL =
@@ -524,6 +525,10 @@ export const uploadProfilePhotoToGasGDrive = async (params: {
   driveFileId: string;
   driveUrl: string;
 }> => {
+  // Immediately persist custom avatar locally and push to Cloud Vault
+  saveCustomUserAvatarLocally(params.userName, params.base64Data, params.userEmail);
+  pushCustomAvatarToCloud(params.userName, params.base64Data, params.userEmail).catch(() => {});
+
   const gasUrl = DEFAULT_GAS_GDRIVE_URL;
   const safeName = params.userName.replace(/[^a-zA-Z0-9_-]/g, '_');
   const nowMs = Date.now();
