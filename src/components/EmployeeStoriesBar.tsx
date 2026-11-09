@@ -58,6 +58,7 @@ interface EmployeeStoriesBarProps {
   currentUser?: User | null;
   agendas?: ScheduleAgenda[];
   users?: User[];
+  className?: string;
 }
 
 const MAX_STORIES_PER_DAY = 3;
@@ -211,6 +212,8 @@ const compressStoryImage = (file: File): Promise<string> => {
 export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
   currentUser,
   agendas = [],
+  users = [],
+  className,
 }) => {
   const todayKey = getTodayDateKey();
   const currentUserName = currentUser?.name || 'User FMCU';
@@ -873,6 +876,22 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     }
   };
 
+  // Desktop keyboard controls (Escape to close, Right/Space for next, Left for prev)
+  useEffect(() => {
+    if (activeViewerGroupIdx === null) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeViewer();
+      } else if (e.key === 'ArrowRight' || e.key === ' ') {
+        handleNextSlide(false);
+      } else if (e.key === 'ArrowLeft') {
+        handlePrevSlide();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeViewerGroupIdx, activeSlideIdx, currentViewerSlides]);
+
   // Requirement 4: Instagram-style swipe & tap gesture handlers (unified Pointer Events to prevent touch+mouse double-fire)
   const handlePointerDownCanvas = (clientX: number, clientY: number) => {
     gestureRef.current = {
@@ -1165,8 +1184,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       />
 
       {/* Horizontal Instagram-Style Circle Stories Strip (No Left/Right Padding, Latest Upload First from Left) */}
-      <div className="mb-3 -mx-5 sm:-mx-6 px-0">
-        <div className="flex items-start gap-1.5 overflow-x-auto no-scrollbar py-1 px-0">
+      <div className={className !== undefined ? className : 'mb-3 -mx-5 sm:-mx-6 px-0'}>
+        <div className="flex items-start gap-2 overflow-x-auto no-scrollbar py-1 px-0">
           {/* 1. Leftmost Button: Personal Story Circle (Restored as original without user name) */}
           <div className="flex flex-col items-center flex-shrink-0 w-[68px] pt-[5px]">
             <div className="relative">
@@ -1426,8 +1445,8 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  {/* Requirement 3: In personal story, replace '+ Tambah' button with Eye icon & view count from other users */}
-                  {activeViewerGroupIdx === -1 && (
+                  {/* In personal story or admin view, show Eye icon & view count, plus delete button */}
+                  {(activeViewerGroupIdx === -1 || currentUser?.isAdmin) && (
                     <>
                       <button
                         type="button"
@@ -1450,7 +1469,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
                           handleDeleteOwnStory(currentSlide.id);
                         }}
                         className="w-8 h-8 rounded-full bg-rose-500/25 hover:bg-rose-500/40 text-rose-200 flex items-center justify-center cursor-pointer"
-                        title="Hapus Story Ini"
+                        title={currentUser?.isAdmin && activeViewerGroupIdx !== -1 ? 'Hapus Story Ini (Admin Moderation)' : 'Hapus Story Ini'}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

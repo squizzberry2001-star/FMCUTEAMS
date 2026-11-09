@@ -42,6 +42,7 @@ import excelSeed from '../../data/excelScheduleSeed.json';
 import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from '../visit/HoldingTimeR23Modal';
 import { ExecutiveAnalyticsSuite } from './ExecutiveAnalyticsSuite';
+import { EmployeeStoriesBar } from '../EmployeeStoriesBar';
 import { CalendarScheduleView } from '../CalendarScheduleView';
 import {
   HoldingTimeStandards,
@@ -1012,26 +1013,47 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-8 pt-6 pb-12">
         {/* TAB 1: EXECUTIVE & ADMIN DASHBOARD (LORDBANK BENTO DESIGN) */}
         {activeTab === 'dashboard' && (
-          <ExecutiveAnalyticsSuite
-            currentUser={adminUser}
-            isReadOnly={isReadOnly}
-            agendas={agendas}
-            users={users}
-            stores={allStoresWithOwnership}
-            bestieCount={bestieAssignments.length}
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            onOpenCreateAgenda={handleOpenCreateModal}
-            onOpenEditAgenda={handleOpenEditModal}
-            onDeleteAgenda={onDeleteAgenda}
-            onExportExcel={() => exportScheduleToTemplateExcel(agendas, users, 'ALL')}
-            onOpenLiveMaps={onOpenLiveMaps}
-            onSwitchToUserView={onSwitchToUserView}
-            onSelectBestieStores={(bestieName) => {
-              setSelectedBestieFilter(bestieName);
-              setStoreScopeFilter('OWNED');
-              setActiveTab('stores');
-            }}
-          />
+          <div className="space-y-6">
+            {/* Live Employee Stories & Field Photo Updates */}
+            <div className="bg-[#F8F9FA] rounded-[30px] p-4 sm:p-5 border border-slate-200/80 shadow-2xs">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-[#FF2E93] to-[#FF8A00] animate-pulse" />
+                  <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 tracking-tight">
+                    Live Employee Stories & Dokumentasi Lapangan
+                  </h3>
+                  <span className="text-[10px] font-bold text-teal-800 bg-white px-2.5 py-0.5 rounded-full border border-teal-200/80 shadow-2xs">
+                    Aktif 24 Jam
+                  </span>
+                </div>
+                <span className="text-[11px] font-medium text-slate-400 hidden sm:inline">
+                  Monitoring foto, caption, dan interaksi lapangan seluruh tim
+                </span>
+              </div>
+              <EmployeeStoriesBar currentUser={adminUser} agendas={agendas} users={users} className="w-full" />
+            </div>
+
+            <ExecutiveAnalyticsSuite
+              currentUser={adminUser}
+              isReadOnly={isReadOnly}
+              agendas={agendas}
+              users={users}
+              stores={allStoresWithOwnership}
+              bestieCount={bestieAssignments.length}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              onOpenCreateAgenda={handleOpenCreateModal}
+              onOpenEditAgenda={handleOpenEditModal}
+              onDeleteAgenda={onDeleteAgenda}
+              onExportExcel={() => exportScheduleToTemplateExcel(agendas, users, 'ALL')}
+              onOpenLiveMaps={onOpenLiveMaps}
+              onSwitchToUserView={onSwitchToUserView}
+              onSelectBestieStores={(bestieName) => {
+                setSelectedBestieFilter(bestieName);
+                setStoreScopeFilter('OWNED');
+                setActiveTab('stores');
+              }}
+            />
+          </div>
         )}
 
         {/* TAB 2: MASTER STORES (610) & KEPEMILIKAN BESTIE (531) */}

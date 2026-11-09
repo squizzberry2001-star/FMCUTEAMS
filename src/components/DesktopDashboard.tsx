@@ -34,6 +34,7 @@ import { ScheduleCard } from './ScheduleCard';
 import { HistoryView } from './HistoryView';
 import { CalendarScheduleView } from './CalendarScheduleView';
 import { ProfileView } from './ProfileView';
+import { EmployeeStoriesBar } from './EmployeeStoriesBar';
 import { isSamePersonName, getStoresWithOwnership } from '../data/masterStoresData';
 import {
   getMondayOfWeek,
@@ -619,6 +620,25 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Stories & Aktivitas Lapangan (Desktop View) */}
+              <div className="bg-white rounded-3xl p-4 lg:p-5 shadow-soft-card mb-6 border border-slate-100">
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-[#FF2E93] to-[#FF8A00] animate-pulse" />
+                    <h3 className="text-xs lg:text-sm font-extrabold text-slate-800 tracking-tight">
+                      Stories & Dokumentasi Lapangan
+                    </h3>
+                    <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
+                      Live 24 Jam
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-medium text-slate-400 hidden sm:inline">
+                    Klik lingkaran untuk melihat foto & update tim lapangan
+                  </span>
+                </div>
+                <EmployeeStoriesBar currentUser={user} agendas={agendas} users={users} className="w-full" />
               </div>
 
               {/* 3 Top Summary Stat Cards: Data Aktual Dinamis */}
