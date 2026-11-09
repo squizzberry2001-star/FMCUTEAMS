@@ -20,6 +20,8 @@ import {
   pushSingleAgendaToCloud,
   deleteAgendaFromCloud,
   subscribeToLocalSync,
+  getDeletedAgendaIds,
+  markAgendaDeletedLocally,
 } from './services/cloudScheduleSyncService';
 import { fetchAllVisitReportsFromCloud } from './services/crossDeviceVisitSyncService';
 import {
@@ -258,13 +260,20 @@ export const App: React.FC = () => {
           });
         }
 
+        const deletedIds = getDeletedAgendaIds();
+        const filteredCloud = hydratedCloud.filter((a) => !deletedIds.has(String(a.id)));
+        const cloudIdSet = new Set(filteredCloud.map((a) => a.id));
+
         setAgendas((prev) => {
-          // Cloud is the master cross-device source of truth, but preserve any unsynced local agenda
-          const cloudIdSet = new Set(hydratedCloud.map((a) => a.id));
+          // Cloud is the master cross-device source of truth!
+          // NEVER resurrect missing cloud items (sch-). ONLY keep un-synced local drafts (draft-, local-) that are not deleted!
           const unsyncedLocal = prev.filter(
-            (a) => !cloudIdSet.has(a.id) && (a.id.startsWith('sch-') || a.id.startsWith('local-'))
+            (a) =>
+              !cloudIdSet.has(a.id) &&
+              !deletedIds.has(String(a.id)) &&
+              (a.id.startsWith('local-') || a.id.startsWith('draft-'))
           );
-          const merged = unsyncedLocal.length > 0 ? [...unsyncedLocal, ...hydratedCloud] : hydratedCloud;
+          const merged = unsyncedLocal.length > 0 ? [...unsyncedLocal, ...filteredCloud] : filteredCloud;
 
           const buildSig = (list: ScheduleAgenda[]) =>
             list
@@ -291,12 +300,12 @@ export const App: React.FC = () => {
     // 1. Initial sync on load
     syncSchedulesFromCloud();
 
-    // 2. Poll every 6 seconds when tab is active so changes from other devices appear online
+    // 2. Poll every 5 seconds when tab is active so changes from other devices appear online
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         syncSchedulesFromCloud();
       }
-    }, 6000);
+    }, 5000);
 
     // 3. Sync immediately when user focuses or switches back to the app
     const handleVisibility = () => {
@@ -311,6 +320,14 @@ export const App: React.FC = () => {
         } catch {
           // ignore
         }
+      } else if (e.key === 'fmcu_deleted_agenda_ids_v5' && e.newValue) {
+        try {
+          const arr = JSON.parse(e.newValue);
+          if (Array.isArray(arr)) {
+            const delSet = new Set(arr.map(String));
+            setAgendas((prev) => prev.filter((a) => !delSet.has(String(a.id))));
+          }
+        } catch {}
       }
     };
 
@@ -318,9 +335,26 @@ export const App: React.FC = () => {
     window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', handleStorage);
     window.addEventListener('online', syncSchedulesFromCloud);
-    const unsubBroadcast = subscribeToLocalSync(() => {
+
+    // BroadcastChannel handler for 0ms same-device sync
+    const unsubBroadcast = subscribeToLocalSync((payload: any) => {
+      if (payload && payload.type === 'SCHEDULE_DELETED' && payload.agendaId) {
+        const delId = String(payload.agendaId);
+        markAgendaDeletedLocally(delId);
+        setAgendas((prev) => prev.filter((a) => String(a.id) !== delId));
+      }
       syncSchedulesFromCloud();
     });
+
+    // Custom window event listener for 0ms cross-component sync
+    const handleScheduleDeletedEvent = (e: any) => {
+      const delId = String(e?.detail?.agendaId);
+      if (delId) {
+        markAgendaDeletedLocally(delId);
+        setAgendas((prev) => prev.filter((a) => String(a.id) !== delId));
+      }
+    };
+    window.addEventListener('fmcu:schedule:deleted', handleScheduleDeletedEvent);
 
     return () => {
       clearInterval(interval);
@@ -328,6 +362,7 @@ export const App: React.FC = () => {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('online', syncSchedulesFromCloud);
+      window.removeEventListener('fmcu:schedule:deleted', handleScheduleDeletedEvent);
       unsubBroadcast();
     };
   }, []);
@@ -418,11 +453,23 @@ export const App: React.FC = () => {
 
   const handleDeleteAgenda = (id: string) => {
     if (user?.isExecutiveViewer) return;
-    setAgendas((prev) => prev.filter((a) => a.id !== id));
-    if (selectedAgenda && selectedAgenda.id === id) {
+    const cleanId = String(id);
+    markAgendaDeletedLocally(cleanId);
+    setAgendas((prev) => prev.filter((a) => String(a.id) !== cleanId));
+    if (selectedAgenda && String(selectedAgenda.id) === cleanId) {
       setSelectedAgenda(null);
     }
-    deleteAgendaFromCloud(id);
+    try {
+      const raw = localStorage.getItem('fmcu_agendas_master_v6');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((a: any) => String(a.id) !== cleanId);
+          localStorage.setItem('fmcu_agendas_master_v6', JSON.stringify(cleaned));
+        }
+      }
+    } catch {}
+    deleteAgendaFromCloud(cleanId);
   };
 
   const handleToggleComplete = (id: string) => {

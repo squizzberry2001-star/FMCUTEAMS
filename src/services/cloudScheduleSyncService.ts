@@ -226,6 +226,7 @@ async function postCloudEndpoint(url: string, payload: Record<string, any>): Pro
         'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify(payload),
+      keepalive: true,
     });
     if (!res.ok) return null;
     return await res.json();
@@ -237,27 +238,47 @@ async function postCloudEndpoint(url: string, payload: Record<string, any>): Pro
 
 /**
  * Fetch latest schedules from Cloudflare D1 Edge DB (or fallback to Google Apps Script Vault)
+ * Synchronizes tombstones so deleted agendas vanish cross-device in real time.
  */
 export async function fetchSchedulesFromCloud(): Promise<ScheduleAgenda[] | null> {
-  const deletedIds = getDeletedAgendaIds();
+  // 0. Parallel tombstone sync from GAS Vault
+  const tombstonePromise = (async () => {
+    try {
+      const resp = await postCloudEndpoint(GAS_VAULT_API_URL, {
+        action: 'db_get_collection',
+        collection: 'deleted_schedules',
+      });
+      if (resp && resp.status === 'SUCCESS' && Array.isArray(resp.data)) {
+        resp.data.forEach((item: any) => {
+          const id = String(item?.id || item);
+          if (id) markAgendaDeletedLocally(id);
+        });
+      }
+    } catch {
+      // ignore
+    }
+  })();
 
   // 1. Try Cloudflare D1 Edge SQLite first (~20ms)
-  let resp = await postCloudEndpoint(CLOUDFLARE_D1_API_URL, {
+  const d1Promise = postCloudEndpoint(CLOUDFLARE_D1_API_URL, {
     action: 'db_get_collection',
     collection: 'schedules',
   });
 
-  let rawList: any[] | null =
-    resp && resp.status === 'SUCCESS' && Array.isArray(resp.data) ? resp.data : null;
+  const [, d1Resp] = await Promise.all([tombstonePromise, d1Promise]);
+  const deletedIds = getDeletedAgendaIds();
 
-  // 2. Fallback to Google Apps Script Hidden Vault
+  let rawList: any[] | null =
+    d1Resp && d1Resp.status === 'SUCCESS' && Array.isArray(d1Resp.data) ? d1Resp.data : null;
+
+  // 2. Fallback to Google Apps Script Hidden Vault if D1 empty
   if (!rawList || rawList.length === 0) {
-    resp = await postCloudEndpoint(GAS_VAULT_API_URL, {
+    const gasResp = await postCloudEndpoint(GAS_VAULT_API_URL, {
       action: 'db_get_collection',
       collection: 'schedules',
     });
-    if (resp && resp.status === 'SUCCESS' && Array.isArray(resp.data)) {
-      rawList = resp.data;
+    if (gasResp && gasResp.status === 'SUCCESS' && Array.isArray(gasResp.data)) {
+      rawList = gasResp.data;
     }
   }
 
@@ -340,22 +361,58 @@ export async function pushSingleAgendaToCloud(agenda: ScheduleAgenda): Promise<v
 }
 
 /**
- * Delete a single ScheduleAgenda from Cloudflare D1 and GAS Vault
+ * Delete a single ScheduleAgenda from Cloudflare D1, GAS Vault, and register in cloud tombstones.
+ * Instant 0ms broadcast across local components and guaranteed background delivery via keepalive.
  */
 export async function deleteAgendaFromCloud(agendaId: string): Promise<void> {
-  markAgendaDeletedLocally(agendaId);
-  broadcastLocalSync({ type: 'SCHEDULE_DELETED', agendaId });
-  await Promise.all([
-    postCloudEndpoint(CLOUDFLARE_D1_API_URL, {
-      action: 'db_delete_item',
-      collection: 'schedules',
-      id: String(agendaId),
-    }),
-    postCloudEndpoint(GAS_VAULT_API_URL, {
-      action: 'db_delete_schedule',
-      scheduleId: String(agendaId),
-    }),
-  ]);
+  const cleanId = String(agendaId);
+  markAgendaDeletedLocally(cleanId);
+  broadcastLocalSync({ type: 'SCHEDULE_DELETED', agendaId: cleanId });
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('fmcu:schedule:deleted', { detail: { agendaId: cleanId } }));
+  }
+
+  // 1. Delete from Cloudflare D1
+  const d1Promise = postCloudEndpoint(CLOUDFLARE_D1_API_URL, {
+    action: 'db_delete_item',
+    collection: 'schedules',
+    id: cleanId,
+  });
+
+  // 2. Delete from GAS Vault
+  const gasSchedulePromise = postCloudEndpoint(GAS_VAULT_API_URL, {
+    action: 'db_delete_schedule',
+    scheduleId: cleanId,
+  });
+
+  // 3. Concurrently save tombstone to GAS Vault 'deleted_schedules' so all devices/roles pick it up
+  const tombstonePromise = (async () => {
+    try {
+      let existingTombstones: any[] = [];
+      const getRes = await postCloudEndpoint(GAS_VAULT_API_URL, {
+        action: 'db_get_collection',
+        collection: 'deleted_schedules',
+      });
+      if (getRes && getRes.status === 'SUCCESS' && Array.isArray(getRes.data)) {
+        existingTombstones = getRes.data;
+      }
+      const updated = [
+        ...existingTombstones.filter((t: any) => String(t?.id || t) !== cleanId),
+        { id: cleanId, deletedAtMs: Date.now() },
+      ].slice(-500);
+
+      await postCloudEndpoint(GAS_VAULT_API_URL, {
+        action: 'db_save_collection',
+        collection: 'deleted_schedules',
+        data: updated,
+      });
+    } catch (e) {
+      console.warn('Save deleted_schedules tombstone error:', e);
+    }
+  })();
+
+  await Promise.allSettled([d1Promise, gasSchedulePromise, tombstonePromise]);
 }
 
 // ============================================================================
@@ -386,10 +443,10 @@ export function broadcastLocalSync(payload: Record<string, any>): void {
   }
 }
 
-export function subscribeToLocalSync(onUpdate: () => void): () => void {
+export function subscribeToLocalSync(onUpdate: (payload?: any) => void): () => void {
   const ch = getSyncChannel();
   if (!ch) return () => {};
-  const handler = () => onUpdate();
+  const handler = (evt: MessageEvent) => onUpdate(evt.data);
   ch.addEventListener('message', handler);
   return () => ch.removeEventListener('message', handler);
 }

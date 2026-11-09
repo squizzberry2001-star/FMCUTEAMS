@@ -2935,57 +2935,79 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </div>
             </div>
 
-            {/* 3. Compact T.A.R.O AI Assistant Button */}
+            {/* 3. Smooth & Interactive T.A.R.O AI Assistant Button */}
             <button
               type="button"
               disabled={isAiCompiling}
               onClick={handleTaroAiAutoCompile}
-              className={`w-full py-2 px-3 sm:px-3.5 rounded-xl border text-white shadow-xs transition active:scale-[0.99] flex items-center justify-between gap-2.5 cursor-pointer group ${
+              className={`w-full py-2.5 px-3 sm:px-4 rounded-2xl border text-white shadow-xs transition-all duration-300 active:scale-[0.99] flex items-center justify-between gap-2.5 cursor-pointer group relative overflow-hidden ${
                 isAiCompiling
-                  ? 'bg-slate-950 border-teal-400 shadow-[0_0_15px_rgba(20,184,166,0.3)]'
-                  : 'bg-slate-900 hover:bg-slate-800 border-teal-500/30'
+                  ? 'bg-slate-950 border-teal-400 shadow-[0_0_22px_rgba(20,184,166,0.35)]'
+                  : 'bg-gradient-to-r from-slate-900 via-slate-900 to-teal-950/80 hover:from-slate-800 hover:to-teal-900/90 border-teal-500/30 hover:border-teal-400/60 hover:shadow-[0_4px_20px_rgba(20,184,166,0.18)]'
               }`}
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 relative ${
-                  isAiCompiling ? 'bg-teal-500/30 border-teal-400 text-teal-200' : 'bg-teal-500/20 border-teal-400/30 text-teal-300'
+              {/* Subtle Ambient Shimmer Background */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-teal-400/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+
+              <div className="flex items-center gap-2.5 min-w-0 relative z-10">
+                {/* Smooth Animated TARO AI Mascot Icon */}
+                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 relative transition-all duration-300 group-hover:scale-105 shadow-inner ${
+                  isAiCompiling
+                    ? 'bg-gradient-to-br from-teal-500/40 via-emerald-500/30 to-teal-900/60 border-teal-400 text-teal-200 shadow-[0_0_12px_rgba(45,212,191,0.5)]'
+                    : 'bg-gradient-to-br from-teal-500/20 via-emerald-500/10 to-teal-900/30 border-teal-400/40 text-teal-300 group-hover:border-teal-300 group-hover:text-teal-200 group-hover:shadow-[0_0_12px_rgba(45,212,191,0.3)]'
                 }`}>
-                  <Bot className={`w-4 h-4 stroke-[2.2] ${isAiCompiling ? 'animate-bounce' : ''}`} />
-                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <Bot className={`w-4 h-4 stroke-[2.2] transition-transform duration-300 group-hover:rotate-6 ${
+                    isAiCompiling ? 'animate-pulse text-emerald-300 scale-110' : 'group-hover:scale-110'
+                  }`} />
+                  {/* Floating Micro Status Ring */}
+                  <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_6px_#34d399]" />
+                  </span>
                 </div>
+
                 <div className="min-w-0 text-left">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-extrabold text-xs text-white tracking-tight truncate">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-extrabold text-xs text-white tracking-tight truncate group-hover:text-teal-200 transition-colors">
                       T.A.R.O AI Assistant
                     </span>
-                    <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-400/20">
-                      R23 Rules
+                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-teal-500/20 text-teal-300 border border-teal-400/30 tracking-wider">
+                      FamilyMart R23
                     </span>
                   </div>
+                  <p className="text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors truncate">
+                    Analisa otomatis 6-Box dari bukti foto
+                  </p>
                 </div>
               </div>
-              <div className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-teal-300 group-hover:text-teal-200">
-                <Wand2 className={`w-3.5 h-3.5 text-teal-400 ${isAiCompiling ? 'animate-spin' : ''}`} />
-                <span className="hidden xs:inline">{isAiCompiling ? 'Menganalisa Bukti...' : 'Auto-Kompilasi'}</span>
+
+              <div className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-teal-300 group-hover:text-teal-100 transition-colors relative z-10">
+                <Sparkles className={`w-3.5 h-3.5 text-teal-400 transition-transform duration-500 ${
+                  isAiCompiling ? 'animate-spin text-emerald-300' : 'group-hover:rotate-12 group-hover:scale-110'
+                }`} />
+                <span className="hidden xs:inline">{isAiCompiling ? 'Menganalisa...' : 'Auto-Kompilasi'}</span>
               </div>
             </button>
 
             {/* Scanning Animation when isAiCompiling */}
             {isAiCompiling && (
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-950/90 via-slate-900/95 to-emerald-950/90 border border-teal-500/40 p-3.5 text-white shadow-md animate-in fade-in duration-300">
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className="w-8 h-8 rounded-lg bg-teal-500/20 border border-teal-400/40 flex items-center justify-center shrink-0">
-                    <Bot className="w-4 h-4 text-teal-300 animate-spin" />
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-950/95 via-slate-900 to-emerald-950/95 border border-teal-500/40 p-4 text-white shadow-lg animate-in fade-in zoom-in-95 duration-300">
+                {/* Horizontal Sweeping Scanner Light */}
+                <div className="absolute inset-y-0 w-32 bg-gradient-to-r from-transparent via-teal-400/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none" />
+
+                <div className="flex items-center gap-3.5 relative z-10">
+                  <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-400/50 flex items-center justify-center shrink-0 shadow-[0_0_14px_rgba(20,184,166,0.35)]">
+                    <Bot className="w-5 h-5 text-teal-200 animate-pulse" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h4 className="font-black text-xs text-teal-200">
-                        T.A.R.O AI Menganalisa Foto Bukti...
+                        T.A.R.O AI Sedang Menganalisa Bukti Foto...
                       </h4>
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                     </div>
-                    <p className="text-[10px] text-teal-100/80 truncate">
-                      Mengekstrak deskripsi foto dari Section Bukti & merumuskan 6-Box Model R23...
+                    <p className="text-[10.5px] text-teal-100/80 truncate">
+                      Mengekstrak temuan lapangan & merumuskan 6-Box Model FamilyMart...
                     </p>
                   </div>
                 </div>
@@ -3248,19 +3270,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                                   type="button"
                                   onClick={() => handleAiAutoFill(idx, obs)}
                                   disabled={aiLoadingIdx === idx || !obs.auditFinding?.trim()}
-                                  className={`h-8 px-3 rounded-xl font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 ${
+                                  className={`h-8 px-3 rounded-xl font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition-all duration-200 active:scale-95 group/ai ${
                                     !obs.auditFinding?.trim()
                                       ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
-                                      : 'text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 border border-teal-500/30 cursor-pointer'
+                                      : 'text-white bg-gradient-to-r from-teal-600 via-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 border border-teal-500/40 hover:shadow-[0_0_12px_rgba(20,184,166,0.35)] cursor-pointer'
                                   }`}
                                   title={
                                     !obs.auditFinding?.trim()
                                       ? 'Isi kolom temuan terlebih dahulu untuk menggunakan AI'
-                                      : 'Analisa Temuan dengan AI'
+                                      : 'Analisa Temuan dengan T.A.R.O AI'
                                   }
                                 >
-                                  <Wand2 className={`w-3.5 h-3.5 ${!obs.auditFinding?.trim() ? 'text-slate-400' : 'text-amber-300'} shrink-0 ${aiLoadingIdx === idx ? 'animate-spin' : ''}`} />
-                                  <span>{aiLoadingIdx === idx ? 'Analisa AI...' : 'Auto-Isi AI'}</span>
+                                  <Sparkles className={`w-3.5 h-3.5 ${!obs.auditFinding?.trim() ? 'text-slate-400' : 'text-amber-300 group-hover/ai:rotate-12'} shrink-0 transition-transform duration-300 ${aiLoadingIdx === idx ? 'animate-spin text-white' : ''}`} />
+                                  <span>{aiLoadingIdx === idx ? 'Menganalisa...' : 'Auto-Isi AI'}</span>
                                 </button>
 
                                 <button
