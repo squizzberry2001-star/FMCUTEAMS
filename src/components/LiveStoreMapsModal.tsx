@@ -32,6 +32,12 @@ import {
   calculateHaversineKm,
   buildAdminUserPinpoints,
 } from '../utils/mapGeoUtils';
+import {
+  UserLivePresence,
+  fetchLiveUserPresencesFromCloud,
+  subscribeToLivePresences,
+  getLocalActivePresences,
+} from '../services/userLivePresenceService';
 
 interface LiveStoreMapsModalProps {
   isOpen: boolean;
@@ -113,6 +119,34 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   const [showRadiusCircle, setShowRadiusCircle] = useState<boolean>(true);
   const [showRouteLine, setShowRouteLine] = useState<boolean>(true);
   const [radiusMeters, setRadiusMeters] = useState<number>(250);
+  const [livePresences, setLivePresences] = useState<UserLivePresence[]>(() => getLocalActivePresences());
+
+  // Realtime Live Presences Subscription & Polling when modal is opened
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // 1. Initial fetch from cloud
+    fetchLiveUserPresencesFromCloud().then((res) => {
+      if (Array.isArray(res)) setLivePresences(res);
+    });
+
+    // 2. Local broadcast subscription
+    const unsubscribe = subscribeToLivePresences((updated) => {
+      setLivePresences(updated);
+    });
+
+    // 3. Periodic cloud polling every 20s
+    const pollInterval = setInterval(() => {
+      fetchLiveUserPresencesFromCloud().then((res) => {
+        if (Array.isArray(res)) setLivePresences(res);
+      });
+    }, 20000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [isOpen]);
 
   const allMasterStores = useMemo(() => getMasterStores(), []);
 
@@ -250,10 +284,17 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     if (!isAdmin) return [];
     const targetRef =
       todayVisitPoints.length > 0 ? todayVisitPoints : allScheduledStorePoints;
-    const allPoints = buildAdminUserPinpoints(users, targetRef, radiusMeters, agendas, currentUser);
+    const allPoints = buildAdminUserPinpoints(
+      users,
+      targetRef,
+      radiusMeters,
+      agendas,
+      currentUser,
+      livePresences
+    );
     if (selectedPicFilter === 'ALL') return allPoints;
     return allPoints.filter((u) => isSamePersonName(u.userName, selectedPicFilter));
-  }, [isAdmin, users, todayVisitPoints, allScheduledStorePoints, radiusMeters, selectedPicFilter, agendas, currentUser]);
+  }, [isAdmin, users, todayVisitPoints, allScheduledStorePoints, radiusMeters, selectedPicFilter, agendas, currentUser, livePresences]);
 
   // ============================================================================
   // 4. TOTAL ROUTE DISTANCE (KHUSUS HARI ACTUAL JIKA ADA VISIT)
@@ -602,13 +643,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                       ? (up.distanceToStoreMeters / 1000).toFixed(1) + ' km'
                       : up.distanceToStoreMeters + ' m'
                   } (${up.isInsideRadius ? '✅ Dalam Radius' : '🚗 Menuju Lokasi'})</div>
-                  <div><strong>Sumber GPS:</strong> ${
-                    up.gpsSource === 'LIVE_DEVICE'
-                      ? 'Perangkat Aktif (Realtime)'
-                      : up.gpsSource === 'ATTENDANCE_CHECKIN'
-                      ? 'Audit Kehadiran Toko'
-                      : 'Laporan Visit Lapangan'
-                  }</div>
+                  <div><strong>Sumber GPS:</strong> Web Aktif • GPS Menyala (Realtime)</div>
                   ${up.capturedAt ? `<div><strong>Waktu:</strong> ${up.capturedAt}</div>` : ''}
                   <div style="font-size:9.5px;color:#64748B;margin-top:2px;"><strong>Koordinat:</strong> ${up.lat.toFixed(5)}°, ${up.lng.toFixed(5)}°</div>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   LayoutDashboard,
   Calendar as CalendarIcon,
@@ -67,6 +67,13 @@ import {
   exportScheduleToTemplateExcel,
   exportMasterStoresToExcel,
 } from '../../services/scheduleExcelService';
+import {
+  UserLivePresence,
+  getLocalActivePresences,
+  fetchLiveUserPresencesFromCloud,
+  subscribeToLivePresences,
+} from '../../services/userLivePresenceService';
+import { calculateHaversineKm } from '../../utils/mapGeoUtils';
 
 interface AdminPortalProps {
   adminUser: User;
@@ -161,6 +168,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // Schedule Calendar Filter State
   const [calendarPersonFilter, setCalendarPersonFilter] = useState<string>('ALL');
+
+  // Realtime Live Presences State for Team Monitoring
+  const [livePresences, setLivePresences] = useState<UserLivePresence[]>(() => getLocalActivePresences());
+
+  useEffect(() => {
+    fetchLiveUserPresencesFromCloud().then((res) => {
+      if (Array.isArray(res)) setLivePresences(res);
+    });
+
+    const unsubscribe = subscribeToLivePresences((updated) => {
+      setLivePresences(updated);
+    });
+
+    const pollInterval = setInterval(() => {
+      fetchLiveUserPresencesFromCloud().then((res) => {
+        if (Array.isArray(res)) setLivePresences(res);
+      });
+    }, 25000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, []);
 
   // Modal State for New / Edit Agenda
   const [showAgendaModal, setShowAgendaModal] = useState(false);
@@ -1692,16 +1723,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         isSamePersonName(a.pic, u.name) &&
                         a.date === new Date().toISOString().split('T')[0]
                     );
-                    const isVisitToday = Boolean(todayAgenda && todayAgenda.category === 'VISIT');
-                    const hasActualAttendance = Boolean(
-                      todayAgenda?.completed || todayAgenda?.actualIn
+                    const liveP = livePresences.find(
+                      (p) =>
+                        isSamePersonName(p.userName, u.name) &&
+                        p.isWebActive &&
+                        p.isGpsActive &&
+                        Date.now() - p.lastSeenMs < 3 * 60 * 1000
                     );
-                    const distanceM = hasActualAttendance
-                      ? Math.round(18 + (idx % 6) * 5)
-                      : isVisitToday
-                      ? Math.round(35 + (idx % 8) * 8)
-                      : Math.round(180 + (idx % 7) * 95);
-                    const isInsideRadius = distanceM <= 50;
+                    const isOnline = Boolean(liveP);
+
+                    const todayStore = todayAgenda
+                      ? findMasterStoreByCodeOrName(todayAgenda.storeCode) ||
+                        findMasterStoreByCodeOrName(todayAgenda.location)
+                      : null;
+                    let realDistMeters: number | null = null;
+                    if (isOnline && liveP && todayStore?.lat && todayStore?.lng) {
+                      realDistMeters = Math.round(
+                        calculateHaversineKm(liveP.lat, liveP.lng, todayStore.lat, todayStore.lng) * 1000
+                      );
+                    }
+                    const isInsideRadius = realDistMeters !== null && realDistMeters <= 250;
 
                     return (
                       <div
@@ -1720,28 +1761,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold ${
-                                  isInsideRadius
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                    : todayAgenda
-                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  isOnline
+                                    ? isInsideRadius
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-teal-50 text-teal-700 border border-teal-200'
+                                    : 'bg-slate-100 text-slate-500 border border-slate-200'
                                 }`}
                               >
                                 <span
                                   className={`w-1.5 h-1.5 rounded-full ${
-                                    isInsideRadius
-                                      ? 'bg-emerald-500 animate-pulse'
-                                      : todayAgenda
-                                      ? 'bg-blue-500'
-                                      : 'bg-slate-400'
+                                    isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
                                   }`}
                                 />
                                 <span>
-                                  {isInsideRadius
-                                    ? `Di Toko (${distanceM}m)`
-                                    : todayAgenda
-                                    ? `Dalam Rute (${distanceM}m)`
-                                    : 'Standby / Off'}
+                                  {isOnline
+                                    ? isInsideRadius
+                                      ? `Di Toko (${realDistMeters}m)`
+                                      : realDistMeters !== null
+                                      ? `Online (${realDistMeters >= 1000 ? (realDistMeters / 1000).toFixed(1) + 'km' : realDistMeters + 'm'})`
+                                      : 'Online (Web Aktif)'
+                                    : 'Offline (Tidak Akses Web)'}
                                 </span>
                               </span>
 
@@ -1752,8 +1791,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               )}
                             </div>
 
-                            <span className="text-[9px] font-mono text-slate-400">
-                              GPS: -6.2{((idx * 7) % 9) + 1}4, 106.8{((idx * 5) % 9) + 1}2 • Live
+                            <span
+                              className={`text-[9px] font-mono ${
+                                isOnline ? 'text-teal-700 font-semibold' : 'text-slate-400'
+                              }`}
+                            >
+                              {isOnline && liveP
+                                ? `GPS: ${liveP.lat.toFixed(4)}, ${liveP.lng.toFixed(4)} • Live`
+                                : 'GPS: Offline • Tidak Akses Web'}
                             </span>
                           </div>
 

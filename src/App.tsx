@@ -28,6 +28,10 @@ import {
   flushOfflineAttendanceQueue,
 } from './services/actualAttendanceService';
 import { exportScheduleToTemplateExcel } from './services/scheduleExcelService';
+import {
+  startLivePresenceHeartbeat,
+  stopLivePresenceHeartbeat,
+} from './services/userLivePresenceService';
 import { Shield, ArrowLeft } from 'lucide-react';
 import { GpsEnforcerGuard } from './components/common/GpsEnforcerGuard';
 
@@ -339,6 +343,18 @@ export const App: React.FC = () => {
     } catch (e) {
       console.warn('localStorage session quota warning:', e);
     }
+  }, [user]);
+
+  // Realtime Live Presence & GPS Heartbeat (Hanya aktif saat user sedang membuka web)
+  useEffect(() => {
+    if (user) {
+      startLivePresenceHeartbeat(user);
+    } else {
+      stopLivePresenceHeartbeat();
+    }
+    return () => {
+      stopLivePresenceHeartbeat();
+    };
   }, [user]);
 
   // Handlers for User & Profile Management

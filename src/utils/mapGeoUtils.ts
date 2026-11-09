@@ -1,6 +1,7 @@
 import { MasterStore, getMasterStores, findMasterStoreByCodeOrName, isSamePersonName } from '../data/masterStoresData';
 import { ScheduleAgenda, User } from '../types';
 import { matchStoreFromLocationPart } from '../services/scheduleExcelService';
+import { UserLivePresence, getLocalActivePresences } from '../services/userLivePresenceService';
 
 // Singleton promise to load Leaflet 1.9.4 from CDN without bloating bundle
 let leafletLoadPromise: Promise<any> | null = null;
@@ -343,22 +344,27 @@ function parseGpsCoordinate(raw: string | null | undefined): { lat: number; lng:
 
 /**
  * Compute REAL field positions of users for Admin Map Monitoring.
- * ATURAN MUTLAK: Hilangkan seluruh dummy pin point. Jika user belum pernah
- * terdeteksi GPS aktual atau belum pernah mengakses web/check-in sama sekali,
- * mereka TIDAK AKAN ditampilkan di peta.
+ * ATURAN MUTLAK:
+ * Pinpoint user HANYA MUNCUL DI MAPS JIKA USER SEDANG AKSES WEB DAN GPS MENYALA.
+ * Jika tidak sedang akses web, maka TIDAK PERLU DITAMPILKAN SAMA SEKALI.
+ * Seluruh fallback riwayat audit/check-in lama dan laporan masa lalu dihapus total.
  */
 export function buildAdminUserPinpoints(
   users: User[],
   scheduledPoints: StoreGeoPoint[],
   radiusMeters: number,
   agendas: ScheduleAgenda[] = [],
-  currentUser?: User | null
+  currentUser?: User | null,
+  activePresences: UserLivePresence[] = getLocalActivePresences()
 ): UserPinpoint[] {
   const result: UserPinpoint[] = [];
   const nonAdminUsers = users.filter((u) => !u.isAdmin);
+  const now = Date.now();
+  const MAX_ONLINE_WINDOW_MS = 3 * 60 * 1000; // Maksimal 3 menit toleransi heartbeat akses web
 
-  // 1. Cek koordinat GPS perangkat aktif saat ini
+  // 1. Cek koordinat GPS perangkat sesi aktif saat ini
   let localGpsStr: string | null = null;
+  let localGpsTimestamp = 0;
   let activeSessionUserName: string | null = currentUser?.name || null;
   try {
     if (!activeSessionUserName) {
@@ -369,107 +375,62 @@ export function buildAdminUserPinpoints(
       }
     }
     localGpsStr = localStorage.getItem('fmcu_live_gps');
-  } catch {
-    // ignore storage access error
-  }
-
-  // 2. Load riwayat audit GPS kehadiran aktual dari localStorage
-  let localAttendanceMap: Record<string, { silentAudit?: any }> = {};
-  try {
-    const rawMap = localStorage.getItem('fmcu_actual_attendance_map_v2');
-    if (rawMap) localAttendanceMap = JSON.parse(rawMap);
+    localGpsTimestamp = Number(localStorage.getItem('fmcu_live_gps_timestamp') || 0);
   } catch {
     // ignore
   }
 
-  // 3. Scan riwayat laporan visit yang tersimpan di localStorage
-  const userReportGpsMap = new Map<string, { lat: number; lng: number; capturedAt?: string }>();
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('fmcu_visit_report_')) {
-        const itemRaw = localStorage.getItem(key);
-        if (itemRaw) {
-          try {
-            const report = JSON.parse(itemRaw);
-            if (report.visitorName && report.liveGps) {
-              const coords = parseGpsCoordinate(report.liveGps);
-              if (coords) {
-                userReportGpsMap.set(report.visitorName.toLowerCase().trim(), {
-                  ...coords,
-                  capturedAt: report.date || report.timestamp,
-                });
-              }
-            }
-          } catch {
-            // ignore JSON error
-          }
-        }
-      }
+  // 2. Map presensi live user yang masih segar (< 3 menit & GPS aktif)
+  const presenceMap = new Map<string, UserLivePresence>();
+  activePresences.forEach((p) => {
+    if (
+      p.isWebActive === true &&
+      p.isGpsActive === true &&
+      now - p.lastSeenMs < MAX_ONLINE_WINDOW_MS &&
+      (p.lat !== 0 || p.lng !== 0)
+    ) {
+      presenceMap.set(p.userName.toLowerCase().trim(), p);
     }
-  } catch {
-    // ignore
-  }
+  });
 
   nonAdminUsers.forEach((u) => {
     let realCoords: { lat: number; lng: number } | null = null;
-    let gpsSource: 'LIVE_DEVICE' | 'ATTENDANCE_CHECKIN' | 'VISIT_REPORT' = 'LIVE_DEVICE';
-    let gpsAccuracy: number | undefined;
+    let gpsAccuracy: number | undefined = 15;
     let capturedAt: string | undefined;
 
-    // Prioritas 1: GPS Perangkat Aktif jika pengguna saat ini sedang login & membuka web
+    // A. Pengguna Saat Ini yang Sedang Membuka Web di Browser Ini
     if (
       activeSessionUserName &&
       isSamePersonName(activeSessionUserName, u.name) &&
       localGpsStr
     ) {
-      const parsed = parseGpsCoordinate(localGpsStr);
-      if (parsed) {
-        realCoords = parsed;
-        gpsSource = 'LIVE_DEVICE';
-        gpsAccuracy = 15;
-        capturedAt = 'Sekarang (Realtime Aktif)';
-      }
-    }
-
-    // Prioritas 2: Riwayat Audit GPS Kehadiran Aktual (Check-In / Check-Out)
-    if (!realCoords) {
-      const userAgendas = agendas.filter((ag) => isSamePersonName(ag.pic, u.name));
-      for (const ag of userAgendas) {
-        const audit = ag.silentAudit || localAttendanceMap[ag.id]?.silentAudit;
-        if (audit?.inLat && audit?.inLng && (audit.inLat !== 0 || audit.inLng !== 0)) {
-          realCoords = { lat: audit.inLat, lng: audit.inLng };
-          gpsSource = 'ATTENDANCE_CHECKIN';
-          gpsAccuracy = audit.inAccuracyMeters;
-          capturedAt = ag.actualIn || ag.date;
-          break;
-        } else if (audit?.outLat && audit?.outLng && (audit.outLat !== 0 || audit.outLng !== 0)) {
-          realCoords = { lat: audit.outLat, lng: audit.outLng };
-          gpsSource = 'ATTENDANCE_CHECKIN';
-          gpsAccuracy = audit.outAccuracyMeters;
-          capturedAt = ag.actualOut || ag.date;
-          break;
+      // Pastikan GPS masih segar (diperbarui saat akses web aktif)
+      const isFresh = localGpsTimestamp > 0 ? now - localGpsTimestamp < MAX_ONLINE_WINDOW_MS : true;
+      if (isFresh) {
+        const parsed = parseGpsCoordinate(localGpsStr);
+        if (parsed) {
+          realCoords = parsed;
+          capturedAt = 'Online Sekarang (Web Aktif + GPS Menyala)';
         }
       }
     }
 
-    // Prioritas 3: GPS dari Laporan Visit Lapangan yang Disimpan
+    // B. Pengguna Lain yang Sedang Membuka Web di Perangkat Lain (Live Heartbeat Cloud / Local)
     if (!realCoords) {
-      const reportCoords = userReportGpsMap.get(u.name.toLowerCase().trim());
-      if (reportCoords) {
-        realCoords = { lat: reportCoords.lat, lng: reportCoords.lng };
-        gpsSource = 'VISIT_REPORT';
-        capturedAt = reportCoords.capturedAt;
+      const activeP = presenceMap.get(u.name.toLowerCase().trim());
+      if (activeP) {
+        realCoords = { lat: activeP.lat, lng: activeP.lng };
+        gpsAccuracy = activeP.accuracyMeters || 15;
+        capturedAt = 'Online Sekarang (Web Aktif + GPS Menyala)';
       }
     }
 
-    // ATURAN MUTLAK: Jika user BELUM terdeteksi GPS aktual atau belum akses web, SKIP!
-    // Tidak ada koordinat rekaan / dummy pinpoint sama sekali.
+    // ATURAN MUTLAK: JIKA TIDAK SEDANG AKSES WEB ATAU GPS MATI -> JANGAN TAMPILKAN!
     if (!realCoords) {
       return;
     }
 
-    // Cari toko penugasan pengguna untuk menghitung jarak aktual ke toko
+    // Cari target toko penugasan untuk jarak
     const userStore = scheduledPoints.find((p) => isSamePersonName(p.agendaPic, u.name));
     const targetStore = userStore || scheduledPoints[0];
 
@@ -487,7 +448,7 @@ export function buildAdminUserPinpoints(
       targetStoreName: targetStore?.name || 'Area Operasional FMCU',
       distanceToStoreMeters: distMeters,
       isInsideRadius: targetStore ? distMeters <= radiusMeters : false,
-      gpsSource,
+      gpsSource: 'LIVE_DEVICE',
       gpsAccuracy,
       capturedAt,
       isRealGps: true,
