@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, ExternalLink, Download, Cloud, FileText, ChevronLeft, Store } from 'lucide-react';
+import { X, ExternalLink, Download, Cloud, FileText, ChevronLeft, Folder, Calendar } from 'lucide-react';
 import { VisitReportData } from '../../types';
-import { generatePdfDoc } from '../../services/pdfGeneratorService';
+import { generatePdfDoc, formatDateDdMmYyyy, formatIndonesianDate } from '../../services/pdfGeneratorService';
 import { FMCU_REPORT_GDRIVE_FOLDER_URL } from '../../services/pdfGeneratorService';
 
 interface ExecutiveReportPreviewModalProps {
@@ -10,6 +10,9 @@ interface ExecutiveReportPreviewModalProps {
   reportData?: VisitReportData | null;
   gdrivePdfUrl?: string;
   gdriveEmbedUrl?: string;
+  storeFolderName?: string;
+  pdfFileName?: string;
+  gdriveSavedDate?: string;
 }
 
 export const ExecutiveReportPreviewModal: React.FC<ExecutiveReportPreviewModalProps> = ({
@@ -18,6 +21,9 @@ export const ExecutiveReportPreviewModal: React.FC<ExecutiveReportPreviewModalPr
   reportData,
   gdrivePdfUrl,
   gdriveEmbedUrl,
+  storeFolderName,
+  pdfFileName,
+  gdriveSavedDate,
 }) => {
   const [blobPdfUrl, setBlobPdfUrl] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -58,21 +64,39 @@ export const ExecutiveReportPreviewModal: React.FC<ExecutiveReportPreviewModalPr
 
   if (!isOpen || !reportData) return null;
 
+  const cleanStore = String(reportData.storeName || 'STORE').replace(/[/\\:*?"<>|]/g, ' ').trim();
+  const resolvedFolderName =
+    storeFolderName ||
+    (reportData.storeCode ? `${reportData.storeCode} - ${cleanStore}` : cleanStore);
+
+  const resolvedFileName =
+    pdfFileName ||
+    `Hasil Kunjungan-${cleanStore}-${formatDateDdMmYyyy(reportData.visitDate)}.pdf`;
+
+  const resolvedSavedDate =
+    gdriveSavedDate ||
+    (reportData.updatedAtMs
+      ? `${formatIndonesianDate(
+          new Date(reportData.updatedAtMs).toISOString().split('T')[0],
+          false
+        )}, ${String(new Date(reportData.updatedAtMs).getHours()).padStart(2, '0')}:${String(
+          new Date(reportData.updatedAtMs).getMinutes()
+        ).padStart(2, '0')} WIB`
+      : `${formatIndonesianDate(reportData.visitDate, false)}`);
+
   const pdfSrc = gdriveEmbedUrl || blobPdfUrl || gdrivePdfUrl;
 
   const handleDownload = async () => {
     try {
       const doc = await generatePdfDoc(reportData);
-      doc.save(
-        `Laporan_Visit_${reportData.storeCode || 'FMCU'}_${reportData.visitDate || '2026'}.pdf`
-      );
+      doc.save(resolvedFileName);
     } catch (e) {
       console.error('Download error:', e);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-sm flex flex-col overflow-hidden animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex flex-col overflow-hidden animate-in fade-in duration-200">
       {/* Top Header Bar */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-white shrink-0">
         <div className="flex items-center gap-3 min-w-0">
@@ -86,20 +110,37 @@ export const ExecutiveReportPreviewModal: React.FC<ExecutiveReportPreviewModalPr
           </button>
 
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[10px] font-black">
                 <Cloud className="w-3 h-3" />
                 <span>Google Drive Cloud PDF</span>
               </span>
-              <span className="text-xs sm:text-sm font-black text-white truncate">
-                Toko {reportData.storeName} (#{reportData.storeCode})
+
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800/80">
+                <FileText className="w-3 h-3 text-emerald-400" />
+                <span className="truncate max-w-[280px]">{resolvedFileName}</span>
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-0.5 truncate">
-              PIC: <strong className="text-slate-200">{reportData.visitorName}</strong> • Tanggal:{' '}
-              {reportData.visitDate} • Status:{' '}
-              <span className="text-emerald-400 font-bold">{reportData.status || 'SUBMITTED'}</span>
-            </p>
+
+            <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-400 flex-wrap">
+              <span className="flex items-center gap-1 text-slate-300">
+                <Folder className="w-3 h-3 text-amber-400" />
+                <span>Folder: <strong>{resolvedFolderName}</strong></span>
+              </span>
+
+              <span>•</span>
+
+              <span>
+                PIC: <strong className="text-slate-200">{reportData.visitorName}</strong>
+              </span>
+
+              <span>•</span>
+
+              <span className="flex items-center gap-1 text-emerald-300 font-semibold">
+                <Calendar className="w-3 h-3 text-emerald-400" />
+                <span>Tgl Simpan GDrive: {resolvedSavedDate}</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -120,7 +161,7 @@ export const ExecutiveReportPreviewModal: React.FC<ExecutiveReportPreviewModalPr
             className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white text-[11px] font-extrabold flex items-center gap-1.5 transition shadow-sm"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            <span>Buka di Drive</span>
+            <span>Buka di GDrive</span>
           </a>
 
           <button
@@ -139,7 +180,7 @@ export const ExecutiveReportPreviewModal: React.FC<ExecutiveReportPreviewModalPr
         {isGeneratingPdf && !gdriveEmbedUrl ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-3">
             <div className="w-9 h-9 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs font-semibold">Memuat dokumen laporan dari Google Drive...</p>
+            <p className="text-xs font-semibold">Memuat dokumen hasil kunjungan dari Google Drive...</p>
           </div>
         ) : (
           <iframe

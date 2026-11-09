@@ -296,11 +296,20 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
       }
 
       const remoteStories = await fetchActiveStoriesFromGasGDrive();
-      if (mounted && remoteStories && remoteStories.length > 0) {
+      if (mounted && remoteStories) {
         const validRemote = remoteStories.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id));
         setStories((prev) => {
+          const remoteIds = new Set(validRemote.map((r) => r.id));
           const map = new Map<string, StorySlide>();
-          prev.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id)).forEach((s) => map.set(s.id, s));
+
+          // Keep local stories from prev ONLY IF they are in validRemote OR created less than 20s ago (in-flight upload)
+          prev.forEach((s) => {
+            const isFreshLocal = nowMs - (s.createdAtMs || 0) < 20000;
+            if (!isStoryDeleted(s.id) && isStoryActive24h(s, nowMs) && (remoteIds.has(s.id) || isFreshLocal)) {
+              map.set(s.id, s);
+            }
+          });
+
           validRemote.forEach((item) => {
             const existing = map.get(item.id);
             if (existing) {
@@ -321,7 +330,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
 
     loadAndSync();
 
-    // 1. Fast background interval (6 seconds) for seamless cross-device story updates
+    // 1. Ultra-fast background interval (2.5 seconds) for seamless real-time cross-device updates
     const timer = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         const nowMs = Date.now();
@@ -331,7 +340,7 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
         });
         loadAndSync();
       }
-    }, 6000);
+    }, 2500);
 
     // 2. Immediate sync on tab focus, online, and visibility change
     const handleImmediateSync = () => {
@@ -353,30 +362,84 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     };
   }, []);
 
-  // Real-time local BroadcastChannel for instant story reaction sync across tabs (0ms)
+  // Real-time local BroadcastChannel + Storage Event for instant story sync (0ms)
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
     let channel: BroadcastChannel | null = null;
     try {
-      channel = new BroadcastChannel('fmcu_story_reaction_channel');
-      channel.onmessage = (event) => {
-        if (event.data?.type === 'STORY_REACTION' && event.data.storyId && event.data.reactions) {
-          setStories((prev) =>
-            prev.map((s) =>
-              s.id === event.data.storyId
-                ? { ...s, reactions: event.data.reactions }
-                : s
-            )
-          );
-        } else if (event.data?.type === 'STORY_DELETED' && event.data.storyId) {
-          setStories((prev) => prev.filter((s) => s.id !== event.data.storyId));
-        }
-      };
+      if (typeof BroadcastChannel !== 'undefined') {
+        channel = new BroadcastChannel('fmcu_story_reaction_channel');
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'STORY_POSTED' && event.data.story) {
+            const posted = event.data.story;
+            if (!isStoryDeleted(posted.id)) {
+              setStories((prev) => {
+                if (prev.some((s) => s.id === posted.id)) return prev;
+                return [posted, ...prev].sort((a, b) => b.createdAtMs - a.createdAtMs);
+              });
+            }
+          } else if (event.data?.type === 'STORY_DELETED' && event.data.storyId) {
+            setStories((prev) => prev.filter((s) => s.id !== event.data.storyId));
+          } else if (event.data?.type === 'STORY_REACTION' && event.data.storyId && event.data.reactions) {
+            setStories((prev) =>
+              prev.map((s) =>
+                s.id === event.data.storyId
+                  ? { ...s, reactions: event.data.reactions }
+                  : s
+              )
+            );
+          }
+        };
+      }
     } catch {
       // ignore
     }
+
+    const handleCustomDeleted = (e: any) => {
+      const id = e?.detail?.storyId;
+      if (id) {
+        setStories((prev) => prev.filter((s) => s.id !== id));
+      }
+    };
+
+    const handleCustomPosted = (e: any) => {
+      const posted = e?.detail?.story;
+      if (posted && !isStoryDeleted(posted.id)) {
+        setStories((prev) => {
+          if (prev.some((s) => s.id === posted.id)) return prev;
+          return [posted, ...prev].sort((a, b) => b.createdAtMs - a.createdAtMs);
+        });
+      }
+    };
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'fmcu_deleted_story_ids_v2' && e.newValue) {
+        try {
+          const deleted = JSON.parse(e.newValue);
+          if (Array.isArray(deleted)) {
+            const set = new Set(deleted);
+            setStories((prev) => prev.filter((s) => !set.has(s.id)));
+          }
+        } catch {}
+      } else if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            const nowMs = Date.now();
+            setStories(parsed.filter((s) => isStoryActive24h(s, nowMs) && !isStoryDeleted(s.id)));
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener('fmcu:story:deleted', handleCustomDeleted);
+    window.addEventListener('fmcu:story:posted', handleCustomPosted);
+    window.addEventListener('storage', handleStorageEvent);
+
     return () => {
       channel?.close();
+      window.removeEventListener('fmcu:story:deleted', handleCustomDeleted);
+      window.removeEventListener('fmcu:story:posted', handleCustomPosted);
+      window.removeEventListener('storage', handleStorageEvent);
     };
   }, []);
 
@@ -1160,6 +1223,20 @@ export const EmployeeStoriesBar: React.FC<EmployeeStoriesBarProps> = ({
     recordDeletedStoryId(storyId);
     removeStoryFromIdb(storyId);
     setStories((prev) => prev.filter((s) => s.id !== storyId));
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const channel = new BroadcastChannel('fmcu_story_reaction_channel');
+        channel.postMessage({ type: 'STORY_DELETED', storyId });
+        channel.close();
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('fmcu:story:deleted', { detail: { storyId } }));
+      }
+    } catch {
+      // ignore
+    }
+
     deleteStoryFromGasGDrive(storyId);
     if (currentViewerSlides.length <= 1) {
       closeViewer();

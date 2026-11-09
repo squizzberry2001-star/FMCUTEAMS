@@ -205,12 +205,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     reportData: VisitReportData;
     gdrivePdfUrl: string;
     gdriveEmbedUrl?: string;
+    storeFolderName?: string;
+    pdfFileName?: string;
+    gdriveSavedDate?: string;
   } | null>(null);
 
   useEffect(() => {
-    fetchAllVisitReportsFromCloud(true).then((res) => {
-      if (Array.isArray(res)) setCloudReports(res);
-    });
+    let active = true;
+    const fetchReports = () => {
+      fetchAllVisitReportsFromCloud(true).then((res) => {
+        if (active && Array.isArray(res)) setCloudReports(res);
+      });
+    };
+
+    fetchReports();
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchReports();
+    }, 10000);
+
+    window.addEventListener('focus', fetchReports);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', fetchReports);
+    };
   }, []);
 
   // Modal State for New / Edit Agenda
@@ -2394,6 +2412,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         reportData={executivePreviewReport?.reportData || null}
         gdrivePdfUrl={executivePreviewReport?.gdrivePdfUrl}
         gdriveEmbedUrl={executivePreviewReport?.gdriveEmbedUrl}
+        storeFolderName={executivePreviewReport?.storeFolderName}
+        pdfFileName={executivePreviewReport?.pdfFileName}
+        gdriveSavedDate={executivePreviewReport?.gdriveSavedDate}
       />
     </div>
   );

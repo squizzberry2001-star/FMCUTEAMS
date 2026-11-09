@@ -23,6 +23,7 @@ import { getLocalDateYmd } from '../../utils/mapGeoUtils';
 import { getMondayOfWeek, getFullWeekDays } from '../../services/scheduleExcelService';
 import { resolveVisitedStoreReportData } from '../HistoryView';
 import { getGDriveReportRegistryEntry } from '../../services/pdfGeneratorService';
+import { findVerifiedGDriveReport, VerifiedGDriveReportMeta } from '../../services/gdriveReportLiveService';
 
 interface ExecutiveTeamViewProps {
   currentUser: User;
@@ -35,6 +36,9 @@ interface ExecutiveTeamViewProps {
     reportData: VisitReportData;
     gdrivePdfUrl: string;
     gdriveEmbedUrl?: string;
+    storeFolderName?: string;
+    pdfFileName?: string;
+    gdriveSavedDate?: string;
   }) => void;
 }
 
@@ -152,23 +156,23 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
   }, [selectedUser, agendas, modalPeriodFilter, modalMonthOffset, modalCategoryFilter, todayYmd]);
 
   const handlePreviewReport = (agenda: ScheduleAgenda) => {
-    const registry = getGDriveReportRegistryEntry({
+    const verified = findVerifiedGDriveReport({
       storeCode: agenda.storeCode,
       storeName: agenda.storeName || agenda.location,
       agendaId: agenda.id,
+      visitDate: agenda.date,
+      cloudReports,
     });
 
-    const resolved = resolveVisitedStoreReportData({
-      storeCode: agenda.storeCode,
-      storeName: agenda.storeName || agenda.location,
-      agenda,
-      currentUserName: agenda.pic,
-    });
+    if (!verified) return;
 
     onOpenReportPreview({
-      reportData: resolved.reportData,
-      gdrivePdfUrl: registry?.pdfUrl || resolved.gdrivePdfUrl,
-      gdriveEmbedUrl: registry?.gdriveEmbedUrl || resolved.gdriveEmbedUrl,
+      reportData: verified.reportData,
+      gdrivePdfUrl: verified.gdrivePdfUrl,
+      gdriveEmbedUrl: verified.gdriveEmbedUrl,
+      storeFolderName: verified.storeFolderName,
+      pdfFileName: verified.pdfFileName,
+      gdriveSavedDate: verified.gdriveSavedDate,
     });
   };
 
@@ -445,6 +449,16 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
                     item.category === 'NSO' ||
                     Boolean(item.storeCode);
 
+                  const verifiedReport = isVisit
+                    ? findVerifiedGDriveReport({
+                        storeCode: item.storeCode,
+                        storeName: item.storeName || item.location,
+                        agendaId: item.id,
+                        visitDate: item.date,
+                        cloudReports,
+                      })
+                    : null;
+
                   return (
                     <div
                       key={item.id}
@@ -478,10 +492,16 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
                             </>
                           )}
                         </div>
+
+                        {verifiedReport && verifiedReport.gdriveSavedDate && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-emerald-600 font-semibold">
+                            <span>GDrive: {verifiedReport.gdriveSavedDate}</span>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Preview Laporan Action */}
-                      {isVisit && (
+                      {/* Preview Laporan Action (ONLY IF VERIFIED IN GDRIVE) */}
+                      {isVisit && verifiedReport && (
                         <div className="shrink-0 self-end sm:self-center">
                           <button
                             type="button"

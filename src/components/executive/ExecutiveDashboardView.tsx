@@ -29,6 +29,7 @@ import { resolveVisitedStoreReportData } from '../HistoryView';
 import { getLocalDateYmd } from '../../utils/mapGeoUtils';
 import { getMondayOfWeek, getFullWeekDays } from '../../services/scheduleExcelService';
 import { getGDriveReportRegistryEntry, FMCU_REPORT_GDRIVE_FOLDER_URL } from '../../services/pdfGeneratorService';
+import { findVerifiedGDriveReport, VerifiedGDriveReportMeta } from '../../services/gdriveReportLiveService';
 
 interface ExecutiveDashboardViewProps {
   currentUser: User;
@@ -43,6 +44,9 @@ interface ExecutiveDashboardViewProps {
     reportData: VisitReportData;
     gdrivePdfUrl: string;
     gdriveEmbedUrl?: string;
+    storeFolderName?: string;
+    pdfFileName?: string;
+    gdriveSavedDate?: string;
   }) => void;
 }
 
@@ -60,6 +64,7 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
   const [activityPeriod, setActivityPeriod] = useState<'ALL' | 'MONTH' | 'WEEK' | 'TODAY'>('ALL');
   const [historySearch, setHistorySearch] = useState('');
   const [historyFilter, setHistoryFilter] = useState<'ALL' | 'GDRIVE_ONLY'>('ALL');
+  const [historyCategoryTab, setHistoryCategoryTab] = useState<'VISIT' | 'NSO' | 'ALL'>('VISIT');
   const [selectedRmFilter, setSelectedRmFilter] = useState<string>('ALL');
 
   const todayYmd = useMemo(() => getLocalDateYmd(), []);
@@ -223,7 +228,7 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
     return Array.from(rmMap.values()).sort((a, b) => b.storeCount - a.storeCount);
   }, [stores, agendas]);
 
-  // 6. COMPLETED STORE VISITS WITH GDRIVE PREVIEW
+  // 6. COMPLETED STORE VISITS WITH REAL-TIME GDRIVE PREVIEW
   const completedVisits = useMemo(() => {
     // Collect all visits that have report or completed or past date
     const visitAgendas = agendas
@@ -235,39 +240,48 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
       });
 
     return visitAgendas.map((ag) => {
-      // Check if report exists in local or cloud
-      const hasLocalReport =
-        typeof window !== 'undefined' &&
-        Boolean(localStorage.getItem(`fmcu_visit_report_${ag.id}`));
-
-      const registry = getGDriveReportRegistryEntry({
+      // Find verified report from real-time Google Drive / Cloud Vault
+      const verifiedMeta = findVerifiedGDriveReport({
         storeCode: ag.storeCode,
         storeName: ag.storeName || ag.location,
         agendaId: ag.id,
+        visitDate: ag.date,
+        cloudReports,
       });
 
-      const hasCloudReport = cloudReports.some(
-        (cr) =>
-          cr.agendaId === ag.id ||
-          (ag.storeCode &&
-            String(cr.storeCode).toUpperCase() === String(ag.storeCode).toUpperCase() &&
-            cr.visitDate === ag.date)
-      );
-
-      const hasReport = Boolean(hasLocalReport || registry || hasCloudReport || ag.completed);
+      const isNso =
+        ag.category === 'NSO' ||
+        String(ag.title || '').toUpperCase().includes('NSO') ||
+        String(ag.location || '').toUpperCase().includes('NSO');
 
       return {
         agenda: ag,
-        hasReport,
-        gdrivePdfUrl: registry?.pdfUrl || FMCU_REPORT_GDRIVE_FOLDER_URL,
-        gdriveEmbedUrl: registry?.gdriveEmbedUrl,
+        isNso,
+        verifiedMeta,
+        hasReport: Boolean(verifiedMeta),
+        gdrivePdfUrl: verifiedMeta?.gdrivePdfUrl || FMCU_REPORT_GDRIVE_FOLDER_URL,
+        gdriveEmbedUrl: verifiedMeta?.gdriveEmbedUrl,
+        storeFolderName: verifiedMeta?.storeFolderName,
+        pdfFileName: verifiedMeta?.pdfFileName,
+        gdriveSavedDate: verifiedMeta?.gdriveSavedDate,
       };
     });
   }, [agendas, todayYmd, cloudReports]);
 
+  const visitCount = useMemo(
+    () => completedVisits.filter((v) => !v.isNso).length,
+    [completedVisits]
+  );
+  const nsoCount = useMemo(
+    () => completedVisits.filter((v) => v.isNso).length,
+    [completedVisits]
+  );
+
   const filteredCompletedVisits = useMemo(() => {
     const q = historySearch.trim().toLowerCase();
     return completedVisits.filter((item) => {
+      if (historyCategoryTab === 'VISIT' && item.isNso) return false;
+      if (historyCategoryTab === 'NSO' && !item.isNso) return false;
       if (historyFilter === 'GDRIVE_ONLY' && !item.hasReport) return false;
       if (!q) return true;
       const ag = item.agenda;
@@ -279,20 +293,18 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
         (ag.pic || '').toLowerCase().includes(q)
       );
     });
-  }, [completedVisits, historySearch, historyFilter]);
+  }, [completedVisits, historySearch, historyFilter, historyCategoryTab]);
 
   const handlePreviewReport = (item: (typeof completedVisits)[0]) => {
-    const resolved = resolveVisitedStoreReportData({
-      storeCode: item.agenda.storeCode,
-      storeName: item.agenda.storeName || item.agenda.location,
-      agenda: item.agenda,
-      currentUserName: item.agenda.pic,
-    });
+    if (!item.hasReport || !item.verifiedMeta) return;
 
     onOpenReportPreview({
-      reportData: resolved.reportData,
-      gdrivePdfUrl: item.gdrivePdfUrl || resolved.gdrivePdfUrl,
-      gdriveEmbedUrl: item.gdriveEmbedUrl || resolved.gdriveEmbedUrl,
+      reportData: item.verifiedMeta.reportData,
+      gdrivePdfUrl: item.verifiedMeta.gdrivePdfUrl,
+      gdriveEmbedUrl: item.verifiedMeta.gdriveEmbedUrl,
+      storeFolderName: item.verifiedMeta.storeFolderName,
+      pdfFileName: item.verifiedMeta.pdfFileName,
+      gdriveSavedDate: item.verifiedMeta.gdriveSavedDate,
     });
   };
 
@@ -744,13 +756,13 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
               </h2>
             </div>
             <p className="text-xs font-semibold text-slate-500 mt-0.5">
-              Daftar Log Kunjungan Toko &amp; Pratinjau Dokumen PDF dari Google Drive
+              Daftar Log Kunjungan Toko &amp; Pratinjau Dokumen PDF Realtime dari Google Drive
             </p>
           </div>
 
           {/* Search & Filter Bar */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px]">
+            <div className="relative min-w-[180px]">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -773,19 +785,61 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>Hanya yang Ada Laporan</span>
+              <span>Ada Laporan GDrive</span>
             </button>
           </div>
+        </div>
+
+        {/* Separated Classification Tabs: Store Visit vs NSO Opening */}
+        <div className="pt-4 flex items-center gap-2 flex-wrap border-b border-slate-100 pb-3">
+          <span className="text-xs font-bold text-slate-400 mr-1">Klasifikasi:</span>
+          <button
+            type="button"
+            onClick={() => setHistoryCategoryTab('VISIT')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+              historyCategoryTab === 'VISIT'
+                ? 'bg-[#10B981] text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            <Store className="w-3.5 h-3.5" />
+            <span>Store Visit ({visitCount})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setHistoryCategoryTab('NSO')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+              historyCategoryTab === 'NSO'
+                ? 'bg-sky-600 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>NSO Opening ({nsoCount})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setHistoryCategoryTab('ALL')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+              historyCategoryTab === 'ALL'
+                ? 'bg-[#3A657C] text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            <span>Semua Kunjungan ({completedVisits.length})</span>
+          </button>
         </div>
 
         {/* Completed Visits List Table / Cards */}
         <div className="pt-4 space-y-2.5">
           {filteredCompletedVisits.length === 0 ? (
             <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs font-semibold">
-              Tidak ada riwayat kunjungan yang sesuai pencarian atau filter.
+              Tidak ada riwayat kunjungan {historyCategoryTab === 'VISIT' ? 'Store Visit' : historyCategoryTab === 'NSO' ? 'NSO' : ''} yang sesuai filter.
             </div>
           ) : (
-            filteredCompletedVisits.slice(0, 10).map((item) => {
+            filteredCompletedVisits.slice(0, 15).map((item) => {
               const ag = item.agenda;
               return (
                 <div
@@ -793,20 +847,38 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
                   className="p-3.5 sm:p-4 rounded-2xl bg-[#F8FAFC] hover:bg-white border border-slate-200/80 hover:border-slate-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
                 >
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
-                      <Store className="w-4 h-4" />
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                        item.isNso
+                          ? 'bg-sky-100 text-sky-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {item.isNso ? <Sparkles className="w-4 h-4" /> : <Store className="w-4 h-4" />}
                     </div>
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-black text-slate-900 truncate">
+                        <span
+                          className={`text-[9.5px] font-black px-2 py-0.5 rounded-md ${
+                            item.isNso
+                              ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}
+                        >
+                          {item.isNso ? 'NSO' : 'VISIT STORE'}
+                        </span>
+
+                        <span className="text-xs sm:text-sm font-black text-slate-900 truncate">
                           {ag.storeName || ag.location || ag.title}
                         </span>
+
                         {ag.storeCode && (
                           <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
                             #{ag.storeCode}
                           </span>
                         )}
+
                         <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           <CheckCircle2 className="w-3 h-3" />
                           Selesai
@@ -817,10 +889,24 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
                         PIC: <strong className="text-slate-700 font-bold">{ag.pic}</strong> • Tanggal:{' '}
                         {ag.date} ({ag.time || '08:30'} WIB)
                       </p>
+
+                      {/* Realtime GDrive Metadata if verified report is available */}
+                      {item.hasReport && item.gdriveSavedDate && (
+                        <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
+                          <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
+                            GDrive: {item.gdriveSavedDate}
+                          </span>
+                          {item.pdfFileName && (
+                            <span className="font-mono text-slate-500 truncate max-w-[240px]">
+                              {item.pdfFileName}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Action Button: Preview Laporan */}
+                  {/* Action Button: Preview Laporan (ONLY DISPLAYED IF REPORT EXISTS IN GDRIVE) */}
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                     {item.hasReport ? (
                       <button
@@ -833,11 +919,7 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
                         <span>Preview Laporan</span>
                         <ExternalLink className="w-3 h-3" />
                       </button>
-                    ) : (
-                      <span className="text-[10.5px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/80">
-                        Menunggu Laporan
-                      </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               );
@@ -845,10 +927,10 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
           )}
         </div>
 
-        {filteredCompletedVisits.length > 10 && (
+        {filteredCompletedVisits.length > 15 && (
           <div className="text-center pt-3">
             <span className="text-xs font-bold text-slate-500">
-              Menampilkan 10 dari {filteredCompletedVisits.length} riwayat kunjungan selesai
+              Menampilkan 15 dari {filteredCompletedVisits.length} riwayat kunjungan selesai
             </span>
           </div>
         )}
