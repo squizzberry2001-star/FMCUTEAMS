@@ -37,13 +37,18 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import confetti from 'canvas-confetti';
-import { ScheduleAgenda, ScheduleCategory, User } from '../../types';
+import { ScheduleAgenda, ScheduleCategory, User, VisitReportData } from '../../types';
 import excelSeed from '../../data/excelScheduleSeed.json';
 import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from '../visit/HoldingTimeR23Modal';
 import { ExecutiveAnalyticsSuite } from './ExecutiveAnalyticsSuite';
 import { EmployeeStoriesBar } from '../EmployeeStoriesBar';
 import { CalendarScheduleView } from '../CalendarScheduleView';
+import { ExecutiveDashboardView } from '../executive/ExecutiveDashboardView';
+import { ExecutiveCalendarView } from '../executive/ExecutiveCalendarView';
+import { ExecutiveTeamView } from '../executive/ExecutiveTeamView';
+import { ExecutiveReportPreviewModal } from '../executive/ExecutiveReportPreviewModal';
+import { fetchAllVisitReportsFromCloud } from '../../services/crossDeviceVisitSyncService';
 import {
   HoldingTimeStandards,
   getActiveHoldingTimeStandards,
@@ -192,6 +197,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       unsubscribe();
       clearInterval(pollInterval);
     };
+  }, []);
+
+  // Cloud GDrive Visit Reports for In-Web Preview
+  const [cloudReports, setCloudReports] = useState<(VisitReportData & { updatedAtMs?: number })[]>([]);
+  const [executivePreviewReport, setExecutivePreviewReport] = useState<{
+    reportData: VisitReportData;
+    gdrivePdfUrl: string;
+    gdriveEmbedUrl?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetchAllVisitReportsFromCloud(true).then((res) => {
+      if (Array.isArray(res)) setCloudReports(res);
+    });
   }, []);
 
   // Modal State for New / Edit Agenda
@@ -833,14 +852,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   };
 
   // Top Navigation Items (Matching Lordbank Reference: Dashboard | Calendar | Projects/Stores | Team | Documents)
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'schedules', label: 'Calendar & Jadwal', icon: CalendarIcon },
-    { id: 'stores', label: 'Master Toko (610)', icon: Store },
-    { id: 'users', label: 'Team (36)', icon: Users },
-    { id: 'import-excel', label: 'Documents & Excel', icon: FileSpreadsheet },
-    { id: 'holding-time', label: 'Standar R23', icon: Clock },
-  ] as const;
+  // Untuk Executive Viewer: Sembunyikan halaman Documents & Excel
+  const navItems = useMemo(() => {
+    if (isReadOnly) {
+      return [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'schedules', label: 'Calendar & Jadwal', icon: CalendarIcon },
+        { id: 'stores', label: 'Master Toko (610)', icon: Store },
+        { id: 'users', label: 'Team (36)', icon: Users },
+        { id: 'holding-time', label: 'Standar R23', icon: Clock },
+      ] as const;
+    }
+    return [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'schedules', label: 'Calendar & Jadwal', icon: CalendarIcon },
+      { id: 'stores', label: 'Master Toko (610)', icon: Store },
+      { id: 'users', label: 'Team (36)', icon: Users },
+      { id: 'import-excel', label: 'Documents & Excel', icon: FileSpreadsheet },
+      { id: 'holding-time', label: 'Standar R23', icon: Clock },
+    ] as const;
+  }, [isReadOnly]);
 
   const handleGlobalSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -939,14 +970,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={onSwitchToUserView}
-              className="w-10 h-10 rounded-full bg-[#F3F5F8] hover:bg-[#EAECEF] text-slate-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
-              title="Pratinjau Tampilan Sisi User / Lapangan"
-            >
-              <Eye className="w-4 h-4 text-slate-700" />
-            </button>
+            {/* Tombol Pratinjau Mode User: Sembunyikan untuk Executive Viewer */}
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={onSwitchToUserView}
+                className="w-10 h-10 rounded-full bg-[#F3F5F8] hover:bg-[#EAECEF] text-slate-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
+                title="Pratinjau Tampilan Sisi User / Lapangan"
+              >
+                <Eye className="w-4 h-4 text-slate-700" />
+              </button>
+            )}
 
             {onReplaySplash && (
               <button
@@ -1033,26 +1067,40 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <EmployeeStoriesBar currentUser={adminUser} agendas={agendas} users={users} className="w-full" />
             </div>
 
-            <ExecutiveAnalyticsSuite
-              currentUser={adminUser}
-              isReadOnly={isReadOnly}
-              agendas={agendas}
-              users={users}
-              stores={allStoresWithOwnership}
-              bestieCount={bestieAssignments.length}
-              onNavigateTab={(tab) => setActiveTab(tab)}
-              onOpenCreateAgenda={handleOpenCreateModal}
-              onOpenEditAgenda={handleOpenEditModal}
-              onDeleteAgenda={onDeleteAgenda}
-              onExportExcel={() => exportScheduleToTemplateExcel(agendas, users, 'ALL')}
-              onOpenLiveMaps={onOpenLiveMaps}
-              onSwitchToUserView={onSwitchToUserView}
-              onSelectBestieStores={(bestieName) => {
-                setSelectedBestieFilter(bestieName);
-                setStoreScopeFilter('OWNED');
-                setActiveTab('stores');
-              }}
-            />
+            {isReadOnly ? (
+              <ExecutiveDashboardView
+                currentUser={adminUser}
+                agendas={agendas}
+                users={users}
+                stores={allStoresWithOwnership}
+                livePresences={livePresences}
+                cloudReports={cloudReports}
+                onOpenLiveMaps={onOpenLiveMaps}
+                onNavigateTab={(tab) => setActiveTab(tab)}
+                onOpenReportPreview={setExecutivePreviewReport}
+              />
+            ) : (
+              <ExecutiveAnalyticsSuite
+                currentUser={adminUser}
+                isReadOnly={isReadOnly}
+                agendas={agendas}
+                users={users}
+                stores={allStoresWithOwnership}
+                bestieCount={bestieAssignments.length}
+                onNavigateTab={(tab) => setActiveTab(tab)}
+                onOpenCreateAgenda={handleOpenCreateModal}
+                onOpenEditAgenda={handleOpenEditModal}
+                onDeleteAgenda={onDeleteAgenda}
+                onExportExcel={() => exportScheduleToTemplateExcel(agendas, users, 'ALL')}
+                onOpenLiveMaps={onOpenLiveMaps}
+                onSwitchToUserView={onSwitchToUserView}
+                onSelectBestieStores={(bestieName) => {
+                  setSelectedBestieFilter(bestieName);
+                  setStoreScopeFilter('OWNED');
+                  setActiveTab('stores');
+                }}
+              />
+            )}
           </div>
         )}
 
@@ -1432,40 +1480,50 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
 
-        {/* TAB 3: CALENDAR & MASTER SCHEDULE MANAGEMENT (UNIFIED WITH USER CALENDAR UI) */}
+        {/* TAB 3: CALENDAR & MASTER SCHEDULE MANAGEMENT */}
         {activeTab === 'schedules' && (
           <div className="animate-in fade-in duration-200">
-            <CalendarScheduleView
-              user={adminUser}
-              agendas={agendas}
-              initialPersonFilter={calendarPersonFilter}
-              onBack={() => setActiveTab('dashboard')}
-              onSelectAgenda={(agenda) => {
-                if (!isReadOnly) {
-                  handleOpenEditModal(agenda);
-                }
-              }}
-              onToggleComplete={(id) => {
-                if (isReadOnly) return;
-                const target = agendas.find((a) => a.id === id);
-                if (target) {
-                  onUpdateAgenda({ ...target, completed: !target.completed });
-                }
-              }}
-              onOpenNewAgenda={!isReadOnly ? handleOpenCreateModal : undefined}
-              onOpenExcelUpload={!isReadOnly ? () => setActiveTab('import-excel') : undefined}
-              onEditAgenda={!isReadOnly ? handleOpenEditModal : undefined}
-              onDeleteAgenda={!isReadOnly ? (id) => {
-                const target = agendas.find((a) => a.id === id);
-                if (window.confirm(`Hapus agenda "${target?.title || id}"?`)) {
-                  onDeleteAgenda(id);
-                }
-              } : undefined}
-              onExportExcel={(filterPerson) => {
-                exportScheduleToTemplateExcel(agendas, users, filterPerson || 'ALL');
-              }}
-              isReadOnly={isReadOnly}
-            />
+            {isReadOnly ? (
+              <ExecutiveCalendarView
+                currentUser={adminUser}
+                agendas={agendas}
+                users={users}
+                cloudReports={cloudReports}
+                onOpenReportPreview={setExecutivePreviewReport}
+              />
+            ) : (
+              <CalendarScheduleView
+                user={adminUser}
+                agendas={agendas}
+                initialPersonFilter={calendarPersonFilter}
+                onBack={() => setActiveTab('dashboard')}
+                onSelectAgenda={(agenda) => {
+                  if (!isReadOnly) {
+                    handleOpenEditModal(agenda);
+                  }
+                }}
+                onToggleComplete={(id) => {
+                  if (isReadOnly) return;
+                  const target = agendas.find((a) => a.id === id);
+                  if (target) {
+                    onUpdateAgenda({ ...target, completed: !target.completed });
+                  }
+                }}
+                onOpenNewAgenda={!isReadOnly ? handleOpenCreateModal : undefined}
+                onOpenExcelUpload={!isReadOnly ? () => setActiveTab('import-excel') : undefined}
+                onEditAgenda={!isReadOnly ? handleOpenEditModal : undefined}
+                onDeleteAgenda={!isReadOnly ? (id) => {
+                  const target = agendas.find((a) => a.id === id);
+                  if (window.confirm(`Hapus agenda "${target?.title || id}"?`)) {
+                    onDeleteAgenda(id);
+                  }
+                } : undefined}
+                onExportExcel={(filterPerson) => {
+                  exportScheduleToTemplateExcel(agendas, users, filterPerson || 'ALL');
+                }}
+                isReadOnly={isReadOnly}
+              />
+            )}
           </div>
         )}
 
@@ -1715,148 +1773,160 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
         {/* TAB 6: TEAM (36 PERSONNEL) */}
         {activeTab === 'users' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="bg-[#F3F5F8] rounded-[32px] p-6 sm:p-8">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-                <div>
-                  <span className="text-xs font-medium text-slate-500 block">
-                    Direktori Personel &amp; Kepemilikan Cabang
+          isReadOnly ? (
+            <ExecutiveTeamView
+              currentUser={adminUser}
+              users={users}
+              agendas={agendas}
+              stores={allStoresWithOwnership}
+              livePresences={livePresences}
+              cloudReports={cloudReports}
+              onOpenReportPreview={(rep) => setExecutivePreviewReport(rep)}
+            />
+          ) : (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="bg-[#F3F5F8] rounded-[32px] p-6 sm:p-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                  <div>
+                    <span className="text-xs font-medium text-slate-500 block">
+                      Direktori Personel &amp; Kepemilikan Cabang
+                    </span>
+                    <h2 className="text-xl font-bold text-slate-900">
+                      Tim Lapangan FMCU ({users.filter((u) => !u.isAdmin).length} Personel)
+                    </h2>
+                  </div>
+                  <span className="px-4 py-1.5 rounded-full bg-white text-xs font-bold text-slate-700 shadow-2xs">
+                    Terhubung 531 Toko Kepemilikan Bestie
                   </span>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Tim Lapangan FMCU ({users.filter((u) => !u.isAdmin).length} Personel)
-                  </h2>
                 </div>
-                <span className="px-4 py-1.5 rounded-full bg-white text-xs font-bold text-slate-700 shadow-2xs">
-                  Terhubung 531 Toko Kepemilikan Bestie
-                </span>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[...users]
-                  .filter((u) => !u.isAdmin)
-                  .sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }))
-                  .map((u, idx) => {
-                    const userAgendasCount = agendas.filter((a) => a.pic === u.name).length;
-                    const ownedCount = getStoresWithOwnership(u.name).filter(
-                      (s) => s.isOwnedByBestie
-                    ).length;
-                    const todayAgenda = agendas.find(
-                      (a) =>
-                        isSamePersonName(a.pic, u.name) &&
-                        a.date === new Date().toISOString().split('T')[0]
-                    );
-                    const liveP = livePresences.find(
-                      (p) =>
-                        isSamePersonName(p.userName, u.name) &&
-                        p.isWebActive &&
-                        p.isGpsActive &&
-                        Date.now() - p.lastSeenMs < 3 * 60 * 1000
-                    );
-                    const isOnline = Boolean(liveP);
-
-                    const todayStore = todayAgenda
-                      ? findMasterStoreByCodeOrName(todayAgenda.storeCode) ||
-                        findMasterStoreByCodeOrName(todayAgenda.location)
-                      : null;
-                    let realDistMeters: number | null = null;
-                    if (isOnline && liveP && todayStore?.lat && todayStore?.lng) {
-                      realDistMeters = Math.round(
-                        calculateHaversineKm(liveP.lat, liveP.lng, todayStore.lat, todayStore.lng) * 1000
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[...users]
+                    .filter((u) => !u.isAdmin)
+                    .sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }))
+                    .map((u, idx) => {
+                      const userAgendasCount = agendas.filter((a) => a.pic === u.name).length;
+                      const ownedCount = getStoresWithOwnership(u.name).filter(
+                        (s) => s.isOwnedByBestie
+                      ).length;
+                      const todayAgenda = agendas.find(
+                        (a) =>
+                          isSamePersonName(a.pic, u.name) &&
+                          a.date === new Date().toISOString().split('T')[0]
                       );
-                    }
-                    const isInsideRadius = realDistMeters !== null && realDistMeters <= 250;
+                      const liveP = livePresences.find(
+                        (p) =>
+                          isSamePersonName(p.userName, u.name) &&
+                          p.isWebActive &&
+                          p.isGpsActive &&
+                          Date.now() - p.lastSeenMs < 3 * 60 * 1000
+                      );
+                      const isOnline = Boolean(liveP);
 
-                    return (
-                      <div
-                        key={u.id || idx}
-                        className="p-4 bg-white rounded-[24px] flex items-start gap-3.5 hover:shadow-xs transition-all border border-slate-100"
-                      >
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#3A657C] to-[#2E8B57] text-white font-black text-sm flex items-center justify-center shrink-0 uppercase shadow-2xs">
-                          {u.name.substring(0, 2)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h4 className="text-xs font-bold text-slate-900 truncate">{u.name}</h4>
-                          <p className="text-[11px] text-slate-400 truncate">{u.email}</p>
+                      const todayStore = todayAgenda
+                        ? findMasterStoreByCodeOrName(todayAgenda.storeCode) ||
+                          findMasterStoreByCodeOrName(todayAgenda.location)
+                        : null;
+                      let realDistMeters: number | null = null;
+                      if (isOnline && liveP && todayStore?.lat && todayStore?.lng) {
+                        realDistMeters = Math.round(
+                          calculateHaversineKm(liveP.lat, liveP.lng, todayStore.lat, todayStore.lng) * 1000
+                        );
+                      }
+                      const isInsideRadius = realDistMeters !== null && realDistMeters <= 250;
 
-                          {/* Live Actual Location Status */}
-                          <div className="mt-2 flex flex-col gap-0.5">
-                            <div className="flex items-center gap-1.5 flex-wrap">
+                      return (
+                        <div
+                          key={u.id || idx}
+                          className="p-4 bg-white rounded-[24px] flex items-start gap-3.5 hover:shadow-xs transition-all border border-slate-100"
+                        >
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#3A657C] to-[#2E8B57] text-white font-black text-sm flex items-center justify-center shrink-0 uppercase shadow-2xs">
+                            {u.name.substring(0, 2)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs font-bold text-slate-900 truncate">{u.name}</h4>
+                            <p className="text-[11px] text-slate-400 truncate">{u.email}</p>
+
+                            {/* Live Actual Location Status */}
+                            <div className="mt-2 flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold ${
+                                    isOnline
+                                      ? isInsideRadius
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : 'bg-teal-50 text-teal-700 border border-teal-200'
+                                      : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                                    }`}
+                                  />
+                                  <span>
+                                    {isOnline
+                                      ? isInsideRadius
+                                        ? `Di Toko (${realDistMeters}m)`
+                                        : realDistMeters !== null
+                                        ? `Online (${realDistMeters >= 1000 ? (realDistMeters / 1000).toFixed(1) + 'km' : realDistMeters + 'm'})`
+                                        : 'Online (Web Aktif)'
+                                      : 'Offline (Tidak Akses Web)'}
+                                  </span>
+                                </span>
+
+                                {todayAgenda?.storeCode && (
+                                  <span className="text-[10px] font-mono font-bold text-slate-600 truncate max-w-[130px]">
+                                    #{todayAgenda.storeCode}
+                                  </span>
+                                )}
+                              </div>
+
                               <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold ${
-                                  isOnline
-                                    ? isInsideRadius
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                      : 'bg-teal-50 text-teal-700 border border-teal-200'
-                                    : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                className={`text-[9px] font-mono ${
+                                  isOnline ? 'text-teal-700 font-semibold' : 'text-slate-400'
                                 }`}
                               >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
-                                  }`}
-                                />
-                                <span>
-                                  {isOnline
-                                    ? isInsideRadius
-                                      ? `Di Toko (${realDistMeters}m)`
-                                      : realDistMeters !== null
-                                      ? `Online (${realDistMeters >= 1000 ? (realDistMeters / 1000).toFixed(1) + 'km' : realDistMeters + 'm'})`
-                                      : 'Online (Web Aktif)'
-                                    : 'Offline (Tidak Akses Web)'}
-                                </span>
+                                {isOnline && liveP
+                                  ? `GPS: ${liveP.lat.toFixed(4)}, ${liveP.lng.toFixed(4)} • Live`
+                                  : 'GPS: Offline • Tidak Akses Web'}
                               </span>
-
-                              {todayAgenda?.storeCode && (
-                                <span className="text-[10px] font-mono font-bold text-slate-600 truncate max-w-[130px]">
-                                  #{todayAgenda.storeCode}
-                                </span>
-                              )}
                             </div>
 
-                            <span
-                              className={`text-[9px] font-mono ${
-                                isOnline ? 'text-teal-700 font-semibold' : 'text-slate-400'
-                              }`}
-                            >
-                              {isOnline && liveP
-                                ? `GPS: ${liveP.lat.toFixed(4)}, ${liveP.lng.toFixed(4)} • Live`
-                                : 'GPS: Offline • Tidak Akses Web'}
-                            </span>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCalendarPersonFilter(u.name);
-                                setActiveTab('schedules');
-                              }}
-                              className="text-[10.5px] font-bold text-[#3A657C] bg-[#EBF2F6] px-2.5 py-0.5 rounded-full cursor-pointer hover:brightness-95 transition"
-                            >
-                              {userAgendasCount} Jadwal
-                            </button>
-                            {ownedCount > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setSelectedBestieFilter(u.name);
-                                  setStoreScopeFilter('OWNED');
-                                  setActiveTab('stores');
+                                  setCalendarPersonFilter(u.name);
+                                  setActiveTab('schedules');
                                 }}
-                                className="text-[10.5px] font-bold text-[#2E8B57] bg-[#EBF8F0] px-2.5 py-0.5 rounded-full flex items-center gap-1 cursor-pointer hover:brightness-95 transition"
+                                className="text-[10.5px] font-bold text-[#3A657C] bg-[#EBF2F6] px-2.5 py-0.5 rounded-full cursor-pointer hover:brightness-95 transition"
                               >
-                                <Star className="w-2.5 h-2.5 fill-current" />
-                                <span>{ownedCount} Toko</span>
+                                {userAgendasCount} Jadwal
                               </button>
-                            )}
+                              {ownedCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedBestieFilter(u.name);
+                                    setStoreScopeFilter('OWNED');
+                                    setActiveTab('stores');
+                                  }}
+                                  className="text-[10.5px] font-bold text-[#2E8B57] bg-[#EBF8F0] px-2.5 py-0.5 rounded-full flex items-center gap-1 cursor-pointer hover:brightness-95 transition"
+                                >
+                                  <Star className="w-2.5 h-2.5 fill-current" />
+                                  <span>{ownedCount} Toko</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                </div>
               </div>
             </div>
-          </div>
+          )
         )}
 
         {/* TAB 7: CATEGORIES */}
@@ -2315,6 +2385,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       <HoldingTimeR23Modal
         isOpen={showR23PreviewModal}
         onClose={() => setShowR23PreviewModal(false)}
+      />
+
+      {/* Executive Report In-Web PDF Preview Modal */}
+      <ExecutiveReportPreviewModal
+        isOpen={Boolean(executivePreviewReport)}
+        onClose={() => setExecutivePreviewReport(null)}
+        reportData={executivePreviewReport?.reportData || null}
+        gdrivePdfUrl={executivePreviewReport?.gdrivePdfUrl}
+        gdriveEmbedUrl={executivePreviewReport?.gdriveEmbedUrl}
       />
     </div>
   );

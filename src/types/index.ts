@@ -111,3 +111,6 @@ export interface Medicine {
   frequency: string;
   takenToday?: boolean;
 }
+
+export * from './visitReport';
+

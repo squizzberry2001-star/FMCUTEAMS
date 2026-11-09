@@ -50,7 +50,7 @@ interface HistoryViewProps {
  * Resolve or construct complete VisitReportData + GDrive metadata so clicking "Lihat Laporan"
  * immediately renders the store's PDF report directly inside the web page.
  */
-function resolveVisitedStoreReportData(params: {
+export function resolveVisitedStoreReportData(params: {
   storeCode?: string;
   storeName?: string;
   agenda?: ScheduleAgenda | null;
