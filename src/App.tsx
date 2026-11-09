@@ -623,7 +623,7 @@ export const App: React.FC = () => {
                   selectedDate={selectedDate}
                   onSelectDate={setSelectedDate}
                   onSelectAgenda={handleSelectAgenda}
-                  onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+                  onOpenNewAgenda={user?.isAdmin ? () => setShowNewAgendaModal(true) : undefined}
                   onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
                   onOpenLiveMaps={() => setShowLiveMapsModal(true)}
                   onOpenCalendar={() => setMobileTab('calendar')}
@@ -641,7 +641,7 @@ export const App: React.FC = () => {
                   agendas={agendas}
                   onBack={() => setMobileTab('home')}
                   onSelectAgenda={handleSelectAgenda}
-                  onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+                  onOpenNewAgenda={user?.isAdmin ? () => setShowNewAgendaModal(true) : undefined}
                   onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
                   onToggleComplete={handleToggleComplete}
                   onDeleteAgenda={user?.isAdmin ? handleDeleteAgenda : undefined}
@@ -687,7 +687,7 @@ export const App: React.FC = () => {
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
               onSelectAgenda={handleSelectAgenda}
-              onOpenNewAgenda={() => setShowNewAgendaModal(true)}
+              onOpenNewAgenda={user?.isAdmin ? () => setShowNewAgendaModal(true) : undefined}
               onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
               onOpenLiveMaps={() => setShowLiveMapsModal(true)}
               onOpenVisitForm={(agenda) => {
@@ -711,8 +711,8 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* New Agenda Creation Modal (Desktop & Mobile) */}
-      {showNewAgendaModal && (
+      {/* New Agenda Creation Modal (Admin Only) */}
+      {showNewAgendaModal && user?.isAdmin && (
         <NewAgendaModal
           initialDate={selectedDate}
           onClose={() => setShowNewAgendaModal(false)}

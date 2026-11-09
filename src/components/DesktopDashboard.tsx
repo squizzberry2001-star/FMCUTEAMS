@@ -50,7 +50,7 @@ interface DesktopDashboardProps {
   selectedDate: string;
   onSelectDate: (date: string) => void;
   onSelectAgenda: (agenda: ScheduleAgenda) => void;
-  onOpenNewAgenda: () => void;
+  onOpenNewAgenda?: () => void;
   onOpenExcelUpload?: () => void;
   onOpenLiveMaps?: () => void;
   onOpenVisitForm?: (agenda: ScheduleAgenda) => void;
@@ -486,10 +486,10 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               agendas={agendas}
               onBack={() => setActiveMenu('dashboard')}
               onSelectAgenda={onSelectAgenda}
-              onOpenNewAgenda={onOpenNewAgenda}
-              onOpenExcelUpload={onOpenExcelUpload}
+              onOpenNewAgenda={user.isAdmin ? onOpenNewAgenda : undefined}
+              onOpenExcelUpload={user.isAdmin ? onOpenExcelUpload : undefined}
               onToggleComplete={onToggleComplete}
-              onEditAgenda={onUpdateAgenda ? (item) => onSelectAgenda(item) : undefined}
+              onEditAgenda={user.isAdmin && onUpdateAgenda ? (item) => onSelectAgenda(item) : undefined}
               onDeleteAgenda={user.isAdmin ? onDeleteAgenda : undefined}
               onExportExcel={(filterPerson) => {
                 exportScheduleToTemplateExcel(agendas, users, filterPerson || 'ALL');

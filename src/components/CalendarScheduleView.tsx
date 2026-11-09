@@ -351,90 +351,92 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         </div>
       </div>
 
-      {/* Operational Toolbar (Admin / Executive / Export / WA Broadcast) */}
-      <div className="flex items-center justify-between flex-wrap gap-2.5 mb-4 bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-100 shadow-soft-card">
-        <div className="flex items-center gap-2">
-          <span
-            className={`text-[10px] font-extrabold px-3 py-1 rounded-full flex items-center gap-1.5 ${
-              isReadOnly
-                ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                : user?.isAdmin
-                ? 'bg-teal-50 text-teal-800 border border-teal-200'
-                : 'bg-slate-100 text-slate-700'
-            }`}
-          >
-            {isReadOnly ? (
-              <Lock className="w-3 h-3 text-amber-600" />
-            ) : user?.isAdmin ? (
-              <Shield className="w-3 h-3 text-teal-600" />
-            ) : (
-              <CalendarIcon className="w-3 h-3 text-slate-500" />
-            )}
-            <span>
-              {isReadOnly
-                ? 'Executive Viewer • Read-Only'
-                : user?.isAdmin
-                ? 'Portal Admin FMCU'
-                : 'Master Jadwal FMCU'}
+      {/* Operational Toolbar (HANYA MUNCUL DI SISI ADMIN / EXECUTIVE VIEWER - DI SISI USER BIASA DIHILANGKAN TOTAL) */}
+      {(user?.isAdmin || isReadOnly || user?.isExecutiveViewer || user?.accessLevel === 'EXECUTIVE_VIEWER') && (
+        <div className="flex items-center justify-between flex-wrap gap-2.5 mb-4 bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-100 shadow-soft-card">
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[10px] font-extrabold px-3 py-1 rounded-full flex items-center gap-1.5 ${
+                isReadOnly
+                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                  : user?.isAdmin
+                  ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                  : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              {isReadOnly ? (
+                <Lock className="w-3 h-3 text-amber-600" />
+              ) : user?.isAdmin ? (
+                <Shield className="w-3 h-3 text-teal-600" />
+              ) : (
+                <CalendarIcon className="w-3 h-3 text-slate-500" />
+              )}
+              <span>
+                {isReadOnly
+                  ? 'Executive Viewer • Read-Only'
+                  : user?.isAdmin
+                  ? 'Portal Admin FMCU'
+                  : 'Master Jadwal FMCU'}
+              </span>
             </span>
-          </span>
-          <span className="text-[11px] font-medium text-slate-400 hidden sm:inline">
-            {displayedAgendas.length} agenda aktif
-          </span>
+            <span className="text-[11px] font-medium text-slate-400 hidden sm:inline">
+              {displayedAgendas.length} agenda aktif
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Broadcast WA Rekap */}
+            <button
+              type="button"
+              onClick={handleBroadcastFilteredAgendasWhatsApp}
+              className="px-3 py-1.5 rounded-full bg-[#25D366] hover:bg-[#20BD5A] text-white text-[10.5px] font-bold shadow-2xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              title="Broadcast agenda terfilter ke WhatsApp"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Broadcast WA ({displayedAgendas.length})</span>
+            </button>
+
+            {/* Export Excel */}
+            {onExportExcel && (
+              <button
+                type="button"
+                onClick={() => onExportExcel(selectedPersonDropdown)}
+                className="px-3 py-1.5 rounded-full bg-[#76C88D] hover:bg-[#66B87D] text-white text-[10.5px] font-bold shadow-2xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                title="Download Jadwal ke Template Excel"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Excel</span>
+              </button>
+            )}
+
+            {/* Upload Excel (Admin Only) */}
+            {user?.isAdmin && onOpenExcelUpload && (
+              <button
+                type="button"
+                onClick={onOpenExcelUpload}
+                className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10.5px] font-bold transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                title="Upload / Sinkronisasi Jadwal Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Upload Excel</span>
+              </button>
+            )}
+
+            {/* Buat Agenda (Admin Only) */}
+            {user?.isAdmin && onOpenNewAgenda && (
+              <button
+                type="button"
+                onClick={onOpenNewAgenda}
+                className="px-3 py-1.5 rounded-full bg-[#3A657C] hover:bg-[#2E5266] text-white text-[10.5px] font-bold shadow-2xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                title="Buat Agenda Baru"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Buat Agenda</span>
+              </button>
+            )}
+          </div>
         </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Broadcast WA Rekap */}
-          <button
-            type="button"
-            onClick={handleBroadcastFilteredAgendasWhatsApp}
-            className="px-3 py-1.5 rounded-full bg-[#25D366] hover:bg-[#20BD5A] text-white text-[10.5px] font-bold shadow-2xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
-            title="Broadcast agenda terfilter ke WhatsApp"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Broadcast WA ({displayedAgendas.length})</span>
-          </button>
-
-          {/* Export Excel */}
-          {onExportExcel && (
-            <button
-              type="button"
-              onClick={() => onExportExcel(selectedPersonDropdown)}
-              className="px-3 py-1.5 rounded-full bg-[#76C88D] hover:bg-[#66B87D] text-white text-[10.5px] font-bold shadow-2xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
-              title="Download Jadwal ke Template Excel"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export Excel</span>
-            </button>
-          )}
-
-          {/* Upload Excel (Admin Only) */}
-          {!isReadOnly && onOpenExcelUpload && (
-            <button
-              type="button"
-              onClick={onOpenExcelUpload}
-              className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10.5px] font-bold transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
-              title="Upload / Sinkronisasi Jadwal Excel"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Upload Excel</span>
-            </button>
-          )}
-
-          {/* Buat Agenda (Admin Only) */}
-          {!isReadOnly && onOpenNewAgenda && (
-            <button
-              type="button"
-              onClick={onOpenNewAgenda}
-              className="px-3 py-1.5 rounded-full bg-[#3A657C] hover:bg-[#2E5266] text-white text-[10.5px] font-bold shadow-2xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
-              title="Buat Agenda Baru"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Buat Agenda</span>
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Responsive Content Grid: Mobile (1 Col Stack) vs Tablet/Desktop (2 Col Expansive) */}
       <div className="flex flex-col md:flex-row gap-5 lg:gap-6 items-start">
@@ -640,7 +642,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                     ? `Tidak ada jadwal yang cocok pada minggu ${formatShortDayDate(weekStartStr)} – ${formatShortDayDate(weekEndStr)}.`
                     : `Tidak ada jadwal yang cocok pada tanggal ${selectedDateStr}.`}
                 </p>
-                {onOpenNewAgenda && !isReadOnly && (
+                {user?.isAdmin && onOpenNewAgenda && (
                   <button
                     type="button"
                     onClick={onOpenNewAgenda}
@@ -725,8 +727,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                               <Share2 className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* Edit Button */}
-                            {onEditAgenda && !isReadOnly && (
+                            {/* Edit Button (Admin Only) */}
+                            {user?.isAdmin && onEditAgenda && !isReadOnly && (
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -740,8 +742,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                               </button>
                             )}
 
-                            {/* Delete Button */}
-                            {onDeleteAgenda && !isReadOnly && (
+                            {/* Delete Button (Admin Only) */}
+                            {user?.isAdmin && onDeleteAgenda && !isReadOnly && (
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -820,8 +822,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                         <Share2 className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Edit Button */}
-                      {onEditAgenda && !isReadOnly && (
+                      {/* Edit Button (Admin Only) */}
+                      {user?.isAdmin && onEditAgenda && !isReadOnly && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -835,8 +837,8 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
                         </button>
                       )}
 
-                      {/* Delete Button */}
-                      {onDeleteAgenda && !isReadOnly && (
+                      {/* Delete Button (Admin Only) */}
+                      {user?.isAdmin && onDeleteAgenda && !isReadOnly && (
                         <button
                           type="button"
                           onClick={(e) => {
