@@ -50,10 +50,10 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
         }`}
       >
         {/* Top Prismatic Hairline Reflection (Apple iPhone Glass Specular) */}
-        <div className="pointer-events-none absolute inset-x-6 top-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-80 z-10" />
+        <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/95 to-transparent opacity-90 z-10" />
 
         {/* Ambient bottom light refraction rim */}
-        <div className="pointer-events-none absolute inset-x-10 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 z-10" />
+        <div className="pointer-events-none absolute inset-x-12 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-60 z-10" />
 
         {/* 
           SLIDING ACTIVE GLASS LENS PILL (White Liquid Glass, Seamless Apple Rim)
@@ -67,8 +67,8 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
           }}
         >
           {/* Top specular hairline inside the pill */}
-          <div className="pointer-events-none absolute inset-x-2.5 top-0 h-[0.75px] bg-gradient-to-r from-transparent via-white to-transparent opacity-90" />
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/50 via-transparent to-white/20" />
+          <div className="pointer-events-none absolute inset-x-3 top-0 h-[1px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95" />
+          <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/40 via-transparent to-white/10" />
         </div>
 
         {/* Tab Items Buttons */}

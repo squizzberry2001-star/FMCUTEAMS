@@ -144,8 +144,16 @@
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.03), 0 12px 32px rgba(30, 41, 59, 0.08);
 }
 
-/* Authentic Apple Liquid Frosted Glass with Seamless Specular Rim & Multi-Stage Elevation Depth */
-/* Crystal-clear liquid glass aesthetic with seamless perimeter refraction and authentic 3D levitation */
+/* ==========================================================================
+   AUTHENTIC APPLE LIQUID GLASS SYSTEM (iOS Refraction, Fresnel Specular & Prism Rim)
+   Accurately matches Apple iOS Liquid Glass (Control Center & Floating Docks):
+   - High Translucency Optical Mineral Glass with True Refractive Backdrop Diffusion
+   - Fresnel Bevel Reflection: Crisp Top Specular White Hairline + Bottom Ambient Light Catch
+   - Volumetric Depth Elevation: Multi-stage Ambient Occlusion and Realistic 3D Levitation
+   - Milky Convex Active Lens Pill with High-Contrast Deep Black Iconography
+   ========================================================================== */
+
+/* 1. Main Floating iPhone Glass Dock */
 .iphone-glass-dock {
   width: 100% !important;
   max-width: 440px !important;
@@ -153,81 +161,92 @@
   border-radius: 36px !important;
   transform: scale(1) translateZ(0) !important;
   background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.78) 0%,
-    rgba(255, 255, 255, 0.58) 50%,
-    rgba(255, 255, 255, 0.72) 100%
+    145deg,
+    rgba(255, 255, 255, 0.58) 0%,
+    rgba(255, 255, 255, 0.28) 45%,
+    rgba(255, 255, 255, 0.42) 100%
   ) !important;
-  backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
-  -webkit-backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
-  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.04);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.04);
+  border: 0.75px solid rgba(255, 255, 255, 0.55) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.88) !important;
   box-shadow: 
-    0 20px 48px -10px rgba(15, 23, 42, 0.22),
-    0 8px 24px -4px rgba(15, 23, 42, 0.12),
-    0 2px 6px -1px rgba(15, 23, 42, 0.08),
-    inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.90),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.30),
-    inset 0 0 12px 0 rgba(255, 255, 255, 0.20) !important;
+    0 20px 48px -8px rgba(15, 23, 42, 0.16),
+    0 8px 20px -4px rgba(15, 23, 42, 0.08),
+    0 2px 6px -1px rgba(15, 23, 42, 0.04),
+    /* Fresnel Top & Bottom Specular Insets */
+    inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.28),
+    /* Internal Volumetric Glass Diffusion */
+    inset 0 0 16px 0 rgba(255, 255, 255, 0.15) !important;
+  isolation: isolate;
+  contain: paint;
 }
 
-/* Auto-Shrinking Scrolled State (scale 0.88 with smooth GPU transform & deeper depth) */
+/* 2. Auto-Shrinking Scrolled State (scale 0.88 with smooth GPU transform & deeper depth) */
 .iphone-glass-dock-scrolled {
   width: 100% !important;
   max-width: 440px !important;
   padding: 6px !important;
   border-radius: 36px !important;
   background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.84) 0%,
-    rgba(255, 255, 255, 0.68) 100%
+    145deg,
+    rgba(255, 255, 255, 0.68) 0%,
+    rgba(255, 255, 255, 0.38) 45%,
+    rgba(255, 255, 255, 0.52) 100%
   ) !important;
   backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
   -webkit-backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
-  border: 1px solid rgba(255, 255, 255, 0.85) !important;
+  border: 0.75px solid rgba(255, 255, 255, 0.65) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.95) !important;
   box-shadow: 
-    0 22px 52px -8px rgba(15, 23, 42, 0.25),
-    0 10px 28px -4px rgba(15, 23, 42, 0.14),
-    0 2px 8px -1px rgba(15, 23, 42, 0.08),
-    inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.95),
+    0 24px 54px -8px rgba(15, 23, 42, 0.20),
+    0 10px 24px -4px rgba(15, 23, 42, 0.10),
+    0 2px 8px -1px rgba(15, 23, 42, 0.06),
+    inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.98),
     inset 0 -1px 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 0 12px 0 rgba(255, 255, 255, 0.25) !important;
+    inset 0 0 18px 0 rgba(255, 255, 255, 0.20) !important;
+  isolation: isolate;
+  contain: paint;
 }
 
-/* Sliding Floating Lens Pill on Active Tab (Liquid Glass Lens, Seamless Apple Rim) */
+/* 3. Sliding Floating Convex Lens Pill on Active Tab (Liquid Glass Lens, Authentic Apple Pill) */
 .iphone-glass-pill {
   background: linear-gradient(
-    140deg,
-    rgba(255, 255, 255, 0.92) 0%,
-    rgba(255, 255, 255, 0.76) 50%,
-    rgba(255, 255, 255, 0.88) 100%
+    145deg,
+    rgba(255, 255, 255, 0.96) 0%,
+    rgba(255, 255, 255, 0.84) 50%,
+    rgba(255, 255, 255, 0.94) 100%
   ) !important;
-  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  border: 0.75px solid rgba(255, 255, 255, 0.95) !important;
   box-shadow: 
-    0 6px 20px -2px rgba(15, 23, 42, 0.12),
-    0 2px 6px -1px rgba(15, 23, 42, 0.06),
-    inset 0 1px 1.5px 0 rgba(255, 255, 255, 1),
-    inset 0 -0.5px 0.75px 0 rgba(255, 255, 255, 0.5) !important;
+    0 4px 16px -2px rgba(15, 23, 42, 0.12),
+    0 1px 4px -1px rgba(15, 23, 42, 0.08),
+    /* Convex Lens Top Specular Edge */
+    inset 0 1.25px 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -0.5px 1px 0 rgba(255, 255, 255, 0.40) !important;
   backdrop-filter: blur(28px) saturate(210%) contrast(110%) brightness(1.10);
   -webkit-backdrop-filter: blur(28px) saturate(210%) contrast(110%) brightness(1.10);
 }
 
-/* Authentic Apple Glass Floating Icon Button with 3D Depth Elevation */
+/* 4. Authentic Apple Glass Floating Icon Button with 3D Depth Elevation (Control Center Round Tiles) */
 .iphone-glass-icon-btn {
   background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.82) 0%,
-    rgba(255, 255, 255, 0.60) 50%,
-    rgba(255, 255, 255, 0.75) 100%
+    145deg,
+    rgba(255, 255, 255, 0.65) 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 255, 255, 0.50) 100%
   ) !important;
-  backdrop-filter: blur(28px) saturate(200%) contrast(105%) brightness(1.08);
-  -webkit-backdrop-filter: blur(28px) saturate(200%) contrast(105%) brightness(1.08);
-  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.05);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.05);
+  border: 0.75px solid rgba(255, 255, 255, 0.65) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.92) !important;
   box-shadow: 
-    0 12px 28px -4px rgba(15, 23, 42, 0.18),
-    0 4px 12px -2px rgba(15, 23, 42, 0.10),
-    0 1px 3px 0 rgba(15, 23, 42, 0.05),
+    0 10px 24px -4px rgba(15, 23, 42, 0.12),
+    0 3px 8px -2px rgba(15, 23, 42, 0.06),
     inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.35) !important;
+    inset 0 -0.75px 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 0 10px 0 rgba(255, 255, 255, 0.12) !important;
   /* 60fps Hardware Acceleration & Compositor Isolation (Zero Glitch on Transform) */
   isolation: isolate;
   contain: paint;
@@ -237,24 +256,24 @@
   -webkit-backface-visibility: hidden;
 }
 
-/* Authentic Apple Liquid Glass Mini Dock (for Top Navbar and Floating Action Bars) */
+/* 5. Authentic Apple Liquid Glass Mini Dock (for Floating Action Bars & Capsules) */
 .iphone-glass-mini-dock {
   background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.82) 0%,
-    rgba(255, 255, 255, 0.62) 50%,
-    rgba(255, 255, 255, 0.76) 100%
+    145deg,
+    rgba(255, 255, 255, 0.68) 0%,
+    rgba(255, 255, 255, 0.38) 50%,
+    rgba(255, 255, 255, 0.55) 100%
   ) !important;
-  backdrop-filter: blur(28px) saturate(200%) contrast(105%) brightness(1.08);
-  -webkit-backdrop-filter: blur(28px) saturate(200%) contrast(105%) brightness(1.08);
-  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.05);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(104%) brightness(1.05);
+  border: 0.75px solid rgba(255, 255, 255, 0.70) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.95) !important;
   box-shadow: 
-    0 12px 30px -4px rgba(15, 23, 42, 0.18),
-    0 4px 12px -2px rgba(15, 23, 42, 0.10),
-    0 1px 3px 0 rgba(15, 23, 42, 0.05),
+    0 12px 28px -4px rgba(15, 23, 42, 0.14),
+    0 3px 8px -2px rgba(15, 23, 42, 0.06),
     inset 0 1.25px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1px 0 rgba(255, 255, 255, 0.35) !important;
-  /* 60fps Hardware Acceleration & Compositor Isolation (Zero Glitch on Transform) */
+    inset 0 -0.75px 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 0 12px 0 rgba(255, 255, 255, 0.12) !important;
   isolation: isolate;
   contain: paint;
   transform: translate3d(0, 0, 0);
@@ -263,22 +282,22 @@
   -webkit-backface-visibility: hidden;
 }
 
-/* Authentic Apple Liquid Glass Top Navbar Header */
+/* 6. Authentic Apple Liquid Glass Top Navbar Header */
 .iphone-glass-top-navbar {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.85) 0%,
-    rgba(248, 249, 253, 0.65) 50%,
-    rgba(255, 255, 255, 0.78) 100%
+    rgba(255, 255, 255, 0.75) 0%,
+    rgba(248, 249, 253, 0.45) 50%,
+    rgba(255, 255, 255, 0.60) 100%
   ) !important;
   backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
   -webkit-backdrop-filter: blur(32px) saturate(200%) contrast(105%) brightness(1.06);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.85) !important;
+  border-bottom: 0.75px solid rgba(255, 255, 255, 0.80) !important;
   box-shadow: 
-    0 16px 40px -6px rgba(15, 23, 42, 0.14),
-    0 4px 14px -2px rgba(15, 23, 42, 0.08),
+    0 16px 40px -6px rgba(15, 23, 42, 0.10),
+    0 4px 14px -2px rgba(15, 23, 42, 0.05),
     inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -0.5px 0.75px 0 rgba(255, 255, 255, 0.40) !important;
+    inset 0 -0.5px 0.75px 0 rgba(255, 255, 255, 0.35) !important;
 }
 
 /* Super Smooth Hardware-Accelerated Apple Spring Transition (Pure GPU Transform) */
