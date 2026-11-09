@@ -112,15 +112,19 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
     };
   }, [isVisitAgenda, agenda.id, agenda.actualIn]);
 
-  // Cek apakah jadwal kunjungan berada di masa depan (ke depan): agenda.date > todayYmd
-  const isFutureVisit = useMemo(() => {
+  // Tanggal Hari Ini (Actual)
+  const todayYmd = useMemo(() => {
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
-    const todayYmd = `${y}-${m}-${d}`;
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  // Cek apakah jadwal kunjungan berada di masa depan (ke depan): agenda.date > todayYmd
+  const isFutureVisit = useMemo(() => {
     return Boolean(agenda.date && agenda.date > todayYmd);
-  }, [agenda.date]);
+  }, [agenda.date, todayYmd]);
 
   // Form visit boleh dibuka jika: hari ini, sudah lewat (masa lalu), ATAU user adalah Admin
   const isVisitOpenable = useMemo(() => {
@@ -242,8 +246,9 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
 
     const boundsCoords: [number, number][] = [];
 
-    // Draw route line if agenda contains multiple stores
-    if (activePoints.length >= 2) {
+    // Draw route line: HANYA dimunculkan khusus untuk hari actual jika ada visit (>= 2 titik)
+    const isActualToday = Boolean(agenda.date && agenda.date === todayYmd);
+    if (isActualToday && isVisitAgenda && activePoints.length >= 2) {
       const latlngs: [number, number][] = activePoints.map((p) => [p.lat, p.lng]);
       L.polyline(latlngs, {
         color: '#0D9488',
@@ -313,7 +318,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
         mapInstanceRef.current = null;
       }
     };
-  }, [isVisitAgenda, leafletReady, primaryGeoPoint, activePoints, currentUser?.isAdmin]);
+  }, [isVisitAgenda, leafletReady, primaryGeoPoint, activePoints, currentUser?.isAdmin, agenda.date, todayYmd]);
 
   const renderCategoryIcon = (category: ScheduleCategory) => {
     switch (category) {

@@ -17,22 +17,21 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronUp,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
 import {
   getMasterStores,
-  getStoreCodesOwnedByBestie,
   isSamePersonName,
 } from '../data/masterStoresData';
 import {
   loadLeaflet,
   StoreGeoPoint,
-  toStoreGeoPoint,
   resolveAgendaGeoPoints,
   calculateHaversineKm,
   buildAdminUserPinpoints,
 } from '../utils/mapGeoUtils';
-import { getMondayOfWeek, getFullWeekDays } from '../services/scheduleExcelService';
 
 interface LiveStoreMapsModalProps {
   isOpen: boolean;
@@ -74,8 +73,8 @@ function getMinimalistStoreLabel(rawName: string): string {
   const cleaned = (rawName || '')
     .replace(/^(?:familymart|family mart|fm|fmi|toko|cabang)\s+/i, '')
     .trim();
-  if (cleaned.length <= 10) return cleaned;
-  return `${cleaned.slice(0, 9).trim()}…`;
+  if (cleaned.length <= 11) return cleaned;
+  return `${cleaned.slice(0, 10).trim()}…`;
 }
 
 export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
@@ -100,12 +99,12 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStore, setSelectedStore] = useState<StoreGeoPoint | null>(null);
 
-  // Direct 100% Fullscreen HUD Drawer States
+  // Fullscreen HUD Drawer States
   const [showFloatingControls, setShowFloatingControls] = useState<boolean>(false);
   const [showBottomStrip, setShowBottomStrip] = useState<boolean>(false);
 
-  // Filter Scope: 'all' (610 master stores + route) vs 'scheduled' (route only)
-  const [viewMode, setViewMode] = useState<'all' | 'scheduled'>('all');
+  // Filter Scope: 'all_scheduled' (Actual + Kedepan) | 'today' (Khusus Hari Ini) | 'upcoming' (Khusus Kedepan)
+  const [viewMode, setViewMode] = useState<'all_scheduled' | 'today' | 'upcoming'>('all_scheduled');
 
   // Admin-specific controls
   const [selectedPicFilter, setSelectedPicFilter] = useState<string>('ALL');
@@ -116,18 +115,30 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
   const [radiusMeters, setRadiusMeters] = useState<number>(250);
 
   const allMasterStores = useMemo(() => getMasterStores(), []);
-  const currentWeekMonday = useMemo(() => getMondayOfWeek(), []);
-  const activeWeekDays = useMemo(() => getFullWeekDays(currentWeekMonday), [currentWeekMonday]);
-  const weekStartStr = activeWeekDays[0]?.dateStr || currentWeekMonday;
-  const weekEndStr = activeWeekDays[activeWeekDays.length - 1]?.dateStr || currentWeekMonday;
 
-  // 1. Resolve Scheduled Store Points & Route
-  const scheduledStorePoints = useMemo(() => {
+  // Tanggal Hari Ini (Actual)
+  const todayYmd = useMemo(() => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
+  // ============================================================================
+  // 1. RESOLVE SCHEDULED STORE POINTS: HANYA ACTUAL ATAU KEDEPAN SAJA (a.date >= todayYmd)
+  // ATURAN MUTLAK:
+  // - Hapus semua dummy pinpoint yang tidak terjadwalkan.
+  // - Hapus jadwal masa lalu (a.date < todayYmd) dari peta pemantauan aktif.
+  // - Garis rute hanya dimunculkan khusus untuk hari actual jika ada visit.
+  // ============================================================================
+  const { todayVisitPoints, upcomingStorePoints, allScheduledStorePoints } = useMemo(() => {
     const relevantAgendas = agendas
       .filter((a) => {
-        const inWeek = a.date >= weekStartStr && a.date <= weekEndStr;
-        if (!inWeek && a.date !== selectedDate) return false;
+        // HANYA jadwal actual (hari ini) atau masa depan (kedepan)
+        if (!a.date || a.date < todayYmd) return false;
 
+        // Filter role / personel
         if (!isAdmin) {
           return isSamePersonName(a.pic, currentUser?.name);
         } else {
@@ -142,94 +153,77 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         return (a.time || '').localeCompare(b.time || '');
       });
 
-    const points: StoreGeoPoint[] = [];
-    let order = 1;
+    const todayPoints: StoreGeoPoint[] = [];
+    const upcomingPoints: StoreGeoPoint[] = [];
+    const seenTodayCodes = new Set<string>();
+    const seenUpcomingCodes = new Set<string>();
+    let todayOrder = 1;
 
     relevantAgendas.forEach((ag) => {
+      const isToday = ag.date === todayYmd;
+      const isVisitLike = ag.category === 'VISIT' || ag.category === 'NSO' || Boolean(ag.storeCode);
+
       const resolved = resolveAgendaGeoPoints(ag, allMasterStores);
       resolved.forEach((pt) => {
-        points.push({
-          ...pt,
-          routeOrder: order++,
-        });
+        if (isToday) {
+          // Khusus hari actual, catat store visit yang terurut
+          if (isVisitLike && !seenTodayCodes.has(pt.code)) {
+            seenTodayCodes.add(pt.code);
+            todayPoints.push({
+              ...pt,
+              routeOrder: todayOrder++,
+            });
+          }
+        } else {
+          // Jadwal kedepan (masa depan: a.date > todayYmd)
+          if (!seenUpcomingCodes.has(pt.code)) {
+            seenUpcomingCodes.add(pt.code);
+            upcomingPoints.push({
+              ...pt,
+              routeOrder: undefined, // Rute garis hanya untuk hari actual
+            });
+          }
+        }
       });
     });
 
-    if (points.length === 0 && !isAdmin && currentUser?.name) {
-      const myAllAgendas = agendas
-        .filter((a) => isSamePersonName(a.pic, currentUser.name))
-        .sort((a, b) => a.date.localeCompare(b.date));
-      myAllAgendas.forEach((ag) => {
-        const resolved = resolveAgendaGeoPoints(ag, allMasterStores);
-        resolved.forEach((pt) => {
-          points.push({
-            ...pt,
-            routeOrder: order++,
-          });
-        });
-      });
+    const allScheduled = [...todayPoints, ...upcomingPoints];
 
-      if (points.length === 0) {
-        const ownedCodes = getStoreCodesOwnedByBestie(currentUser.name);
-        if (ownedCodes.size > 0) {
-          allMasterStores
-            .filter((s) => ownedCodes.has(String(s.code).toUpperCase()))
-            .slice(0, 8)
-            .forEach((st) => {
-              points.push(
-                toStoreGeoPoint(st, {
-                  agendaTitle: `Kunjungan Toko ${st.name}`,
-                  agendaDate: selectedDate,
-                  agendaTime: '09:00',
-                  agendaPic: currentUser.name,
-                  routeOrder: order++,
-                })
-              );
-            });
-        }
-      }
-    }
+    return {
+      todayVisitPoints: todayPoints,
+      upcomingStorePoints: upcomingPoints,
+      allScheduledStorePoints: allScheduled,
+    };
+  }, [agendas, todayYmd, isAdmin, currentUser, selectedPicFilter, allMasterStores]);
 
-    return points;
-  }, [
-    agendas,
-    weekStartStr,
-    weekEndStr,
-    selectedDate,
-    isAdmin,
-    currentUser,
-    selectedPicFilter,
-    allMasterStores,
-  ]);
-
-  // Lookup map of scheduled store codes
-  const scheduledByCodeMap = useMemo(() => {
+  // Lookup map toko hari actual vs kedepan
+  const todayByCodeMap = useMemo(() => {
     const map = new Map<string, StoreGeoPoint>();
-    scheduledStorePoints.forEach((pt) => {
-      const key = String(pt.code).toUpperCase();
-      if (!map.has(key)) {
-        map.set(key, pt);
-      }
+    todayVisitPoints.forEach((pt) => {
+      map.set(String(pt.code).toUpperCase(), pt);
     });
     return map;
-  }, [scheduledStorePoints]);
+  }, [todayVisitPoints]);
 
-  // 2. ALL 610 Master Store GeoPoints
-  const allMasterGeoPoints = useMemo(() => {
-    return allMasterStores.map((st, idx) => {
-      const sched = scheduledByCodeMap.get(String(st.code).toUpperCase());
-      if (sched) {
-        return sched;
-      }
-      return toStoreGeoPoint(st, {
-        routeOrder: idx + 1,
-      });
+  const upcomingByCodeMap = useMemo(() => {
+    const map = new Map<string, StoreGeoPoint>();
+    upcomingStorePoints.forEach((pt) => {
+      map.set(String(pt.code).toUpperCase(), pt);
     });
-  }, [allMasterStores, scheduledByCodeMap]);
+    return map;
+  }, [upcomingStorePoints]);
 
-  // Active Store Points displayed on map
+  // ============================================================================
+  // 2. ACTIVE DISPLAYED STORE POINTS (SESUAI VIEW MODE & PENCARIAN)
+  // TIDAK ADA TOKO DUMMY / UNSCHEDULED DI TAMPILAN INI
+  // ============================================================================
   const displayedStorePoints = useMemo(() => {
-    const source = viewMode === 'scheduled' ? scheduledStorePoints : allMasterGeoPoints;
+    const source =
+      viewMode === 'today'
+        ? todayVisitPoints
+        : viewMode === 'upcoming'
+        ? upcomingStorePoints
+        : allScheduledStorePoints;
 
     const q = searchQuery.trim().toLowerCase();
     if (!q) return source;
@@ -239,44 +233,41 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         p.name.toLowerCase().includes(q) ||
         p.city.toLowerCase().includes(q) ||
         p.address.toLowerCase().includes(q) ||
-        (p.agendaPic || '').toLowerCase().includes(q)
+        (p.agendaPic || '').toLowerCase().includes(q) ||
+        (p.agendaTitle || '').toLowerCase().includes(q)
     );
-  }, [viewMode, scheduledStorePoints, allMasterGeoPoints, searchQuery]);
+  }, [viewMode, todayVisitPoints, upcomingStorePoints, allScheduledStorePoints, searchQuery]);
 
   // Bottom drawer strip list
   const bottomStripPoints = useMemo(() => {
-    if (viewMode === 'scheduled') return displayedStorePoints;
-    const q = searchQuery.trim().toLowerCase();
-    if (q) return displayedStorePoints.slice(0, 60);
-    if (scheduledStorePoints.length > 0) {
-      const schedCodes = new Set(scheduledStorePoints.map((s) => s.code));
-      const rest = displayedStorePoints.filter((s) => !schedCodes.has(s.code)).slice(0, 40);
-      return [...scheduledStorePoints, ...rest];
-    }
-    return displayedStorePoints.slice(0, 50);
-  }, [viewMode, displayedStorePoints, scheduledStorePoints, searchQuery]);
+    return displayedStorePoints;
+  }, [displayedStorePoints]);
 
-  // 3. Admin User Pinpoints (HANYA USER YANG BENAR TERDETEKSI GPS AKTUAL / SUDAH AKSES WEB)
+  // ============================================================================
+  // 3. ADMIN USER PINPOINTS (HANYA USER YANG BENAR TERDETEKSI GPS AKTUAL / REALTIME)
+  // ============================================================================
   const adminUserPinpoints = useMemo(() => {
     if (!isAdmin) return [];
     const targetRef =
-      scheduledStorePoints.length > 0 ? scheduledStorePoints : allMasterGeoPoints.slice(0, 30);
+      todayVisitPoints.length > 0 ? todayVisitPoints : allScheduledStorePoints;
     const allPoints = buildAdminUserPinpoints(users, targetRef, radiusMeters, agendas, currentUser);
     if (selectedPicFilter === 'ALL') return allPoints;
     return allPoints.filter((u) => isSamePersonName(u.userName, selectedPicFilter));
-  }, [isAdmin, users, scheduledStorePoints, allMasterGeoPoints, radiusMeters, selectedPicFilter, agendas, currentUser]);
+  }, [isAdmin, users, todayVisitPoints, allScheduledStorePoints, radiusMeters, selectedPicFilter, agendas, currentUser]);
 
-  // 4. Total Scheduled Route Distance Calculation
-  const totalRouteKm = useMemo(() => {
-    if (scheduledStorePoints.length < 2) return 0;
+  // ============================================================================
+  // 4. TOTAL ROUTE DISTANCE (KHUSUS HARI ACTUAL JIKA ADA VISIT)
+  // ============================================================================
+  const todayRouteKm = useMemo(() => {
+    if (todayVisitPoints.length < 2) return 0;
     let total = 0;
-    for (let i = 0; i < scheduledStorePoints.length - 1; i++) {
-      const a = scheduledStorePoints[i];
-      const b = scheduledStorePoints[i + 1];
+    for (let i = 0; i < todayVisitPoints.length - 1; i++) {
+      const a = todayVisitPoints[i];
+      const b = todayVisitPoints[i + 1];
       total += calculateHaversineKm(a.lat, a.lng, b.lat, b.lng);
     }
     return Number(total.toFixed(2));
-  }, [scheduledStorePoints]);
+  }, [todayVisitPoints]);
 
   // Load Leaflet on mount
   useEffect(() => {
@@ -292,7 +283,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     };
   }, [isOpen]);
 
-  // Viewport-Culled Idle Labels Updater (Runs ONLY when map finishes moving/zooming, Max 22 lightweight labels)
+  // Viewport-Culled Labels Updater (Runs ONLY for scheduled stores in viewport)
   const updateViewportLabels = useCallback(() => {
     const L = (window as any).L;
     const map = mapInstanceRef.current;
@@ -301,23 +292,27 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
     labelGroup.clearLayers();
     const zoom = map.getZoom();
-    // Hide all text labels when zoomed out (< 12) so panning/zooming wide areas has zero DOM clutter
-    if (zoom < 12) return;
+    if (zoom < 11) return;
 
     const bounds = map.getBounds();
     let count = 0;
-    const MAX_LABELS = 22;
+    const MAX_LABELS = 30;
 
-    // 1. Prioritize scheduled route stores visible in current viewport
     if (!isAdmin || showStorePinpoints) {
-      for (let i = 0; i < scheduledStorePoints.length; i++) {
+      for (let i = 0; i < displayedStorePoints.length; i++) {
         if (count >= MAX_LABELS) break;
-        const st = scheduledStorePoints[i];
+        const st = displayedStorePoints[i];
         if (bounds.contains([st.lat, st.lng])) {
           const shortName = getMinimalistStoreLabel(st.name);
+          const isToday = todayByCodeMap.has(String(st.code).toUpperCase());
+
+          const html = isToday
+            ? `<div style="transform:translate(-50%,9px);pointer-events:none;background:#059669;color:#fff;font-size:9px;font-weight:900;padding:2px 6px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;line-height:1.2;border:1px solid #34D399;">#${st.routeOrder || ''} ${shortName} (Hari Ini)</div>`
+            : `<div style="transform:translate(-50%,8px);pointer-events:none;background:#0F172A;color:#fff;font-size:8.5px;font-weight:800;padding:1.5px 5px;border-radius:5px;box-shadow:0 2px 5px rgba(0,0,0,0.25);white-space:nowrap;line-height:1.2;border:1px solid #38BDF8;"><span style="color:#38BDF8;">${st.agendaDate ? st.agendaDate.slice(5) : 'Kedepan'}</span> • ${shortName}</div>`;
+
           const icon = L.divIcon({
             className: 'fmcu-fast-label',
-            html: `<div style="transform:translate(-50%,8px);pointer-events:none;background:#0F172A;color:#fff;font-size:8.5px;font-weight:800;padding:1px 4px;border-radius:4px;white-space:nowrap;line-height:1.2;">#${st.routeOrder || ''} ${shortName}</div>`,
+            html,
             iconSize: [0, 0],
             iconAnchor: [0, 0],
           });
@@ -327,30 +322,8 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
           count++;
         }
       }
-
-      // 2. If zoomed in closely (zoom >= 14), also show regular store labels in viewport up to MAX_LABELS
-      if (zoom >= 14 && count < MAX_LABELS) {
-        for (let i = 0; i < displayedStorePoints.length; i++) {
-          if (count >= MAX_LABELS) break;
-          const st = displayedStorePoints[i];
-          if (scheduledByCodeMap.has(String(st.code).toUpperCase())) continue;
-          if (bounds.contains([st.lat, st.lng])) {
-            const shortName = getMinimalistStoreLabel(st.name);
-            const icon = L.divIcon({
-              className: 'fmcu-fast-label',
-              html: `<div style="transform:translate(-50%,7px);pointer-events:none;background:rgba(255,255,255,0.94);color:#0F172A;border:1px solid #CBD5E1;font-size:8px;font-weight:800;padding:0.5px 3.5px;border-radius:3px;white-space:nowrap;line-height:1.15;">${shortName}</div>`,
-              iconSize: [0, 0],
-              iconAnchor: [0, 0],
-            });
-            L.marker([st.lat, st.lng], { icon, interactive: false, keyboard: false }).addTo(
-              labelGroup
-            );
-            count++;
-          }
-        }
-      }
     }
-  }, [isAdmin, showStorePinpoints, scheduledStorePoints, displayedStorePoints, scheduledByCodeMap]);
+  }, [isAdmin, showStorePinpoints, displayedStorePoints, todayByCodeMap]);
 
   // Initialize Map Instance with Hardware-Accelerated HTML5 Canvas Renderer
   useEffect(() => {
@@ -360,8 +333,8 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
     if (!mapInstanceRef.current) {
       const defaultCenter: [number, number] =
-        scheduledStorePoints.length > 0
-          ? [scheduledStorePoints[0].lat, scheduledStorePoints[0].lng]
+        displayedStorePoints.length > 0
+          ? [displayedStorePoints[0].lat, displayedStorePoints[0].lng]
           : [-6.2297, 106.8295];
 
       const canvasRenderer = L.canvas({ padding: 0.5 });
@@ -369,7 +342,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
-        zoom: 11,
+        zoom: 12,
         zoomControl: false,
         preferCanvas: true,
         renderer: canvasRenderer,
@@ -401,7 +374,6 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       labelLayerGroupRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
 
-      // Clear DOM labels during active zoom so pinch/wheel zoom is 100% pure Canvas (60fps)
       map.on('zoomstart', () => {
         labelLayerGroupRef.current?.clearLayers();
       });
@@ -438,7 +410,9 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     tileLayerRef.current.setUrl(provider.url);
   }, [tileStyle]);
 
-  // Render All 610 Store Pinpoints, Routes, Geofences & User Pinpoints onto the single GPU <canvas>
+  // ============================================================================
+  // RENDER VECTOR LAYERS: PINPOINT STORE (ACTUAL & KEDEPAN), RUTE HARI INI, USER GPS
+  // ============================================================================
   useEffect(() => {
     if (
       !isOpen ||
@@ -459,14 +433,9 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
 
     const focusBoundsCoords: [number, number][] = [];
 
-    // A. ADMIN ONLY: RADIUS GEOFENCE CIRCLES (Canvas-rendered)
+    // A. ADMIN ONLY: RADIUS GEOFENCE CIRCLES (Hanya untuk toko terjadwal)
     if (isAdmin && showRadiusCircle && showStorePinpoints) {
-      const radiusTargets =
-        scheduledStorePoints.length > 0
-          ? scheduledStorePoints
-          : displayedStorePoints.slice(0, 25);
-
-      radiusTargets.forEach((st) => {
+      displayedStorePoints.forEach((st) => {
         L.circle([st.lat, st.lng], {
           renderer,
           radius: radiusMeters,
@@ -480,39 +449,43 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       });
     }
 
-    // B. ROUTE LINES (Canvas-rendered)
-    const shouldDrawRoute = (!isAdmin || showRouteLine) && scheduledStorePoints.length >= 2;
-    if (shouldDrawRoute) {
-      const routeLatLngs: [number, number][] = scheduledStorePoints.map((p) => [p.lat, p.lng]);
+    // B. ROUTE LINES: HANYA DIMUNCULKAN KHUSUS UNTUK HARI ACTUAL JIKA ADA VISIT (>= 2 TITIK)
+    const shouldDrawRoute =
+      (!isAdmin || showRouteLine) &&
+      todayVisitPoints.length >= 2 &&
+      viewMode !== 'upcoming';
 
+    if (shouldDrawRoute) {
+      const routeLatLngs: [number, number][] = todayVisitPoints.map((p) => [p.lat, p.lng]);
+
+      // Outer glow line
       L.polyline(routeLatLngs, {
         renderer,
         color: '#0F766E',
-        weight: 5,
-        opacity: 0.2,
+        weight: 6,
+        opacity: 0.25,
         lineCap: 'round',
         lineJoin: 'round',
         interactive: false,
       }).addTo(vectorGroup);
 
+      // Inner dashed primary route line
       L.polyline(routeLatLngs, {
         renderer,
-        color: '#0D9488',
-        weight: 2.8,
-        opacity: 0.92,
-        dashArray: '7, 5',
+        color: '#059669',
+        weight: 3.2,
+        opacity: 0.95,
+        dashArray: '8, 6',
         lineCap: 'round',
         lineJoin: 'round',
         interactive: false,
       }).addTo(vectorGroup);
     }
 
-    // Admin route from User Pinpoint to Target Store
-    if (isAdmin && showRouteLine && showUserPinpoints) {
+    // Admin direct route from User GPS Pinpoint to Today's Target Store
+    if (isAdmin && showRouteLine && showUserPinpoints && shouldDrawRoute) {
       adminUserPinpoints.forEach((up) => {
-        const targetStore =
-          scheduledStorePoints.find((s) => s.code === up.targetStoreCode) ||
-          displayedStorePoints.find((s) => s.code === up.targetStoreCode);
+        const targetStore = todayVisitPoints.find((s) => s.code === up.targetStoreCode);
         if (targetStore && up.distanceToStoreMeters < 50000) {
           L.polyline(
             [
@@ -532,72 +505,70 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       });
     }
 
-    // C. STORE PINPOINTS ON SINGLE HTML5 CANVAS (Zero DOM Lag for all 610 Stores!)
+    // C. STORE PINPOINTS (HANYA MENAMPILKAN TOKO TERJADWAL ACTUAL ATAU KEDEPAN SAJA)
     if (!isAdmin || showStorePinpoints) {
-      // First pass: regular unscheduled master stores
       displayedStorePoints.forEach((st) => {
-        const schedInfo = scheduledByCodeMap.get(String(st.code).toUpperCase());
-        if (schedInfo) return;
-
-        if (searchQuery.trim()) {
-          focusBoundsCoords.push([st.lat, st.lng]);
-        }
-
-        const dot = L.circleMarker([st.lat, st.lng], {
-          renderer,
-          radius: 5.5,
-          fillColor: '#0D9488',
-          fillOpacity: 0.9,
-          color: '#FFFFFF',
-          weight: 1.8,
-        }).addTo(vectorGroup);
-
-        dot.on('click', () => {
-          setSelectedStore(st);
-        });
-      });
-
-      // Second pass: scheduled stores drawn on top with outer halo ring
-      displayedStorePoints.forEach((st) => {
-        const schedInfo = scheduledByCodeMap.get(String(st.code).toUpperCase());
-        if (!schedInfo) return;
-
         focusBoundsCoords.push([st.lat, st.lng]);
+        const isToday = todayByCodeMap.has(String(st.code).toUpperCase());
 
-        // Outer subtle pulse ring on canvas
-        L.circleMarker([st.lat, st.lng], {
-          renderer,
-          radius: 11,
-          fillColor: '#10B981',
-          fillOpacity: 0.24,
-          weight: 0,
-          interactive: false,
-        }).addTo(vectorGroup);
+        if (isToday) {
+          // Toko Hari Ini (Actual): Emerald Halo + Pin Hijau Berenergi
+          L.circleMarker([st.lat, st.lng], {
+            renderer,
+            radius: 12,
+            fillColor: '#10B981',
+            fillOpacity: 0.28,
+            weight: 0,
+            interactive: false,
+          }).addTo(vectorGroup);
 
-        // Crisp inner scheduled pin on canvas
-        const schedMarker = L.circleMarker([st.lat, st.lng], {
-          renderer,
-          radius: 7.5,
-          fillColor: '#059669',
-          fillOpacity: 1,
-          color: '#FFFFFF',
-          weight: 2.4,
-        }).addTo(vectorGroup);
+          const dot = L.circleMarker([st.lat, st.lng], {
+            renderer,
+            radius: 8,
+            fillColor: '#059669',
+            fillOpacity: 1,
+            color: '#FFFFFF',
+            weight: 2.5,
+          }).addTo(vectorGroup);
 
-        schedMarker.on('click', () => {
-          setSelectedStore(schedInfo);
-        });
+          dot.on('click', () => {
+            setSelectedStore(st);
+          });
+        } else {
+          // Toko Jadwal Mendatang (Kedepan): Sky / Blue-Teal Marker
+          L.circleMarker([st.lat, st.lng], {
+            renderer,
+            radius: 10,
+            fillColor: '#0284C7',
+            fillOpacity: 0.2,
+            weight: 0,
+            interactive: false,
+          }).addTo(vectorGroup);
+
+          const dot = L.circleMarker([st.lat, st.lng], {
+            renderer,
+            radius: 7,
+            fillColor: '#0284C7',
+            fillOpacity: 1,
+            color: '#FFFFFF',
+            weight: 2.2,
+          }).addTo(vectorGroup);
+
+          dot.on('click', () => {
+            setSelectedStore(st);
+          });
+        }
       });
     }
 
-    // D. ADMIN USER PINPOINTS ON CANVAS
+    // D. ADMIN USER PINPOINTS (HANYA USER YANG BENAR TERDETEKSI GPS AKTUAL / REALTIME)
     if (isAdmin && showUserPinpoints) {
       adminUserPinpoints.forEach((up) => {
         focusBoundsCoords.push([up.lat, up.lng]);
 
         L.circleMarker([up.lat, up.lng], {
           renderer,
-          radius: 12,
+          radius: 13,
           fillColor: '#3B82F6',
           fillOpacity: 0.22,
           weight: 0,
@@ -648,8 +619,8 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       });
     }
 
-    // Only auto-fit bounds when filter scope / search / PIC changes (not on minor layer toggles)
-    const fitSignature = `${viewMode}|${selectedPicFilter}|${searchQuery.trim()}`;
+    // Auto-fit bounds bila filter / pencarian berubah
+    const fitSignature = `${viewMode}|${selectedPicFilter}|${searchQuery.trim()}|${displayedStorePoints.length}`;
     if (focusBoundsCoords.length > 0 && lastFitSignatureRef.current !== fitSignature) {
       lastFitSignatureRef.current = fitSignature;
       try {
@@ -665,8 +636,9 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     isOpen,
     leafletReady,
     displayedStorePoints,
-    scheduledStorePoints,
-    scheduledByCodeMap,
+    todayVisitPoints,
+    todayByCodeMap,
+    upcomingByCodeMap,
     isAdmin,
     showUserPinpoints,
     showStorePinpoints,
@@ -710,7 +682,11 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
     const L = (window as any).L;
     if (!L) return;
     const targetPoints =
-      scheduledStorePoints.length > 0 ? scheduledStorePoints : displayedStorePoints;
+      displayedStorePoints.length > 0
+        ? displayedStorePoints
+        : todayVisitPoints.length > 0
+        ? todayVisitPoints
+        : upcomingStorePoints;
     if (targetPoints.length > 0) {
       try {
         const bounds = L.latLngBounds(targetPoints.map((p) => [p.lat, p.lng]));
@@ -748,18 +724,34 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 <Compass className="w-3.5 h-3.5" />
               </div>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              <span className="text-[11px] font-extrabold text-slate-900 whitespace-nowrap">
-                {displayedStorePoints.length} Toko
-              </span>
-              {scheduledStorePoints.length > 0 && (
-                <>
-                  <span className="text-slate-300 hidden sm:inline">•</span>
-                  <span className="hidden sm:flex text-[11px] font-extrabold text-teal-700 items-center gap-1 whitespace-nowrap">
-                    <Route className="w-3 h-3" />
-                    {scheduledStorePoints.length} Rute ({totalRouteKm} km)
-                  </span>
-                </>
-              )}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-extrabold text-slate-900 whitespace-nowrap">
+                  {displayedStorePoints.length} Toko Terjadwal
+                </span>
+                {todayVisitPoints.length >= 2 ? (
+                  <>
+                    <span className="text-slate-300 hidden sm:inline">•</span>
+                    <span className="hidden sm:flex text-[11px] font-extrabold text-teal-700 items-center gap-1 whitespace-nowrap">
+                      <Route className="w-3 h-3" />
+                      Rute Hari Ini ({todayRouteKm} km)
+                    </span>
+                  </>
+                ) : todayVisitPoints.length === 1 ? (
+                  <>
+                    <span className="text-slate-300 hidden sm:inline">•</span>
+                    <span className="hidden sm:inline text-[10.5px] font-bold text-emerald-700 whitespace-nowrap">
+                      1 Visit Hari Ini
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-slate-300 hidden sm:inline">•</span>
+                    <span className="hidden sm:inline text-[10.5px] font-medium text-slate-500 whitespace-nowrap">
+                      Hari Ini Tidak Ada Visit
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Map Tile Switcher Pill (Desktop only inline, Mobile inside drawer) */}
@@ -791,7 +783,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-[#76C88D]" />
-              <span>Filter &amp; Cari</span>
+              <span>Filter Jadwal</span>
             </button>
           </div>
 
@@ -810,20 +802,17 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         {/* FLOATING FILTER & SEARCH DRAWER (WITH BACKDROP ON MOBILE) */}
         {showFloatingControls && (
           <>
-            {/* Backdrop on mobile so tapping outside on the map closes the drawer immediately */}
             <div
               className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[2px] sm:hidden"
               onClick={() => setShowFloatingControls(false)}
             />
 
-            {/* Drawer Container: Bottom Sheet on Mobile, Floating Panel on Desktop */}
             <div className="fixed inset-x-0 bottom-0 max-h-[82vh] z-50 bg-white rounded-t-[32px] p-5 shadow-2xl overflow-y-auto no-scrollbar sm:fixed-none sm:absolute sm:top-16 sm:left-3 sm:bottom-auto sm:inset-x-auto sm:w-[380px] sm:rounded-3xl sm:p-4 border border-slate-200 space-y-3 animate-in slide-in-from-bottom sm:slide-in-from-top-2 duration-200">
-              {/* Header Drawer with Drag handle & Close */}
               <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-4 rounded-full bg-[#76C88D]" />
                   <h4 className="text-xs sm:text-sm font-black text-slate-900">
-                    Filter &amp; Pencarian Toko
+                    Filter Toko Terjadwal
                   </h4>
                 </div>
                 <button
@@ -864,7 +853,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari dari 610 toko (kode / nama / kota)..."
+                  placeholder="Cari toko terjadwal (kode/nama/PIC)..."
                   className="w-full pl-8 pr-7 py-2.5 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3A657C]"
                 />
                 {searchQuery && (
@@ -878,31 +867,43 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 )}
               </div>
 
-              {/* View Mode Toggle */}
-              <div className="flex items-center gap-1.5">
+              {/* View Mode Toggle: Actual vs Kedepan vs Semua Terjadwal */}
+              <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-2xl">
                 <button
                   type="button"
-                  onClick={() => setViewMode('all')}
-                  className={`flex-1 py-2.5 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 border cursor-pointer ${
-                    viewMode === 'all'
-                      ? 'bg-[#3A657C] text-white border-[#3A657C]'
-                      : 'bg-slate-50 text-slate-600 border-slate-200'
+                  onClick={() => setViewMode('all_scheduled')}
+                  className={`py-2 px-1 rounded-xl text-[10px] font-extrabold transition cursor-pointer text-center truncate ${
+                    viewMode === 'all_scheduled'
+                      ? 'bg-[#3A657C] text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
+                  title="Tampilkan semua toko terjadwal (hari ini dan mendatang)"
                 >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>Semua Toko ({allMasterStores.length})</span>
+                  Semua ({allScheduledStorePoints.length})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setViewMode('scheduled')}
-                  className={`flex-1 py-2.5 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 border cursor-pointer ${
-                    viewMode === 'scheduled'
-                      ? 'bg-[#3A657C] text-white border-[#3A657C]'
-                      : 'bg-slate-50 text-slate-600 border-slate-200'
+                  onClick={() => setViewMode('today')}
+                  className={`py-2 px-1 rounded-xl text-[10px] font-extrabold transition cursor-pointer text-center truncate ${
+                    viewMode === 'today'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
+                  title="Hanya toko kunjungan hari ini"
                 >
-                  <Route className="w-3.5 h-3.5" />
-                  <span>Rute Jadwal ({scheduledStorePoints.length})</span>
+                  Hari Ini ({todayVisitPoints.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('upcoming')}
+                  className={`py-2 px-1 rounded-xl text-[10px] font-extrabold transition cursor-pointer text-center truncate ${
+                    viewMode === 'upcoming'
+                      ? 'bg-sky-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Hanya toko jadwal mendatang (ke depan)"
+                >
+                  Kedepan ({upcomingStorePoints.length})
                 </button>
               </div>
 
@@ -942,7 +943,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                           : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      Toko
+                      Toko ({displayedStorePoints.length})
                     </button>
                     <button
                       type="button"
@@ -972,7 +973,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                     <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 pt-0.5">
                       <span className="flex items-center gap-1">
                         <Radio className="w-3 h-3 text-emerald-600" />
-                        Radius Geofence Toko:
+                        Radius Geofence:
                       </span>
                       <select
                         value={radiusMeters}
@@ -988,7 +989,6 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 </div>
               )}
 
-              {/* Apply & Close Button on Mobile */}
               <button
                 type="button"
                 onClick={() => setShowFloatingControls(false)}
@@ -1006,7 +1006,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             type="button"
             onClick={handleFitAllBounds}
             className="px-3 py-2 rounded-2xl bg-white hover:bg-slate-50 text-slate-900 border border-slate-200/90 shadow-lg text-[11px] font-extrabold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-            title="Pusatkan Rute Peta"
+            title="Pusatkan Peta"
           >
             <LocateFixed className="w-3.5 h-3.5 text-[#3A657C]" />
             <span>Pusatkan Peta</span>
@@ -1020,7 +1020,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 ? 'bg-[#3A657C] text-white border-[#3A657C]'
                 : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-200/90'
             }`}
-            title="Tampilkan / Sembunyikan Daftar Rute Toko"
+            title="Tampilkan / Sembunyikan Daftar Toko Terjadwal"
           >
             {showBottomStrip ? (
               <>
@@ -1036,14 +1036,44 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
           </button>
         </div>
 
+        {/* NOTICE JIKA TIDAK ADA TOKO TERJADWAL */}
+        {displayedStorePoints.length === 0 && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 bg-white/95 backdrop-blur-sm rounded-3xl p-5 shadow-2xl border border-slate-200 max-w-sm text-center">
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-2.5">
+              <Store className="w-5 h-5" />
+            </div>
+            <h4 className="text-sm font-extrabold text-slate-900 mb-1">
+              Tidak Ada Toko Terjadwal
+            </h4>
+            <p className="text-xs text-slate-500 font-medium">
+              {viewMode === 'today'
+                ? 'Tidak ada agenda kunjungan toko untuk hari ini (actual).'
+                : viewMode === 'upcoming'
+                ? 'Tidak ada agenda kunjungan toko untuk jadwal mendatang (kedepan).'
+                : 'Tidak ada agenda toko yang terjadwal untuk hari ini maupun masa depan.'}
+            </p>
+          </div>
+        )}
+
         {/* SELECTED STORE FLOATING DETAIL CARD */}
         {selectedStore && (
           <div className="absolute bottom-14 left-3 right-3 sm:bottom-3 sm:left-auto sm:right-14 sm:w-80 z-20 bg-white rounded-3xl p-4 shadow-2xl border border-slate-200">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div>
-                <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
-                  #{selectedStore.code} • {selectedStore.type}
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                    #{selectedStore.code} • {selectedStore.type}
+                  </span>
+                  {selectedStore.agendaDate === todayYmd ? (
+                    <span className="text-[9.5px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      Hari Ini #{selectedStore.routeOrder || 1}
+                    </span>
+                  ) : (
+                    <span className="text-[9.5px] font-black text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200">
+                      Kedepan ({selectedStore.agendaDate || ''})
+                    </span>
+                  )}
+                </div>
                 <h4 className="text-sm font-black text-slate-900 mt-1">
                   Toko {selectedStore.name}
                 </h4>
@@ -1120,12 +1150,12 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
             <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-[#3A657C]" />
               <span>
-                Rute &amp; Koordinat Toko ({displayedStorePoints.length} Titik Master Data)
+                Toko Terjadwal ({displayedStorePoints.length} Toko)
               </span>
             </span>
-            {scheduledStorePoints.length >= 2 && (
+            {todayVisitPoints.length >= 2 && viewMode !== 'upcoming' && (
               <a
-                href={`https://www.google.com/maps/dir/${scheduledStorePoints
+                href={`https://www.google.com/maps/dir/${todayVisitPoints
                   .slice(0, 10)
                   .map((p) => `${p.lat},${p.lng}`)
                   .join('/')}`}
@@ -1134,7 +1164,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 className="text-[10px] font-extrabold text-teal-700 hover:text-teal-800 flex items-center gap-1 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200"
               >
                 <Navigation className="w-3 h-3" />
-                <span>Buka Multi-Rute di Google Maps</span>
+                <span>Buka Multi-Rute Hari Ini di Google Maps</span>
               </a>
             )}
           </div>
@@ -1142,34 +1172,34 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
             {bottomStripPoints.length === 0 ? (
               <div className="text-xs text-slate-400 py-2">
-                Tidak ada titik toko yang cocok dengan pencarian.
+                Tidak ada titik toko yang cocok dengan filter atau pencarian.
               </div>
             ) : (
               bottomStripPoints.map((st, idx) => {
                 const isSelected = selectedStore?.code === st.code;
-                const isSched = scheduledByCodeMap.has(String(st.code).toUpperCase());
+                const isToday = todayByCodeMap.has(String(st.code).toUpperCase());
 
                 return (
                   <button
                     key={`${st.code}-${idx}`}
                     type="button"
                     onClick={() => handleFocusStore(st)}
-                    className={`shrink-0 text-left p-2 rounded-2xl border transition cursor-pointer min-w-[205px] max-w-[225px] ${
+                    className={`shrink-0 text-left p-2 rounded-2xl border transition cursor-pointer min-w-[210px] max-w-[230px] ${
                       isSelected
                         ? 'bg-teal-50 border-teal-500'
-                        : isSched
-                        ? 'bg-emerald-50/50 hover:bg-slate-50 border-teal-200'
-                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80'
+                        : isToday
+                        ? 'bg-emerald-50/70 hover:bg-emerald-100/50 border-emerald-300'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1.5 mb-1">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span
                           className={`w-4 h-4 rounded-full text-white text-[9px] font-black flex items-center justify-center shrink-0 ${
-                            isSched ? 'bg-teal-600' : 'bg-slate-500'
+                            isToday ? 'bg-emerald-600' : 'bg-sky-600'
                           }`}
                         >
-                          {isSched ? st.routeOrder || idx + 1 : '•'}
+                          {isToday ? st.routeOrder || idx + 1 : '•'}
                         </span>
                         <span className="text-[11px] font-black text-slate-800 truncate">
                           {st.name}
@@ -1195,7 +1225,12 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                       <div className="mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[9px] text-slate-500 font-semibold">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-2.5 h-2.5 text-teal-600" />
-                          {st.agendaDate} ({st.agendaTime})
+                          {isToday ? (
+                            <strong className="text-emerald-700">Hari Ini</strong>
+                          ) : (
+                            st.agendaDate
+                          )}{' '}
+                          ({st.agendaTime})
                         </span>
                         {st.agendaPic && (
                           <span className="text-teal-700 font-bold truncate max-w-[85px]">
