@@ -39,6 +39,7 @@ import {
   getMondayOfWeek,
   getFullWeekDays,
   formatWeekRangeDisplay,
+  exportScheduleToTemplateExcel,
 } from '../services/scheduleExcelService';
 
 interface DesktopDashboardProps {
@@ -487,7 +488,13 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               onOpenNewAgenda={onOpenNewAgenda}
               onOpenExcelUpload={onOpenExcelUpload}
               onToggleComplete={onToggleComplete}
+              onEditAgenda={onUpdateAgenda ? (item) => onSelectAgenda(item) : undefined}
+              onDeleteAgenda={user.isAdmin ? onDeleteAgenda : undefined}
+              onExportExcel={(filterPerson) => {
+                exportScheduleToTemplateExcel(agendas, users, filterPerson || 'ALL');
+              }}
               initialDate={selectedDate}
+              isReadOnly={Boolean(user.isExecutiveViewer || user.accessLevel === 'EXECUTIVE_VIEWER')}
             />
           ) : activeMenu === 'coverage' ? (
             /* Halaman Coverage Store & Leaderboard */

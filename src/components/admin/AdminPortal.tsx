@@ -42,6 +42,7 @@ import excelSeed from '../../data/excelScheduleSeed.json';
 import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from '../visit/HoldingTimeR23Modal';
 import { ExecutiveAnalyticsSuite } from './ExecutiveAnalyticsSuite';
+import { CalendarScheduleView } from '../CalendarScheduleView';
 import {
   HoldingTimeStandards,
   getActiveHoldingTimeStandards,
@@ -158,10 +159,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     ownerBestieName: '',
   });
 
-  // Schedule Filter & Search State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
-  const [selectedUserFilter, setSelectedUserFilter] = useState<string>('ALL');
+  // Schedule Calendar Filter State
+  const [calendarPersonFilter, setCalendarPersonFilter] = useState<string>('ALL');
 
   // Modal State for New / Edit Agenda
   const [showAgendaModal, setShowAgendaModal] = useState(false);
@@ -801,79 +800,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
-  const filteredAgendas = agendas.filter((item) => {
-    const matchSearch =
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.pic.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.storeCode && item.storeCode.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchCategory =
-      selectedCategoryFilter === 'ALL' || item.category === selectedCategoryFilter;
-    const matchUser = selectedUserFilter === 'ALL' || item.pic === selectedUserFilter;
-    return matchSearch && matchCategory && matchUser;
-  });
-
-  // Schedule View Mode ('cards' ala user view vs 'table')
-  const [scheduleViewMode, setScheduleViewMode] = useState<'cards' | 'table'>('cards');
-
-  // WhatsApp Broadcast Handlers
-  const handleBroadcastAgendaWhatsApp = (agenda: ScheduleAgenda) => {
-    const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://fmcu-teams.web.app';
-    const storeInfo = agenda.storeCode ? `[${agenda.storeCode}] ${agenda.location}` : agenda.location || '-';
-    const msg = [
-      `📢 *JADWAL PENUGASAN FMCU*`,
-      `👤 *Personel:* ${agenda.pic || '-'}`,
-      `📅 *Hari/Tanggal:* ${agenda.date}`,
-      `⏰ *Waktu:* ${agenda.time || '08:30'}${agenda.endTime ? ` – ${agenda.endTime}` : ''} WIB`,
-      `🏷️ *Kategori:* ${agenda.category}`,
-      `🏢 *Toko / Lokasi:* ${storeInfo}`,
-      `📝 *Agenda:* ${agenda.title}`,
-      agenda.description ? `ℹ️ *Catatan:* ${agenda.description}` : '',
-      ``,
-      `🔗 *Buka Aplikasi Web FMCU Teams:*`,
-      `${appUrl}`,
-      ``,
-      `_Pesan resmi terkirim otomatis dari Portal Admin & Executive FMCU._`,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
-  };
-
-  const handleBroadcastFilteredAgendasWhatsApp = () => {
-    const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://fmcu-teams.web.app';
-    const count = filteredAgendas.length;
-    if (count === 0) {
-      alert('Tidak ada agenda yang terfilter untuk di-broadcast.');
-      return;
-    }
-
-    const itemsSummary = filteredAgendas.slice(0, 12).map((a, idx) => {
-      const storeStr = a.storeCode ? `[${a.storeCode}]` : '';
-      return `${idx + 1}. *${a.pic}* (${a.date} • ${a.time} WIB)\n   ${storeStr} ${a.title} (${a.category})`;
-    }).join('\n\n');
-
-    const msg = [
-      `📢 *BROADCAST JADWAL FMCU (${count} PENUGASAN)*`,
-      selectedUserFilter !== 'ALL' ? `👤 *Filter Personel:* ${selectedUserFilter}` : '',
-      selectedCategoryFilter !== 'ALL' ? `🏷️ *Kategori:* ${selectedCategoryFilter}` : '',
-      `📅 *Total Agenda Terfilter:* ${count} Kegiatan`,
-      ``,
-      itemsSummary,
-      count > 12 ? `\n...dan ${count - 12} penugasan lainnya.` : '',
-      ``,
-      `🔗 *Buka Aplikasi Web FMCU Teams:*`,
-      `${appUrl}`,
-      ``,
-      `_Pesan resmi terkirim otomatis dari Portal Admin & Executive FMCU._`,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
-  };
-
   // Top Navigation Items (Matching Lordbank Reference: Dashboard | Calendar | Projects/Stores | Team | Documents)
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -887,8 +813,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const handleGlobalSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!globalSearch.trim()) return;
-    setSearchQuery(globalSearch.trim());
-    setActiveTab('schedules');
+    setStoreSearchQuery(globalSearch.trim());
+    setActiveTab('stores');
   };
 
   return (
@@ -1453,383 +1379,40 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
 
-        {/* TAB 3: CALENDAR & MASTER SCHEDULE MANAGEMENT */}
+        {/* TAB 3: CALENDAR & MASTER SCHEDULE MANAGEMENT (UNIFIED WITH USER CALENDAR UI) */}
         {activeTab === 'schedules' && (
-          <div className="space-y-5 animate-in fade-in duration-200">
-            <div className="bg-[#F3F5F8] rounded-[28px] p-5 flex flex-col lg:flex-row items-center justify-between gap-3">
-              <div className="relative w-full lg:w-80">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Cari agenda, kode toko, karyawan, lokasi..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white rounded-full pl-10 pr-4 py-2 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#76C88D]"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                <select
-                  value={selectedCategoryFilter}
-                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                  className="px-4 py-2 bg-white rounded-full text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                >
-                  <option value="ALL">Semua Kategori ({agendas.length})</option>
-                  <option value="VISIT">
-                    Store Visit ({agendas.filter((a) => a.category === 'VISIT').length})
-                  </option>
-                  <option value="NSO">
-                    NSO Opening ({agendas.filter((a) => a.category === 'NSO').length})
-                  </option>
-                  <option value="TRAINING">
-                    Training / SBS ({agendas.filter((a) => a.category === 'TRAINING').length})
-                  </option>
-                  <option value="MEETING">
-                    Meeting ({agendas.filter((a) => a.category === 'MEETING').length})
-                  </option>
-                  <option value="AUDIT">
-                    Audit SOP ({agendas.filter((a) => a.category === 'AUDIT').length})
-                  </option>
-                  <option value="WORK_PLAN">
-                    Work Plan ({agendas.filter((a) => a.category === 'WORK_PLAN').length})
-                  </option>
-                  <option value="OPERATION">
-                    Operation ({agendas.filter((a) => a.category === 'OPERATION').length})
-                  </option>
-                  <option value="CUTI">
-                    Cuti ({agendas.filter((a) => a.category === 'CUTI').length})
-                  </option>
-                  <option value="OFF">
-                    Hari Libur / OFF ({agendas.filter((a) => a.category === 'OFF').length})
-                  </option>
-                </select>
-
-                <select
-                  value={selectedUserFilter}
-                  onChange={(e) => setSelectedUserFilter(e.target.value)}
-                  className="px-4 py-2 bg-white rounded-full text-xs font-bold text-slate-700 outline-none max-w-[200px] cursor-pointer"
-                >
-                  <option value="ALL">
-                    Semua Karyawan ({users.filter((u) => !u.isAdmin).length})
-                  </option>
-                  {[...users]
-                    .filter((u) => !u.isAdmin)
-                    .sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }))
-                    .map((u) => (
-                      <option key={u.id || u.name} value={u.name}>
-                        {u.name}
-                      </option>
-                    ))}
-                </select>
-
-                {/* View Switcher: Cards (Ala User) vs Tabel */}
-                <div className="flex items-center bg-white rounded-full p-1 border border-slate-200/80 shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => setScheduleViewMode('cards')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                      scheduleViewMode === 'cards'
-                        ? 'bg-[#3A657C] text-white shadow-2xs'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" />
-                    <span>Cards (Ala User)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScheduleViewMode('table')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                      scheduleViewMode === 'table'
-                        ? 'bg-[#3A657C] text-white shadow-2xs'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    <List className="w-3.5 h-3.5" />
-                    <span>Tabel</span>
-                  </button>
-                </div>
-
-                {/* Broadcast Filtered Agendas ke WhatsApp Button */}
-                <button
-                  type="button"
-                  onClick={handleBroadcastFilteredAgendasWhatsApp}
-                  className="px-4 py-2 rounded-full bg-[#25D366] hover:bg-[#20BD5A] text-white text-xs font-bold shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
-                  title="Broadcast semua jadwal terfilter ke WhatsApp"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>Broadcast WA ({filteredAgendas.length})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    exportScheduleToTemplateExcel(agendas, users, selectedUserFilter)
-                  }
-                  className="px-4 py-2 rounded-full bg-[#76C88D] hover:bg-[#66B87D] text-white text-xs font-bold shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>
-                    Export Excel{' '}
-                    {selectedUserFilter === 'ALL' ? '(Semua)' : `(${selectedUserFilter})`}
-                  </span>
-                </button>
-
-                {!isReadOnly ? (
-                  <button
-                    onClick={handleOpenCreateModal}
-                    className="px-4 py-2 rounded-full bg-[#3A657C] hover:bg-[#2E5266] text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Buat Agenda</span>
-                  </button>
-                ) : (
-                  <span className="px-3.5 py-2 rounded-full bg-white text-[#3A657C] text-xs font-bold flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>Read-Only</span>
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-[28px] border border-slate-100 shadow-2xs overflow-hidden">
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">
-                  Menampilkan {filteredAgendas.length} agenda kerja ({scheduleViewMode === 'cards' ? 'Tampilan Card Ala User' : 'Tampilan Tabel'})
-                </span>
-                <span className="text-[11px] font-bold text-[#2E8B57] bg-[#EBF8F0] px-3 py-0.5 rounded-full">
-                  Terintegrasi 610 Master Toko &amp; Kepemilikan Bestie
-                </span>
-              </div>
-
-              {scheduleViewMode === 'cards' ? (
-                /* =========================================================================
-                   TAMPILAN CARD (ALA USER / EXECUTIVE MODERN MINIMALIST)
-                   ========================================================================= */
-                <div className="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[640px] overflow-y-auto no-scrollbar">
-                  {filteredAgendas.length === 0 ? (
-                    <div className="col-span-full py-12 text-center text-slate-400 text-xs font-semibold">
-                      Tidak ada agenda yang cocok dengan filter yang dipilih.
-                    </div>
-                  ) : (
-                    filteredAgendas.map((agenda) => {
-                      return (
-                        <div
-                          key={agenda.id}
-                          className="p-5 rounded-[24px] bg-[#F8FAFC] border border-slate-200/70 hover:border-teal-200 hover:bg-white hover:shadow-soft-card transition-all flex flex-col justify-between"
-                        >
-                          <div>
-                            {/* Card Top: Category Chip & Time */}
-                            <div className="flex items-center justify-between gap-2 mb-3">
-                              <span
-                                className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
-                                  agenda.category === 'VISIT'
-                                    ? 'bg-[#EBF8F0] text-[#2E8B57] border border-[#2E8B57]/20'
-                                    : agenda.category === 'NSO'
-                                    ? 'bg-[#EBF2F6] text-[#3A657C] border border-[#3A657C]/20'
-                                    : agenda.category === 'OFF'
-                                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                    : agenda.category === 'CUTI'
-                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                    : 'bg-slate-100 text-slate-700 border border-slate-200'
-                                }`}
-                              >
-                                {agenda.category}
-                              </span>
-
-                              <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">
-                                <Clock className="w-3 h-3 text-teal-600" />
-                                <span>{agenda.time}{agenda.endTime ? `–${agenda.endTime}` : ''} WIB</span>
-                              </div>
-                            </div>
-
-                            {/* Card Title */}
-                            <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
-                              {agenda.title}
-                            </h4>
-
-                            {/* Store & Location Badge */}
-                            <div className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                              <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                              <span className="truncate">
-                                {agenda.storeCode && (
-                                  <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-[#3A657C] text-white mr-1.5">
-                                    #{agenda.storeCode}
-                                  </span>
-                                )}
-                                <span>{agenda.location}</span>
-                              </span>
-                            </div>
-
-                            {/* PIC Personnel with Clean Initials */}
-                            <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#3A657C] to-[#2E8B57] text-white text-[10px] font-black flex items-center justify-center shrink-0 uppercase shadow-2xs">
-                                  {agenda.pic.substring(0, 2)}
-                                </div>
-                                <div className="min-w-0">
-                                  <span className="block text-xs font-bold text-slate-800 truncate">
-                                    {agenda.pic}
-                                  </span>
-                                  <span className="block text-[10px] text-slate-400 font-medium">
-                                    {agenda.date}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Status indicator */}
-                              <span
-                                className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full ${
-                                  agenda.completed
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-slate-200/70 text-slate-600'
-                                }`}
-                              >
-                                {agenda.completed ? 'Selesai' : 'Terjadwal'}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Card Actions: WhatsApp Broadcast + Edit + Delete */}
-                          <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleBroadcastAgendaWhatsApp(agenda)}
-                              className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] font-bold text-xs flex items-center justify-center gap-1.5 border border-[#25D366]/30 transition active:scale-95 cursor-pointer"
-                              title="Kirim Penugasan ke WhatsApp Personel"
-                            >
-                              <Share2 className="w-3.5 h-3.5" />
-                              <span>Broadcast WA</span>
-                            </button>
-
-                            {!isReadOnly ? (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditModal(agenda)}
-                                  className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition active:scale-95 cursor-pointer"
-                                  title="Edit Agenda"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => onDeleteAgenda(agenda.id)}
-                                  className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition active:scale-95 cursor-pointer"
-                                  title="Hapus Agenda"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">
-                                <Lock className="w-3 h-3" />
-                                <span>Read-Only</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              ) : (
-                /* =========================================================================
-                   TAMPILAN TABEL RINGKAS (POWER USER & SPREADSHEET SCANNING)
-                   ========================================================================= */
-                <div className="overflow-x-auto no-scrollbar max-h-[620px] overflow-y-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead className="sticky top-0 z-10 bg-[#F8FAFC]">
-                      <tr className="text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100 text-[10.5px]">
-                        <th className="py-3.5 px-4">Karyawan (PIC)</th>
-                        <th className="py-3.5 px-4">Judul Agenda</th>
-                        <th className="py-3.5 px-4">Kategori</th>
-                        <th className="py-3.5 px-4">Tanggal &amp; Waktu</th>
-                        <th className="py-3.5 px-4">Lokasi / Master Toko</th>
-                        <th className="py-3.5 px-4 text-right">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {filteredAgendas.map((agenda) => (
-                        <tr key={agenda.id} className="hover:bg-[#F8FAFC] transition-colors">
-                          <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#3A657C] to-[#2E8B57] text-white text-[10px] font-black flex items-center justify-center shrink-0 uppercase shadow-2xs">
-                              {agenda.pic.substring(0, 2)}
-                            </div>
-                            <span className="truncate max-w-[155px]">{agenda.pic}</span>
-                          </td>
-                          <td className="py-3.5 px-4 font-semibold text-slate-800 max-w-xs break-words">
-                            {agenda.title}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span
-                              className={`text-[10.5px] font-bold px-2.5 py-0.5 rounded-full ${
-                                agenda.category === 'VISIT'
-                                  ? 'bg-[#EBF8F0] text-[#2E8B57]'
-                                  : agenda.category === 'NSO'
-                                  ? 'bg-[#EBF2F6] text-[#3A657C]'
-                                  : 'bg-[#F3F5F8] text-slate-600'
-                              }`}
-                            >
-                              {agenda.category}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 font-semibold text-slate-600">
-                            {agenda.date} • {agenda.time}
-                            {agenda.endTime ? `–${agenda.endTime}` : ''} WIB
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-500 max-w-[230px]">
-                            <div className="truncate">
-                              {agenda.storeCode && (
-                                <span className="font-mono font-bold text-[10px] px-2 py-0.5 rounded bg-[#3A657C] text-white mr-1.5">
-                                  {agenda.storeCode}
-                                </span>
-                              )}
-                              <span>{agenda.location}</span>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleBroadcastAgendaWhatsApp(agenda)}
-                                className="p-2 rounded-full bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] transition cursor-pointer"
-                                title="Broadcast WhatsApp"
-                              >
-                                <Share2 className="w-3.5 h-3.5" />
-                              </button>
-                              {!isReadOnly ? (
-                                <>
-                                  <button
-                                    onClick={() => handleOpenEditModal(agenda)}
-                                    className="p-2 rounded-full bg-[#F3F5F8] hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                                    title="Edit Agenda"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => onDeleteAgenda(agenda.id)}
-                                    className="p-2 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
-                                    title="Hapus Agenda"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F3F5F8] text-slate-500 text-[10px] font-bold">
-                                  <Lock className="w-3 h-3" />
-                                  <span>Read-Only</span>
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+          <div className="animate-in fade-in duration-200">
+            <CalendarScheduleView
+              user={adminUser}
+              agendas={agendas}
+              initialPersonFilter={calendarPersonFilter}
+              onBack={() => setActiveTab('dashboard')}
+              onSelectAgenda={(agenda) => {
+                if (!isReadOnly) {
+                  handleOpenEditModal(agenda);
+                }
+              }}
+              onToggleComplete={(id) => {
+                if (isReadOnly) return;
+                const target = agendas.find((a) => a.id === id);
+                if (target) {
+                  onUpdateAgenda({ ...target, completed: !target.completed });
+                }
+              }}
+              onOpenNewAgenda={!isReadOnly ? handleOpenCreateModal : undefined}
+              onOpenExcelUpload={!isReadOnly ? () => setActiveTab('import-excel') : undefined}
+              onEditAgenda={!isReadOnly ? handleOpenEditModal : undefined}
+              onDeleteAgenda={!isReadOnly ? (id) => {
+                const target = agendas.find((a) => a.id === id);
+                if (window.confirm(`Hapus agenda "${target?.title || id}"?`)) {
+                  onDeleteAgenda(id);
+                }
+              } : undefined}
+              onExportExcel={(filterPerson) => {
+                exportScheduleToTemplateExcel(agendas, users, filterPerson || 'ALL');
+              }}
+              isReadOnly={isReadOnly}
+            />
           </div>
         )}
 
@@ -2178,7 +1761,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             <button
                               type="button"
                               onClick={() => {
-                                setSelectedUserFilter(u.name);
+                                setCalendarPersonFilter(u.name);
                                 setActiveTab('schedules');
                               }}
                               className="text-[10.5px] font-bold text-[#3A657C] bg-[#EBF2F6] px-2.5 py-0.5 rounded-full cursor-pointer hover:brightness-95 transition"

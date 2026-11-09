@@ -27,6 +27,7 @@ import {
   hydrateAgendasWithLocalAttendance,
   flushOfflineAttendanceQueue,
 } from './services/actualAttendanceService';
+import { exportScheduleToTemplateExcel } from './services/scheduleExcelService';
 import { Shield, ArrowLeft } from 'lucide-react';
 import { GpsEnforcerGuard } from './components/common/GpsEnforcerGuard';
 
@@ -408,6 +409,14 @@ export const App: React.FC = () => {
     deleteAgendaFromCloud(id);
   };
 
+  const handleToggleComplete = (id: string) => {
+    if (user?.isExecutiveViewer) return;
+    const target = agendas.find((a) => a.id === id);
+    if (target) {
+      handleUpdateAgenda({ ...target, completed: !target.completed });
+    }
+  };
+
   // Handlers for Admin & User Excel Import & Sync
   const handleImportExcel = (
     importedUsers: User[],
@@ -618,7 +627,11 @@ export const App: React.FC = () => {
                   onSelectAgenda={handleSelectAgenda}
                   onOpenNewAgenda={() => setShowNewAgendaModal(true)}
                   onOpenExcelUpload={user?.isAdmin ? () => setShowExcelUploadModal(true) : undefined}
+                  onToggleComplete={handleToggleComplete}
+                  onDeleteAgenda={user?.isAdmin ? handleDeleteAgenda : undefined}
+                  onExportExcel={(person) => exportScheduleToTemplateExcel(agendas, users, person || 'ALL')}
                   initialDate={selectedDate}
+                  isReadOnly={Boolean(user?.isExecutiveViewer || user?.accessLevel === 'EXECUTIVE_VIEWER')}
                 />
               )}
 
