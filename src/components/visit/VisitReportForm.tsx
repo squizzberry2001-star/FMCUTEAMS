@@ -240,7 +240,7 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
         aria-hidden="true"
         readOnly
         rows={minRows}
-        className={`fixed -top-[9999px] -left-[9999px] opacity-0 pointer-events-none overflow-hidden resize-none ${className}`}
+        className={`absolute top-0 left-0 opacity-0 pointer-events-none overflow-hidden resize-none -z-50 ${className}`}
         style={{
           ...style,
           boxSizing: 'border-box',
@@ -538,22 +538,24 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   const sectionScrollPosRef = useRef<Record<number, number>>({ 1: 0, 2: 0, 3: 0 });
 
   const handleSwitchSection = (nextSection: number) => {
-    // Simpan posisi scroll section saat ini
-    const currentScrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+    const container = formScrollContainerRef.current;
+    const currentScrollY = container
+      ? container.scrollTop
+      : (window.scrollY || window.pageYOffset || document.documentElement?.scrollTop || 0);
     sectionScrollPosRef.current[activeSection] = currentScrollY;
 
     setActiveSection(nextSection);
+    setShowTopNavbar(true);
+    setIsScrolled(false);
+    lastScrollYRef.current = 0;
 
-    if (nextSection === 1) {
-      // SECTION 1 form visit selalu start dari top page
+    // Scroll container ke posisi paling atas section baru secara instan & mulus
+    requestAnimationFrame(() => {
+      if (container) {
+        container.scrollTop = 0;
+      }
       window.scrollTo({ top: 0, behavior: 'instant' });
-    } else {
-      // Section Observasi & Bukti mempertahankan posisi scroll terakhir
-      const savedY = sectionScrollPosRef.current[nextSection] || 0;
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: savedY, behavior: 'instant' });
-      });
-    }
+    });
   };
 
   // Sub-section tabs
@@ -2164,7 +2166,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   return (
     <div
       ref={formScrollContainerRef}
-      className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar bg-[#F8F9FD] select-none px-4 sm:px-6 pt-16 pb-36 max-w-6xl mx-auto relative flex flex-col"
+      style={{
+        WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-y',
+      }}
+      className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar bg-[#F8F9FD] px-4 sm:px-6 pt-16 pb-44 max-w-6xl mx-auto relative flex flex-col"
     >
       {/* Section / Sub-Tab Blur + Silhouette + Mini "FMCU....." Bouncing Loader */}
       <PageTransitionLoader visible={isSectionTransitioning} />
@@ -3028,7 +3034,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             TANPA BANNER ACTUAL IN/OUT
             ============================================================ */}
         {activeSection === 2 && (
-          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-5 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-5 animate-in fade-in min-h-[60vh]">
             {/* Header Section 2 */}
             <div className="border-b border-slate-100 pb-3">
               <h3 className="font-black text-base sm:text-lg text-slate-900">
