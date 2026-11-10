@@ -81,6 +81,13 @@ import {
   subscribeToCrossDeviceVisit,
   saveVisitPhotosToIdb,
   loadVisitPhotosFromIdb,
+  getDeletedObsIds,
+  markObsDeletedLocally,
+  getDeletedPhotoIds,
+  markPhotoDeletedLocally,
+  getDeletedCrewIds,
+  markCrewDeletedLocally,
+  filterReportWithTombstones,
 } from '../../services/crossDeviceVisitSyncService';
 
 interface VisitReportFormProps {
@@ -415,7 +422,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return {
+        return filterReportWithTombstones({
           ...parsed,
           actualIn: agenda.actualIn || parsed.actualIn || initialInTime,
           actualOut: agenda.actualOut || parsed.actualOut || initialOutTime,
@@ -428,7 +435,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           areaManager: parsed.areaManager || resolvedAreaManager,
           regionalManager: parsed.regionalManager || resolvedRegionalManager,
           storeEmail: parsed.storeEmail || resolvedStoreEmail,
-        };
+        });
       } catch (e) {
         console.error(e);
       }
@@ -636,7 +643,17 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   const activeRecognitionRef = useRef<any>(null);
 
   // Cross-Device Real-time Sync Timestamp Ref
-  const lastSyncTimestampRef = useRef<number>((formData as any).updatedAtMs || 0);
+  const initialTimestamp = (() => {
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.updatedAtMs) return Number(parsed.updatedAtMs);
+      }
+    } catch {}
+    return (formData as any)?.updatedAtMs || 0;
+  })();
+  const lastSyncTimestampRef = useRef<number>(initialTimestamp);
 
   // Restore heavy photos from IndexedDB on mount & Cross-Device Real-time Hydration
   useEffect(() => {
@@ -645,20 +662,19 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     // 1. Instant local restore from IndexedDB
     loadPhotosFromIdb(draftKey).then((cached) => {
       if (mounted && cached) {
+        const deletedPhotos = getDeletedPhotoIds(agenda.id);
         setFormData((prev) => ({
           ...prev,
-          storeFrontPhoto: cached.storeFrontPhoto || prev.storeFrontPhoto,
-          qscSheetPhoto: cached.qscSheetPhoto || cached.qscSheetTop || cached.qscSheetBottom || prev.qscSheetPhoto,
-          qscSheetTop: cached.qscSheetTop || prev.qscSheetTop,
-          qscSheetBottom: cached.qscSheetBottom || prev.qscSheetBottom,
-          evidencePhotos:
-            Array.isArray(cached.evidencePhotos) && cached.evidencePhotos.length > 0
-              ? cached.evidencePhotos
-              : prev.evidencePhotos,
-          caPhotos:
-            Array.isArray(cached.caPhotos) && cached.caPhotos.length > 0
-              ? cached.caPhotos
-              : prev.caPhotos,
+          storeFrontPhoto: cached.storeFrontPhoto !== undefined ? cached.storeFrontPhoto : prev.storeFrontPhoto,
+          qscSheetPhoto: cached.qscSheetPhoto !== undefined ? cached.qscSheetPhoto : prev.qscSheetPhoto,
+          qscSheetTop: cached.qscSheetTop !== undefined ? cached.qscSheetTop : prev.qscSheetTop,
+          qscSheetBottom: cached.qscSheetBottom !== undefined ? cached.qscSheetBottom : prev.qscSheetBottom,
+          evidencePhotos: Array.isArray(cached.evidencePhotos)
+            ? (cached.evidencePhotos as EvidencePhoto[]).filter((p) => !deletedPhotos.has(p.id))
+            : prev.evidencePhotos,
+          caPhotos: Array.isArray(cached.caPhotos)
+            ? (cached.caPhotos as EvidencePhoto[]).filter((p) => !deletedPhotos.has(p.id))
+            : prev.caPhotos,
         }));
       }
     });
@@ -669,35 +685,33 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       const remoteMs = cloudReport.updatedAtMs || 0;
       const localMs = lastSyncTimestampRef.current;
+      const isLocalEmpty = localMs === 0 && !localStorage.getItem(draftKey);
 
-      const hasCloudData =
-        (Array.isArray(cloudReport.observations) && cloudReport.observations.length > 0) ||
-        (Array.isArray(cloudReport.evidencePhotos) && cloudReport.evidencePhotos.length > 0) ||
-        Boolean(cloudReport.qscSheetPhoto || cloudReport.qscSheetTop || cloudReport.qscSheetBottom);
-
-      if (remoteMs > localMs || hasCloudData) {
+      // ONLY overwrite local state if remote is strictly newer OR if this device has no local draft at all
+      if (remoteMs > localMs || isLocalEmpty) {
+        const cleanReport = filterReportWithTombstones(cloudReport);
         lastSyncTimestampRef.current = remoteMs || Date.now();
         setFormData((prev) => ({
           ...prev,
-          ...cloudReport,
-          crews: Array.isArray(cloudReport.crews) && cloudReport.crews.length > 0 ? cloudReport.crews : prev.crews,
-          observations: Array.isArray(cloudReport.observations) ? cloudReport.observations : prev.observations,
-          evidencePhotos: Array.isArray(cloudReport.evidencePhotos) ? cloudReport.evidencePhotos : prev.evidencePhotos,
-          caPhotos: Array.isArray(cloudReport.caPhotos) ? cloudReport.caPhotos : prev.caPhotos,
-          storeFrontPhoto: cloudReport.storeFrontPhoto || prev.storeFrontPhoto,
-          qscSheetPhoto: cloudReport.qscSheetPhoto || prev.qscSheetPhoto,
-          qscSheetTop: cloudReport.qscSheetTop || prev.qscSheetTop,
-          qscSheetBottom: cloudReport.qscSheetBottom || prev.qscSheetBottom,
+          ...cleanReport,
+          crews: Array.isArray(cleanReport.crews) && cleanReport.crews.length >= 2 ? cleanReport.crews : prev.crews,
+          observations: Array.isArray(cleanReport.observations) ? cleanReport.observations : prev.observations,
+          evidencePhotos: Array.isArray(cleanReport.evidencePhotos) ? cleanReport.evidencePhotos : prev.evidencePhotos,
+          caPhotos: Array.isArray(cleanReport.caPhotos) ? cleanReport.caPhotos : prev.caPhotos,
+          storeFrontPhoto: cleanReport.storeFrontPhoto !== undefined ? cleanReport.storeFrontPhoto : prev.storeFrontPhoto,
+          qscSheetPhoto: cleanReport.qscSheetPhoto !== undefined ? cleanReport.qscSheetPhoto : prev.qscSheetPhoto,
+          qscSheetTop: cleanReport.qscSheetTop !== undefined ? cleanReport.qscSheetTop : prev.qscSheetTop,
+          qscSheetBottom: cleanReport.qscSheetBottom !== undefined ? cleanReport.qscSheetBottom : prev.qscSheetBottom,
           gasSyncStatus: 'synced',
         }));
 
         savePhotosToIdb(draftKey, {
-          storeFrontPhoto: cloudReport.storeFrontPhoto,
-          qscSheetPhoto: cloudReport.qscSheetPhoto,
-          qscSheetTop: cloudReport.qscSheetTop,
-          qscSheetBottom: cloudReport.qscSheetBottom,
-          evidencePhotos: cloudReport.evidencePhotos,
-          caPhotos: cloudReport.caPhotos,
+          storeFrontPhoto: cleanReport.storeFrontPhoto,
+          qscSheetPhoto: cleanReport.qscSheetPhoto,
+          qscSheetTop: cleanReport.qscSheetTop,
+          qscSheetBottom: cleanReport.qscSheetBottom,
+          evidencePhotos: cleanReport.evidencePhotos,
+          caPhotos: cleanReport.caPhotos,
         });
       }
     });
@@ -708,28 +722,29 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       () => lastSyncTimestampRef.current,
       (remoteReport) => {
         if (!mounted || !remoteReport) return;
-        lastSyncTimestampRef.current = remoteReport.updatedAtMs || Date.now();
+        const cleanReport = filterReportWithTombstones(remoteReport);
+        lastSyncTimestampRef.current = cleanReport.updatedAtMs || Date.now();
         setFormData((prev) => ({
           ...prev,
-          ...remoteReport,
-          crews: Array.isArray(remoteReport.crews) && remoteReport.crews.length > 0 ? remoteReport.crews : prev.crews,
-          observations: Array.isArray(remoteReport.observations) ? remoteReport.observations : prev.observations,
-          evidencePhotos: Array.isArray(remoteReport.evidencePhotos) ? remoteReport.evidencePhotos : prev.evidencePhotos,
-          caPhotos: Array.isArray(remoteReport.caPhotos) ? remoteReport.caPhotos : prev.caPhotos,
-          storeFrontPhoto: remoteReport.storeFrontPhoto || prev.storeFrontPhoto,
-          qscSheetPhoto: remoteReport.qscSheetPhoto || prev.qscSheetPhoto,
-          qscSheetTop: remoteReport.qscSheetTop || prev.qscSheetTop,
-          qscSheetBottom: remoteReport.qscSheetBottom || prev.qscSheetBottom,
+          ...cleanReport,
+          crews: Array.isArray(cleanReport.crews) && cleanReport.crews.length >= 2 ? cleanReport.crews : prev.crews,
+          observations: Array.isArray(cleanReport.observations) ? cleanReport.observations : prev.observations,
+          evidencePhotos: Array.isArray(cleanReport.evidencePhotos) ? cleanReport.evidencePhotos : prev.evidencePhotos,
+          caPhotos: Array.isArray(cleanReport.caPhotos) ? cleanReport.caPhotos : prev.caPhotos,
+          storeFrontPhoto: cleanReport.storeFrontPhoto !== undefined ? cleanReport.storeFrontPhoto : prev.storeFrontPhoto,
+          qscSheetPhoto: cleanReport.qscSheetPhoto !== undefined ? cleanReport.qscSheetPhoto : prev.qscSheetPhoto,
+          qscSheetTop: cleanReport.qscSheetTop !== undefined ? cleanReport.qscSheetTop : prev.qscSheetTop,
+          qscSheetBottom: cleanReport.qscSheetBottom !== undefined ? cleanReport.qscSheetBottom : prev.qscSheetBottom,
           gasSyncStatus: 'synced',
         }));
 
         savePhotosToIdb(draftKey, {
-          storeFrontPhoto: remoteReport.storeFrontPhoto,
-          qscSheetPhoto: remoteReport.qscSheetPhoto,
-          qscSheetTop: remoteReport.qscSheetTop,
-          qscSheetBottom: remoteReport.qscSheetBottom,
-          evidencePhotos: remoteReport.evidencePhotos,
-          caPhotos: remoteReport.caPhotos,
+          storeFrontPhoto: cleanReport.storeFrontPhoto,
+          qscSheetPhoto: cleanReport.qscSheetPhoto,
+          qscSheetTop: cleanReport.qscSheetTop,
+          qscSheetBottom: cleanReport.qscSheetBottom,
+          evidencePhotos: cleanReport.evidencePhotos,
+          caPhotos: cleanReport.caPhotos,
         });
       },
       6000
@@ -1004,11 +1019,14 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       lastSyncTimestampRef.current = Date.now();
       pushVisitReportToCloud(formData).then((ok) => {
         if (ok) {
-          setFormData((prev) => ({
-            ...prev,
-            gasSyncStatus: 'synced',
-            lastSyncedAt: getCurrentWibTime(),
-          }));
+          setFormData((prev) => {
+            if (prev.gasSyncStatus === 'synced') return prev;
+            return {
+              ...prev,
+              gasSyncStatus: 'synced',
+              lastSyncedAt: getCurrentWibTime(),
+            };
+          });
         }
       });
     }, 1800);
@@ -1394,8 +1412,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleDeleteQsc = () => {
     if (confirm('Hapus foto lembar QSC ini?')) {
+      const now = Date.now();
+      lastSyncTimestampRef.current = now;
       setFormData((prev) => {
-        const nextReport = {
+        const nextReport: VisitReportData = {
           ...prev,
           qscSheetPhoto: '',
           qscSheetTop: '',
@@ -1403,9 +1423,24 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           qscDriveUrl: '',
           qscTopDriveUrl: '',
           qscBottomDriveUrl: '',
+          updatedAtMs: now,
         };
-        lastSyncTimestampRef.current = Date.now();
-        pushVisitReportToCloud(nextReport);
+        try {
+          localStorage.setItem(draftKey, JSON.stringify(nextReport));
+        } catch (e) {
+          console.warn('Draft save error:', e);
+        }
+        savePhotosToIdb(draftKey, {
+          storeFrontPhoto: nextReport.storeFrontPhoto,
+          qscSheetPhoto: '',
+          qscSheetTop: '',
+          qscSheetBottom: '',
+          evidencePhotos: nextReport.evidencePhotos,
+          caPhotos: nextReport.caPhotos,
+        });
+        queueMicrotask(() => {
+          pushVisitReportToCloud(nextReport);
+        });
         return nextReport;
       });
     }
@@ -1431,8 +1466,30 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleRemoveCrew = (idx: number) => {
     if (idx < 2) return; // Keep Store Head & Shift Leader
-    const updated = formData.crews.filter((_, i) => i !== idx);
-    setFormData((prev) => ({ ...prev, crews: updated }));
+    const crewToRemove = formData.crews[idx];
+    if (crewToRemove?.id) {
+      markCrewDeletedLocally(agenda.id, crewToRemove.id);
+    }
+    const now = Date.now();
+    lastSyncTimestampRef.current = now;
+    setFormData((prev) => {
+      const updated = prev.crews.filter((_, i) => i !== idx);
+      const nextReport: VisitReportData = {
+        ...prev,
+        crews: updated,
+        deletedCrewIds: Array.from(getDeletedCrewIds(agenda.id)),
+        updatedAtMs: now,
+      };
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(nextReport));
+      } catch (e) {
+        console.warn('Draft save error:', e);
+      }
+      queueMicrotask(() => {
+        pushVisitReportToCloud(nextReport);
+      });
+      return nextReport;
+    });
   };
 
   // Observations Management
@@ -1492,13 +1549,25 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   const handleRemoveObs = (id: string) => {
     if (confirm('Apakah Anda yakin ingin menghapus kartu temuan ini?')) {
+      markObsDeletedLocally(agenda.id, id);
+      const now = Date.now();
+      lastSyncTimestampRef.current = now;
       setFormData((prev) => {
-        const nextReport = {
+        const updated = prev.observations.filter((o) => o.id !== id);
+        const nextReport: VisitReportData = {
           ...prev,
-          observations: prev.observations.filter((o) => o.id !== id),
+          observations: updated,
+          deletedObsIds: Array.from(getDeletedObsIds(agenda.id)),
+          updatedAtMs: now,
         };
-        lastSyncTimestampRef.current = Date.now();
-        pushVisitReportToCloud(nextReport);
+        try {
+          localStorage.setItem(draftKey, JSON.stringify(nextReport));
+        } catch (e) {
+          console.warn('Draft save error:', e);
+        }
+        queueMicrotask(() => {
+          pushVisitReportToCloud(nextReport);
+        });
         return nextReport;
       });
       setActiveObsIdx((prevIdx) => Math.max(0, prevIdx - 1));
@@ -1748,15 +1817,34 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   };
 
   const handleRemoveEvidencePhoto = (id: string, isCa = false) => {
+    markPhotoDeletedLocally(agenda.id, id);
+    const now = Date.now();
+    lastSyncTimestampRef.current = now;
     setFormData((prev) => {
       const nextReport: VisitReportData = {
         ...prev,
         ...(isCa
           ? { caPhotos: (prev.caPhotos || []).filter((p) => p.id !== id) }
           : { evidencePhotos: prev.evidencePhotos.filter((p) => p.id !== id) }),
+        deletedPhotoIds: Array.from(getDeletedPhotoIds(agenda.id)),
+        updatedAtMs: now,
       };
-      lastSyncTimestampRef.current = Date.now();
-      pushVisitReportToCloud(nextReport);
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(nextReport));
+      } catch (e) {
+        console.warn('Draft save error:', e);
+      }
+      savePhotosToIdb(draftKey, {
+        storeFrontPhoto: nextReport.storeFrontPhoto,
+        qscSheetPhoto: nextReport.qscSheetPhoto,
+        qscSheetTop: nextReport.qscSheetTop,
+        qscSheetBottom: nextReport.qscSheetBottom,
+        evidencePhotos: nextReport.evidencePhotos,
+        caPhotos: nextReport.caPhotos,
+      });
+      queueMicrotask(() => {
+        pushVisitReportToCloud(nextReport);
+      });
       return nextReport;
     });
   };

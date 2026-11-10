@@ -14,6 +14,161 @@ const OFFLINE_VISIT_QUEUE_KEY = 'fmcu_visit_report_offline_queue_v1';
 const IDB_NAME = 'fmcu_visit_photos_db_v1';
 const IDB_STORE = 'visit_photos';
 
+// Tombstone storage keys for reliable cross-device deletion sync
+const DELETED_OBS_PREFIX = 'fmcu_deleted_obs_';
+const DELETED_PHOTOS_PREFIX = 'fmcu_deleted_photos_';
+const DELETED_CREWS_PREFIX = 'fmcu_deleted_crews_';
+
+export function getDeletedObsIds(agendaId: string): Set<string> {
+  if (!agendaId || typeof localStorage === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(`${DELETED_OBS_PREFIX}${agendaId}`);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set(arr.map(String)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function markObsDeletedLocally(agendaId: string, obsId: string): void {
+  if (!agendaId || !obsId || typeof localStorage === 'undefined') return;
+  try {
+    const set = getDeletedObsIds(agendaId);
+    set.add(String(obsId));
+    localStorage.setItem(`${DELETED_OBS_PREFIX}${agendaId}`, JSON.stringify(Array.from(set).slice(-500)));
+  } catch {
+    // ignore
+  }
+}
+
+export function getDeletedPhotoIds(agendaId: string): Set<string> {
+  if (!agendaId || typeof localStorage === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(`${DELETED_PHOTOS_PREFIX}${agendaId}`);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set(arr.map(String)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function markPhotoDeletedLocally(agendaId: string, photoId: string): void {
+  if (!agendaId || !photoId || typeof localStorage === 'undefined') return;
+  try {
+    const set = getDeletedPhotoIds(agendaId);
+    set.add(String(photoId));
+    localStorage.setItem(`${DELETED_PHOTOS_PREFIX}${agendaId}`, JSON.stringify(Array.from(set).slice(-500)));
+  } catch {
+    // ignore
+  }
+}
+
+export function getDeletedCrewIds(agendaId: string): Set<string> {
+  if (!agendaId || typeof localStorage === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(`${DELETED_CREWS_PREFIX}${agendaId}`);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set(arr.map(String)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function markCrewDeletedLocally(agendaId: string, crewId: string): void {
+  if (!agendaId || !crewId || typeof localStorage === 'undefined') return;
+  try {
+    const set = getDeletedCrewIds(agendaId);
+    set.add(String(crewId));
+    localStorage.setItem(`${DELETED_CREWS_PREFIX}${agendaId}`, JSON.stringify(Array.from(set).slice(-500)));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Filter a report using tombstone tracking to guarantee deleted items
+ * (observations, photos, crews) never resurrect across devices or reloads.
+ */
+export function filterReportWithTombstones(report: VisitReportData & { updatedAtMs?: number }): VisitReportData & { updatedAtMs?: number } {
+  if (!report || !report.agendaId) return report;
+  const agendaId = report.agendaId;
+
+  // Merge any remote tombstones into local storage
+  if (Array.isArray(report.deletedObsIds) && typeof localStorage !== 'undefined') {
+    const localObs = getDeletedObsIds(agendaId);
+    let changed = false;
+    report.deletedObsIds.forEach((id) => {
+      if (!localObs.has(String(id))) {
+        localObs.add(String(id));
+        changed = true;
+      }
+    });
+    if (changed) {
+      try {
+        localStorage.setItem(`${DELETED_OBS_PREFIX}${agendaId}`, JSON.stringify(Array.from(localObs).slice(-500)));
+      } catch {}
+    }
+  }
+
+  if (Array.isArray(report.deletedPhotoIds) && typeof localStorage !== 'undefined') {
+    const localPhotos = getDeletedPhotoIds(agendaId);
+    let changed = false;
+    report.deletedPhotoIds.forEach((id) => {
+      if (!localPhotos.has(String(id))) {
+        localPhotos.add(String(id));
+        changed = true;
+      }
+    });
+    if (changed) {
+      try {
+        localStorage.setItem(`${DELETED_PHOTOS_PREFIX}${agendaId}`, JSON.stringify(Array.from(localPhotos).slice(-500)));
+      } catch {}
+    }
+  }
+
+  if (Array.isArray(report.deletedCrewIds) && typeof localStorage !== 'undefined') {
+    const localCrews = getDeletedCrewIds(agendaId);
+    let changed = false;
+    report.deletedCrewIds.forEach((id) => {
+      if (!localCrews.has(String(id))) {
+        localCrews.add(String(id));
+        changed = true;
+      }
+    });
+    if (changed) {
+      try {
+        localStorage.setItem(`${DELETED_CREWS_PREFIX}${agendaId}`, JSON.stringify(Array.from(localCrews).slice(-500)));
+      } catch {}
+    }
+  }
+
+  const deletedObs = getDeletedObsIds(agendaId);
+  const deletedPhotos = getDeletedPhotoIds(agendaId);
+  const deletedCrews = getDeletedCrewIds(agendaId);
+
+  return {
+    ...report,
+    observations: Array.isArray(report.observations)
+      ? report.observations.filter((o) => !deletedObs.has(o.id))
+      : report.observations,
+    evidencePhotos: Array.isArray(report.evidencePhotos)
+      ? report.evidencePhotos.filter((p) => !deletedPhotos.has(p.id))
+      : report.evidencePhotos,
+    caPhotos: Array.isArray(report.caPhotos)
+      ? report.caPhotos.filter((p) => !deletedPhotos.has(p.id))
+      : report.caPhotos,
+    crews: Array.isArray(report.crews)
+      ? report.crews.filter((c) => !deletedCrews.has(c.id))
+      : report.crews,
+    deletedObsIds: Array.from(deletedObs),
+    deletedPhotoIds: Array.from(deletedPhotos),
+    deletedCrewIds: Array.from(deletedCrews),
+  };
+}
+
 // In-memory cache to prevent redundant network fetches
 let cachedReportsList: (VisitReportData & { updatedAtMs?: number })[] | null = null;
 let lastCacheFetchTime = 0;
@@ -138,9 +293,9 @@ export async function fetchAllVisitReportsFromCloud(forceFresh = false): Promise
     if (!res.ok) return cachedReportsList || [];
     const json = await res.json();
     if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
-      cachedReportsList = json.data;
+      cachedReportsList = json.data.map((r: any) => filterReportWithTombstones(r));
       lastCacheFetchTime = now;
-      return json.data;
+      return cachedReportsList || [];
     }
     return cachedReportsList || [];
   } catch (err) {
@@ -157,7 +312,7 @@ export async function fetchVisitReportFromCloud(agendaId: string, forceFresh = f
   try {
     const all = await fetchAllVisitReportsFromCloud(forceFresh);
     const found = all.find((r) => r.agendaId === agendaId || r.id === agendaId);
-    return found || null;
+    return found ? filterReportWithTombstones(found) : null;
   } catch {
     return null;
   }
@@ -171,7 +326,7 @@ export function getLocalVisitReport(agendaId: string): (VisitReportData & { upda
   try {
     const raw = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}${agendaId}`);
     if (!raw) return null;
-    return JSON.parse(raw);
+    return filterReportWithTombstones(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -183,10 +338,10 @@ export function getLocalVisitReport(agendaId: string): (VisitReportData & { upda
 export async function pushVisitReportToCloud(report: VisitReportData): Promise<boolean> {
   if (!report || !report.agendaId) return false;
 
-  const nowMs = Date.now();
+  const nowMs = report.updatedAtMs || Date.now();
   const sanitized = sanitizeReportForCloud(report);
   const enrichedReport: VisitReportData & { updatedAtMs: number } = {
-    ...sanitized,
+    ...filterReportWithTombstones(sanitized),
     updatedAtMs: nowMs,
   };
 
@@ -319,7 +474,7 @@ export function subscribeToCrossDeviceVisit(
     ) {
       const remoteMs = event.data.updatedAtMs || 0;
       if (remoteMs > getCurrentUpdatedAtMs()) {
-        onRemoteUpdate(event.data.report);
+        onRemoteUpdate(filterReportWithTombstones(event.data.report));
       }
     }
   };
@@ -341,7 +496,7 @@ export function subscribeToCrossDeviceVisit(
 
       // If remote has newer data than local
       if (remoteMs > currentMs) {
-        onRemoteUpdate(cloudReport);
+        onRemoteUpdate(filterReportWithTombstones(cloudReport));
       }
     } catch {
       // ignore network errors

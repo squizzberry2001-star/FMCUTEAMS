@@ -88,4 +88,9 @@ export interface VisitReportData {
   status: 'DRAFT' | 'SUBMITTED';
   submittedAt?: string;
   updatedAtMs?: number;
+
+  // Tombstones for reliable multi-device deletion sync
+  deletedObsIds?: string[];
+  deletedPhotoIds?: string[];
+  deletedCrewIds?: string[];
 }
