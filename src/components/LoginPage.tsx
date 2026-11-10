@@ -104,8 +104,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
-    const expectedPassword = foundUser.password || '0000';
-    if (staffPassword !== expectedPassword) {
+    const expectedPassword = foundUser.password || foundUser.nik || '0000';
+    const isPasswordValid =
+      staffPassword === expectedPassword ||
+      (foundUser.nik && staffPassword === foundUser.nik) ||
+      (foundUser.password && staffPassword === foundUser.password);
+
+    if (!isPasswordValid) {
       setTimeout(() => {
         setErrorMessage('Password salah! Silakan periksa kembali password akun Anda.');
         setIsSubmitting(false);
@@ -114,9 +119,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
 
     // Show 5-second loading animation before entering the app
+    const activeStaffUser = {
+      ...foundUser,
+      password: expectedPassword,
+      nik: foundUser.nik || (/^\d+$/.test(expectedPassword) ? expectedPassword : undefined),
+    };
+
     setTimeout(() => {
       setIsSubmitting(false);
-      onLogin(foundUser);
+      onLogin(activeStaffUser);
     }, 5000);
   };
 

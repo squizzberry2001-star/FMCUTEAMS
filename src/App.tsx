@@ -35,6 +35,12 @@ import {
   startLivePresenceHeartbeat,
   stopLivePresenceHeartbeat,
 } from './services/userLivePresenceService';
+import {
+  fetchOnlineUserPasswords,
+  mergeUsersWithOnlinePasswords,
+  USER_PASSWORD_SYNC_EVENT,
+  FMCU_USERS_STORAGE_KEY,
+} from './services/userAuthSyncService';
 import { Shield, ArrowLeft } from 'lucide-react';
 import { GpsEnforcerGuard } from './components/common/GpsEnforcerGuard';
 
@@ -53,14 +59,31 @@ const VisitReportForm = lazy(() =>
 );
 
 export const App: React.FC = () => {
-  // 1. Master State for Users (Admin + 36 User dari Excel dengan password 0000)
+  // 1. Master State for Users (Admin + 36 User dari Excel dengan password NIK/0000)
   const [users, setUsers] = useState<User[]>(() => {
     try {
       localStorage.removeItem('fmcu_users_v2');
-      const saved = localStorage.getItem('fmcu_users_v5');
+      const saved = localStorage.getItem(FMCU_USERS_STORAGE_KEY) || localStorage.getItem('fmcu_users_v5');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const seedMap = new Map(
+            initialUsers.map((u) => [u.name.toLowerCase().replace(/\([^)]+\)\s*/g, '').trim(), u])
+          );
+          return parsed.map((u: User) => {
+            const cleanName = u.name.toLowerCase().replace(/\([^)]+\)\s*/g, '').trim();
+            const seedUser = seedMap.get(cleanName);
+            if (seedUser && seedUser.nik && seedUser.password && seedUser.password !== '0000') {
+              if (!u.password || u.password === '0000') {
+                return { ...u, password: seedUser.password, nik: seedUser.nik };
+              }
+            }
+            if (seedUser && seedUser.nik && !u.nik) {
+              return { ...u, nik: seedUser.nik };
+            }
+            return u;
+          });
+        }
       }
     } catch (e) {
       console.error(e);
@@ -200,11 +223,46 @@ export const App: React.FC = () => {
   // Save master users to localStorage safely
   useEffect(() => {
     try {
+      localStorage.setItem(FMCU_USERS_STORAGE_KEY, JSON.stringify(users));
       localStorage.setItem('fmcu_users_v5', JSON.stringify(users));
     } catch (e) {
       console.warn('localStorage users quota warning:', e);
     }
   }, [users]);
+
+  // Listen to password update events (from ProfileView or cross-tab broadcast)
+  useEffect(() => {
+    const handlePasswordUpdated = (e: any) => {
+      const detail = e.detail;
+      if (!detail?.userName || !detail?.newPassword) return;
+      const targetName = detail.userName.toLowerCase().replace(/\([^)]+\)\s*/g, '').trim();
+      setUsers((prev) =>
+        prev.map((u) => {
+          const uName = u.name.toLowerCase().replace(/\([^)]+\)\s*/g, '').trim();
+          return uName === targetName ? { ...u, password: detail.newPassword, nik: u.nik || detail.newPassword } : u;
+        })
+      );
+      setUser((curr) => {
+        if (!curr) return null;
+        const currName = curr.name.toLowerCase().replace(/\([^)]+\)\s*/g, '').trim();
+        if (currName === targetName) {
+          const updated = { ...curr, password: detail.newPassword, nik: curr.nik || detail.newPassword };
+          try {
+            localStorage.setItem('fmcu_user_session_v3', JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
+        }
+        return curr;
+      });
+    };
+
+    window.addEventListener(USER_PASSWORD_SYNC_EVENT, handlePasswordUpdated);
+    return () => {
+      window.removeEventListener(USER_PASSWORD_SYNC_EVENT, handlePasswordUpdated);
+    };
+  }, []);
 
   // Save master agendas to localStorage safely
   useEffect(() => {
@@ -224,10 +282,35 @@ export const App: React.FC = () => {
     if (isSyncingCloudRef.current) return;
     isSyncingCloudRef.current = true;
     try {
-      const [cloudAgendas, cloudReports] = await Promise.all([
+      const [cloudAgendas, cloudReports, rawCloudPasswords] = await Promise.all([
         fetchSchedulesFromCloud(),
         fetchAllVisitReportsFromCloud(true).catch(() => null),
+        fetchOnlineUserPasswords().catch(() => ({} as Record<string, string>)),
       ]);
+      const cloudPasswords: Record<string, string> = (rawCloudPasswords as Record<string, string>) || {};
+
+      // Cross-device online password sync
+      if (cloudPasswords && Object.keys(cloudPasswords).length > 0) {
+        setUsers((prev) => {
+          const { updatedList, hasChanges } = mergeUsersWithOnlinePasswords(prev, cloudPasswords);
+          return hasChanges ? updatedList : prev;
+        });
+        setUser((prevUser) => {
+          if (!prevUser) return null;
+          const cleanName = prevUser.name.toLowerCase().replace(/\([^)]+\)\s*/g, '').trim();
+          const onlinePass = cloudPasswords[cleanName] || (prevUser.id ? cloudPasswords[String(prevUser.id)] : undefined);
+          if (onlinePass && onlinePass !== prevUser.password) {
+            const next = { ...prevUser, password: onlinePass, nik: prevUser.nik || onlinePass };
+            try {
+              localStorage.setItem('fmcu_user_session_v3', JSON.stringify(next));
+            } catch {
+              // ignore
+            }
+            return next;
+          }
+          return prevUser;
+        });
+      }
 
       // Cache cloud reports to localStorage so that all components instantly have updated reports
       if (cloudReports && Array.isArray(cloudReports) && cloudReports.length > 0) {

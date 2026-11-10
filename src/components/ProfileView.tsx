@@ -15,12 +15,14 @@ import {
   Calendar,
   Briefcase,
   Mail,
-  User as UserIcon
+  User as UserIcon,
+  Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { User } from '../types';
 import { uploadProfilePhotoToGasGDrive } from '../utils/gdriveGasSync';
 import { saveCustomUserAvatarLocally, pushCustomAvatarToCloud } from '../services/userAvatarSyncService';
+import { syncUserPasswordOnline } from '../services/userAuthSyncService';
 import { PageTransitionLoader } from './PageTransitionLoader';
 import { DeveloperFooter } from './DeveloperFooter';
 
@@ -89,6 +91,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   // Status & Feedback Messages
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState<boolean>(false);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState<boolean>(false);
 
@@ -155,16 +158,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   };
 
-  // Handle Ubah Sandi Submit
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  // Handle Ubah Sandi Submit (Terintegrasi Online Cloudflare D1 & GAS Vault)
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUpdatingPassword) return;
     setPasswordError(null);
     setPasswordSuccess(null);
 
-    const actualExpectedPassword = user.password || (user.isAdmin ? '607090' : '0000');
+    // Validasi sandi saat ini (Mendukung password tersimpan, NIK, atau fallback default)
+    const isCurrentPasswordValid =
+      currentPassword === user.password ||
+      (user.nik && currentPassword === user.nik) ||
+      (!user.password && currentPassword === (user.isAdmin ? '607090' : '0000')) ||
+      (user.isAdmin && currentPassword === '607090');
 
-    // Validasi sandi saat ini
-    if (currentPassword !== actualExpectedPassword) {
+    if (!isCurrentPasswordValid) {
       setPasswordError('Sandi saat ini salah. Pastikan sandi yang dimasukkan benar.');
       return;
     }
@@ -186,29 +194,49 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       return;
     }
 
-    // Update password user
-    if (onUpdateUser) {
-      onUpdateUser({
+    try {
+      setIsUpdatingPassword(true);
+
+      // 1. Sinkronisasi Online ke Cloudflare D1 Edge SQLite & GAS Vault
+      const syncResult = await syncUserPasswordOnline(user, newPassword);
+
+      // 2. Update state di master context aplikasi
+      const updatedUser: User = {
         ...user,
         password: newPassword,
+        nik: user.nik || (/^\d+$/.test(newPassword) ? newPassword : user.nik),
+      };
+
+      if (onUpdateUser) {
+        onUpdateUser(updatedUser);
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+
+      setPasswordSuccess(
+        syncResult.cloudSynced
+          ? 'Sandi berhasil diubah dan tersinkronisasi online di semua perangkat!'
+          : 'Sandi berhasil diperbarui dan tersimpan di perangkat ini.'
+      );
+
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.6 },
+        colors: ['#2BB3A0', '#10B981', '#3B82F6'],
       });
+
+      setTimeout(() => {
+        setPasswordSuccess(null);
+      }, 5000);
+    } catch (err: any) {
+      console.error('Gagal memperbarui sandi:', err);
+      setPasswordError('Terjadi kendala saat menyinkronkan sandi. Silakan coba lagi.');
+    } finally {
+      setIsUpdatingPassword(false);
     }
-
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setPasswordSuccess('Sandi berhasil diubah! Gunakan sandi baru ini untuk login berikutnya.');
-
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { y: 0.6 },
-      colors: ['#2BB3A0', '#10B981', '#3B82F6'],
-    });
-
-    setTimeout(() => {
-      setPasswordSuccess(null);
-    }, 4500);
   };
 
   return (
@@ -502,10 +530,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 hover:brightness-105 text-white font-extrabold text-xs shadow-pill-teal active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={isUpdatingPassword}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 hover:brightness-105 text-white font-extrabold text-xs shadow-pill-teal active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Simpan Sandi Baru</span>
+                  {isUpdatingPassword ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan ke Cloud...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Simpan Sandi Baru</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

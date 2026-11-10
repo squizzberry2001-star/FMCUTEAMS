@@ -90,6 +90,7 @@ export interface User {
   avatar?: string;
   role?: string;
   password?: string;
+  nik?: string;
   isAdmin?: boolean;
   isExecutiveViewer?: boolean;
   accessLevel?: 'ADMIN' | 'EXECUTIVE_VIEWER' | 'STAFF';

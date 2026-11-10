@@ -86,9 +86,10 @@
       "name": "Cindy Silvia Sahyu",
       "email": "cindy.silvia.sahyu@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "210923054",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=CindySilviaSahyu",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "210923054"
     },
     {
       "id": "usr-11",
@@ -104,36 +105,40 @@
       "name": "Yuyun Yuliyanti",
       "email": "yuyun.yuliyanti@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "230823803",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=YuyunYuliyanti",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "230823803"
     },
     {
       "id": "usr-13",
       "name": "Muhammad Fikri",
       "email": "muhammad.fikri@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "230723758",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=MuhammadFikri",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "230723758"
     },
     {
       "id": "usr-14",
       "name": "Novilya Dwi Rahman",
       "email": "novilya.dwi.rahman@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "201222610",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=NovilyaDwiRahman",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "201222610"
     },
     {
       "id": "usr-15",
       "name": "Aulia Puspita Dewi",
       "email": "aulia.puspita.dewi@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "210923045",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=AuliaPuspitaDewi",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "210923045"
     },
     {
       "id": "usr-16",
@@ -149,18 +154,20 @@
       "name": "Anggi Novita",
       "email": "anggi.novita@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "230723742",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=AnggiNovita",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "230723742"
     },
     {
       "id": "usr-18",
       "name": "Tia Fitri",
       "email": "tia.fitri@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "230523599",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=TiaFitri",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "230523599"
     },
     {
       "id": "usr-19",
@@ -185,18 +192,20 @@
       "name": "Fiqri Amatul Firdaus",
       "email": "fiqri.amatul.firdaus@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "210923070",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=FiqriAmatulFirdaus",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "210923070"
     },
     {
       "id": "usr-22",
       "name": "Edi Sukarno",
       "email": "edi.sukarno@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "210822948",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=EdiSukarno",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "210822948"
     },
     {
       "id": "usr-23",
@@ -212,9 +221,10 @@
       "name": "Seftiana Putri Rahmawati",
       "email": "seftiana.putri.rahmawati@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "220623417",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=SeftianaPutriRahmawati",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "220623417"
     },
     {
       "id": "usr-25",
@@ -248,72 +258,80 @@
       "name": "Aan Bagus Permana",
       "email": "aan.bagus.permana@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "210822947",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=AanBagusPermana",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "210822947"
     },
     {
       "id": "usr-29",
       "name": "Rani Ismawati",
       "email": "rani.ismawati@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "210722912",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=RaniIsmawati",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "210722912"
     },
     {
       "id": "usr-30",
       "name": "Karlina Endah Puji Astuti",
       "email": "karlina.endah.puji.astuti@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "211123186",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=KarlinaEndahPujiAstuti",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "211123186"
     },
     {
       "id": "usr-31",
       "name": "Rully Alfandi",
       "email": "rully.alfandi@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "210822981",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=RullyAlfandi",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "210822981"
     },
     {
       "id": "usr-32",
       "name": "Bagus Pradika",
       "email": "bagus.pradika@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "210823002",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=BagusPradika",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "210823002"
     },
     {
       "id": "usr-33",
       "name": "Fajar Saputra",
       "email": "fajar.saputra@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "230623709",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=FajarSaputra",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "230623709"
     },
     {
       "id": "usr-34",
       "name": "Fendi Setiawan",
       "email": "fendi.setiawan@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "230523581",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=FendiSetiawan",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "230523581"
     },
     {
       "id": "usr-35",
       "name": "Malik Ibrahim",
       "email": "malik.ibrahim@fmcuteams.com",
       "role": "FMCU Field Operations",
-      "password": "0000",
+      "password": "200622511",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=MalikIbrahim",
-      "isAdmin": false
+      "isAdmin": false,
+      "nik": "200622511"
     },
     {
       "id": "usr-36",
@@ -322,6 +340,16 @@
       "role": "FMCU Field Operations",
       "password": "0000",
       "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=PuteriUntari",
+      "isAdmin": false
+    },
+    {
+      "id": "usr-auliafauziah",
+      "name": "Aulia Fauziah",
+      "email": "aulia.fauziah@fmcuteams.com",
+      "role": "FMCU Field Operations",
+      "password": "210923045",
+      "nik": "210923045",
+      "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=AuliaFauziah",
       "isAdmin": false
     }
   ],
