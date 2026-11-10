@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -44,7 +44,9 @@ import {
   WifiOff,
   Navigation,
   Star,
-  Pencil
+  Pencil,
+  Cpu,
+  Zap
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from '../../types';
@@ -100,8 +102,9 @@ interface VisitReportFormProps {
 
 // ============================================================================
 // ============================================================================
-// AUTO-RESIZE TEXTAREA WITH 60FPS SOFT SPRING ANIMATION
-// Tumbuh/menyusut baris demi baris secara elastis & lembut dengan Web Animations API spring overshoot
+// AUTO-RESIZE TEXTAREA WITH SMOOTH RESIZE OBSERVER ENGINE
+// Menyesuaikan tinggi secara presisi saat nilai dimuat (draft/refresh)
+// dan saat tab/section berubah dari hidden menjadi visible.
 // ============================================================================
 interface AutoResizeTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   value?: string;
@@ -117,140 +120,88 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   ...props
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const ghostRef = useRef<HTMLTextAreaElement | null>(null);
-  const isInitializedRef = useRef(false);
-  const currentHeightRef = useRef<number>(0);
-  const activeAnimationRef = useRef<Animation | null>(null);
+  const isUserTypingRef = useRef(false);
 
-  const updateHeight = useCallback(
-    (animate = true) => {
-      const el = textareaRef.current;
-      const ghost = ghostRef.current;
-      if (!el || !ghost) return;
+  const adjustHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
 
-      // 1. Sinkronisasi lebar dan isi konten ke elemen ghost
-      const width = el.getBoundingClientRect().width || el.clientWidth;
-      if (width > 0) {
-        ghost.style.width = `${width}px`;
-      }
-      ghost.value = el.value || '';
+    // Jika elemen masih tersembunyi (di dalam section hidden / offsetWidth === 0), tunda kalkulasi
+    if (el.offsetWidth === 0 && el.offsetHeight === 0) return;
 
-      // 2. Ukur tinggi minimum berdasarkan line-height dan padding aktual
-      const computed = window.getComputedStyle(el);
-      const paddingTop = parseFloat(computed.paddingTop) || 10;
-      const paddingBottom = parseFloat(computed.paddingBottom) || 10;
-      const lineHeight = parseFloat(computed.lineHeight) || 17;
-      const minHeight = minRows * lineHeight + paddingTop + paddingBottom;
+    const computed = window.getComputedStyle(el);
+    const paddingTop = parseFloat(computed.paddingTop) || 8;
+    const paddingBottom = parseFloat(computed.paddingBottom) || 8;
+    const lineHeight = parseFloat(computed.lineHeight) || 17;
+    const minHeight = minRows * lineHeight + paddingTop + paddingBottom;
 
-      // 3. Baca scrollHeight murni dari ghost element tanpa mengganggu textarea aktif
-      const targetHeight = Math.max(minHeight, Math.ceil(ghost.scrollHeight));
+    if (!isUserTypingRef.current) {
+      el.style.transition = 'none';
+    } else {
+      el.style.transition = 'height 160ms cubic-bezier(0.16, 1, 0.3, 1)';
+    }
 
-      // 4. Initial render: pasang tinggi target langsung tanpa animasi
-      if (!isInitializedRef.current || !animate) {
-        isInitializedRef.current = true;
-        currentHeightRef.current = targetHeight;
-        el.style.height = `${targetHeight}px`;
-        return;
-      }
+    // Reset ke auto untuk mengukur scrollHeight yang aktual
+    el.style.height = 'auto';
+    const targetHeight = Math.max(minHeight, Math.ceil(el.scrollHeight));
+    el.style.height = `${targetHeight}px`;
+  }, [minRows]);
 
-      const prevHeight = currentHeightRef.current || el.getBoundingClientRect().height;
+  // Sesuaikan tinggi saat value berubah (misal saat draft data dimuat, dikte suara, atau AI compile)
+  useLayoutEffect(() => {
+    adjustHeight();
+    const rafId = requestAnimationFrame(() => {
+      adjustHeight();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [value, adjustHeight]);
 
-      // 5. Jika tinggi baris sama persis, pertahankan posisi stabil
-      if (Math.abs(prevHeight - targetHeight) < 1.5) {
-        el.style.height = `${targetHeight}px`;
-        return;
-      }
-
-      // 6. Terjadi perubahan baris teks (bertambah / berkurang 1 baris atau lebih)
-      if (activeAnimationRef.current) {
-        activeAnimationRef.current.cancel();
-      }
-
-      const isExpanding = targetHeight > prevHeight;
-      // Kurva Soft Spring: Overshoot elastis lembut (+6px saat melebar, -3.5px saat menyusut)
-      const overshoot = isExpanding
-        ? targetHeight + 6.0
-        : Math.max(minHeight, targetHeight - 3.5);
-
-      if (typeof el.animate === 'function') {
-        // Eksekusi animasi hardware-accelerated 60fps dengan Web Animations API
-        const anim = el.animate(
-          [
-            { height: `${prevHeight}px`, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' },
-            { height: `${overshoot}px`, offset: 0.62, easing: 'cubic-bezier(0.35, 1.4, 0.65, 1)' },
-            { height: `${targetHeight}px`, offset: 1.0 },
-          ],
-          {
-            duration: 380, // Durasi 380ms yang terasa sangat empuk, elastis, dan memuaskan
-            fill: 'forwards',
-          }
-        );
-
-        activeAnimationRef.current = anim;
-        anim.onfinish = () => {
-          el.style.height = `${targetHeight}px`;
-          currentHeightRef.current = targetHeight;
-          if (activeAnimationRef.current === anim) {
-            activeAnimationRef.current = null;
-          }
-        };
-      } else {
-        // Fallback CSS transition jika browser lawas
-        el.style.transition = 'height 380ms cubic-bezier(0.34, 1.56, 0.64, 1)';
-        el.style.height = `${targetHeight}px`;
-        currentHeightRef.current = targetHeight;
-      }
-
-      currentHeightRef.current = targetHeight;
-    },
-    [minRows]
-  );
-
+  // Observer ketika elemen berpindah dari hidden ke visible (misal user switch section/tab)
   useEffect(() => {
-    updateHeight(isInitializedRef.current);
-  }, [value, updateHeight]);
+    const el = textareaRef.current;
+    if (!el) return;
 
+    adjustHeight();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      let lastWidth = el.offsetWidth;
+      const ro = new ResizeObserver(() => {
+        if (el.offsetWidth > 0 && el.offsetWidth !== lastWidth) {
+          lastWidth = el.offsetWidth;
+          adjustHeight();
+        }
+      });
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+  }, [adjustHeight]);
+
+  // Tambahan listener window resize
   useEffect(() => {
-    const handleResize = () => updateHeight(false);
+    const handleResize = () => adjustHeight();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [updateHeight]);
+  }, [adjustHeight]);
 
   return (
-    <>
-      <textarea
-        ref={textareaRef}
-        rows={minRows}
-        value={value}
-        onChange={(e) => {
-          if (onChange) onChange(e);
-          updateHeight(true);
-        }}
-        style={{
-          ...style,
-          boxSizing: 'border-box',
-          willChange: 'height',
-        }}
-        className={`overflow-hidden resize-none ${className}`}
-        {...props}
-      />
-      <textarea
-        ref={ghostRef}
-        tabIndex={-1}
-        aria-hidden="true"
-        readOnly
-        rows={minRows}
-        className={`absolute top-0 left-0 opacity-0 pointer-events-none overflow-hidden resize-none -z-50 ${className}`}
-        style={{
-          ...style,
-          boxSizing: 'border-box',
-          height: 'auto',
-          minHeight: '0px',
-          maxHeight: 'none',
-          visibility: 'hidden',
-        }}
-      />
-    </>
+    <textarea
+      ref={textareaRef}
+      rows={minRows}
+      value={value}
+      onChange={(e) => {
+        isUserTypingRef.current = true;
+        if (onChange) onChange(e);
+        adjustHeight();
+      }}
+      style={{
+        ...style,
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        resize: 'none',
+      }}
+      className={className}
+      {...props}
+    />
   );
 };
 
@@ -2199,8 +2150,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   const currentObsList = formData.observations.filter(
     (o) => o.type.toUpperCase() === obsSubTab.toUpperCase()
   );
-  const isCurrentObsSubTabEnabled =
-    obsSubTab === 'qsc' ? formData.enableQsc !== false : formData.enableOpi !== false;
 
   return (
     <div
@@ -3306,99 +3255,129 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </div>
             </div>
 
-            {/* 3. Smooth & Interactive T.A.R.O AI Assistant Button */}
-            <button
-              type="button"
-              disabled={isAiCompiling}
-              onClick={handleTaroAiAutoCompile}
-              className={`w-full py-2.5 px-3 sm:px-4 rounded-2xl border text-white shadow-xs transition-all duration-300 active:scale-[0.99] flex items-center justify-between gap-2.5 cursor-pointer group relative overflow-hidden ${
-                isAiCompiling
-                  ? 'bg-slate-950 border-teal-400 shadow-[0_0_22px_rgba(20,184,166,0.35)]'
-                  : 'bg-gradient-to-r from-slate-900 via-slate-900 to-teal-950/80 hover:from-slate-800 hover:to-teal-900/90 border-teal-500/30 hover:border-teal-400/60 hover:shadow-[0_4px_20px_rgba(20,184,166,0.18)]'
-              }`}
-            >
-              {/* Subtle Ambient Shimmer Background */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-teal-400/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+            {/* 3. Futuristic, Ultra-Interactive T.A.R.O AI Cybernetic Hub */}
+            <div className="relative overflow-hidden rounded-3xl p-4 sm:p-5 bg-gradient-to-br from-slate-950 via-[#031d1a] to-slate-900 border border-teal-500/40 hover:border-teal-400 text-white shadow-[0_12px_40px_-10px_rgba(20,184,166,0.3)] transition-all duration-500 group">
+              {/* Dynamic Ambient Neon Aura Orbs */}
+              <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-teal-400/15 blur-3xl pointer-events-none group-hover:scale-125 transition-transform duration-700" />
+              <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-emerald-500/15 blur-2xl pointer-events-none" />
 
-              <div className="flex items-center gap-2.5 min-w-0 relative z-10">
-                {/* Smooth Animated TARO AI Mascot Icon */}
-                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 relative transition-all duration-300 group-hover:scale-105 shadow-inner ${
-                  isAiCompiling
-                    ? 'bg-gradient-to-br from-teal-500/40 via-emerald-500/30 to-teal-900/60 border-teal-400 text-teal-200 shadow-[0_0_12px_rgba(45,212,191,0.5)]'
-                    : 'bg-gradient-to-br from-teal-500/20 via-emerald-500/10 to-teal-900/30 border-teal-400/40 text-teal-300 group-hover:border-teal-300 group-hover:text-teal-200 group-hover:shadow-[0_0_12px_rgba(45,212,191,0.3)]'
-                }`}>
-                  <Bot className={`w-4 h-4 stroke-[2.2] transition-transform duration-300 group-hover:rotate-6 ${
-                    isAiCompiling ? 'animate-pulse text-emerald-300 scale-110' : 'group-hover:scale-110'
-                  }`} />
-                  {/* Floating Micro Status Ring */}
-                  <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_6px_#34d399]" />
+              {/* Holographic Shimmer Beam */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-teal-400/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+
+              <div className="relative z-10 space-y-3.5">
+                {/* Header Row: Mascot, Info, & Live Beacon */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Futuristic Orbital Mascot Pod */}
+                    <div className="relative flex items-center justify-center shrink-0">
+                      <div className="w-12 h-12 rounded-2xl bg-teal-500/20 border border-teal-400/50 flex items-center justify-center text-teal-200 shadow-[0_0_20px_rgba(45,212,191,0.35)] group-hover:shadow-[0_0_28px_rgba(45,212,191,0.6)] group-hover:scale-105 transition-all duration-300">
+                        <Bot className={`w-6 h-6 transition-transform duration-500 ${isAiCompiling ? 'animate-bounce text-emerald-300' : 'group-hover:rotate-12'}`} />
+                      </div>
+                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+                      </span>
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-sm sm:text-base text-white tracking-tight">
+                          T.A.R.O AI Assistant
+                        </span>
+                        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-400/20 text-teal-300 border border-teal-400/40 shadow-xs flex items-center gap-1">
+                          <Cpu className="w-2.5 h-2.5" />
+                          <span>Batch Intelligence</span>
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 group-hover:text-teal-100/90 transition-colors mt-0.5">
+                        Bantu kamu buat observasi dari deskripsi foto yang kamu tulis.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Action Button: Auto-Kompilasi */}
+                  <button
+                    type="button"
+                    disabled={isAiCompiling}
+                    onClick={handleTaroAiAutoCompile}
+                    className={`px-4 sm:px-5 py-2.5 rounded-2xl font-black text-xs sm:text-[13px] flex items-center justify-center gap-2 cursor-pointer transition-all duration-300 active:scale-95 shrink-0 shadow-md ${
+                      isAiCompiling
+                        ? 'bg-slate-800 text-teal-300 border border-teal-400/40 cursor-not-allowed opacity-80'
+                        : 'bg-gradient-to-r from-teal-400 via-emerald-400 to-teal-500 hover:from-teal-300 hover:to-emerald-400 text-slate-950 shadow-[0_0_20px_rgba(45,212,191,0.4)] hover:shadow-[0_0_30px_rgba(45,212,191,0.65)] hover:scale-[1.02]'
+                    }`}
+                  >
+                    <Sparkles className={`w-4 h-4 transition-transform duration-500 ${isAiCompiling ? 'animate-spin text-teal-900' : 'group-hover:rotate-45'}`} />
+                    <span>{isAiCompiling ? 'Menganalisa...' : 'Auto-Kompilasi'}</span>
+                  </button>
+                </div>
+
+                {/* Status Indicator Chips */}
+                <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-teal-500/20 text-[10.5px]">
+                  {formData.evidencePhotos.filter((p) => p.caption && p.caption.trim().length > 0).length > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-teal-950/80 text-teal-200 border border-teal-400/40 font-bold">
+                      <Zap className="w-3 h-3 text-amber-300 fill-amber-300" />
+                      <span>{formData.evidencePhotos.filter((p) => p.caption && p.caption.trim().length > 0).length} Foto Bukti Siap Dianalisa</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 text-slate-400 border border-slate-700 font-medium">
+                      <span>Belum ada deskripsi foto di Section Bukti</span>
+                    </span>
+                  )}
+                  <span className="text-slate-400 hidden sm:inline">•</span>
+                  <span className="text-slate-400 text-[10px]">
+                    Sistem akan mengklasifikasikan seluruh temuan & ringkasan eksekutif (summary) ke model 6-box.
                   </span>
                 </div>
-
-                <div className="min-w-0 text-left">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-extrabold text-xs text-white tracking-tight truncate group-hover:text-teal-200 transition-colors">
-                      T.A.R.O AI Assistant
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors truncate">
-                    Bantu kamu buat observasi dari deskripsi foto yang kamu tulis.
-                  </p>
-                </div>
               </div>
 
-              <div className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-teal-300 group-hover:text-teal-100 transition-colors relative z-10">
-                <Sparkles className={`w-3.5 h-3.5 text-teal-400 transition-transform duration-500 ${
-                  isAiCompiling ? 'animate-spin text-emerald-300' : 'group-hover:rotate-12 group-hover:scale-110'
-                }`} />
-                <span className="hidden xs:inline">{isAiCompiling ? 'Menganalisa...' : 'Auto-Kompilasi'}</span>
-              </div>
-            </button>
-
-            {/* Scanning Animation when isAiCompiling */}
-            {isAiCompiling && (
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-950/95 via-slate-900 to-emerald-950/95 border border-teal-500/40 p-4 text-white shadow-lg animate-in fade-in zoom-in-95 duration-300">
-                {/* Horizontal Sweeping Scanner Light */}
-                <div className="absolute inset-y-0 w-32 bg-gradient-to-r from-transparent via-teal-400/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none" />
-
-                <div className="flex items-center gap-3.5 relative z-10">
-                  <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-400/50 flex items-center justify-center shrink-0 shadow-[0_0_14px_rgba(20,184,166,0.35)]">
-                    <Bot className="w-5 h-5 text-teal-200 animate-pulse" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-black text-xs text-teal-200">
-                        T.A.R.O AI Sedang Menganalisa Bukti Foto...
-                      </h4>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              {/* Scanning Animation Hologram saat isAiCompiling */}
+              {isAiCompiling && (
+                <div className="mt-3.5 pt-3.5 border-t border-teal-400/30 relative overflow-hidden animate-in fade-in duration-300">
+                  <div className="absolute inset-y-0 w-36 bg-gradient-to-r from-transparent via-teal-300/30 to-transparent -translate-x-full animate-[shimmer_1.8s_infinite] pointer-events-none" />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 relative z-10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-teal-500/20 border border-teal-400/50 flex items-center justify-center shrink-0">
+                        <Cpu className="w-4 h-4 text-teal-200 animate-spin" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-black text-xs text-teal-200 block">
+                          T.A.R.O AI Sedang Melakukan Analisa Batch...
+                        </span>
+                        <span className="text-[10px] text-teal-100/75 block">
+                          Membaca foto bukti, mencocokkan SOP FamilyMart & merumuskan 6-Box Model...
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-[10.5px] text-teal-100/80 truncate">
-                      Mengekstrak temuan lapangan & merumuskan 6-Box Model FamilyMart...
-                    </p>
+                    {/* Equalizer Frequency Animation */}
+                    <div className="flex items-center gap-1 bg-teal-950/80 border border-teal-500/40 px-2.5 py-1 rounded-lg shrink-0 self-start sm:self-center">
+                      <span className="w-1 h-3.5 bg-teal-400 rounded-full animate-pulse" />
+                      <span className="w-1 h-5 bg-emerald-400 rounded-full animate-bounce" />
+                      <span className="w-1 h-2.5 bg-cyan-400 rounded-full animate-pulse" />
+                      <span className="w-1 h-4 bg-teal-300 rounded-full animate-bounce" />
+                      <span className="text-[9.5px] font-mono text-teal-300 font-bold ml-1">Synthesizing</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* 4. Sub-Section Switcher: QSC & OPI with Proper ON/OFF Switch & Circle Number Badge */}
-            <div className="grid grid-cols-2 gap-2.5 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/90">
+            {/* 4. Sub-Section Switcher: QSC & OPI Tab Switcher (Tanpa Tombol Switch ON/OFF) */}
+            <div className="grid grid-cols-2 gap-2.5 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
               {/* QSC Sub-Section Tab */}
-              <div
+              <button
+                type="button"
                 onClick={() => {
                   setObsSubTab('qsc');
                   setActiveObsIdx(0);
                 }}
                 className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl transition cursor-pointer ${
                   obsSubTab === 'qsc'
-                    ? 'bg-white text-emerald-950 shadow-sm border border-emerald-200/80'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-emerald-950 shadow-sm border border-emerald-200/80 font-black'
+                    : 'text-slate-600 hover:text-slate-900 font-bold'
                 }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-black text-xs sm:text-sm truncate">QSC</span>
-                  {/* Circle Number Badge Only */}
+                  <span className="text-xs sm:text-sm truncate">Standar QSC Store</span>
                   <span
                     className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
                       obsSubTab === 'qsc'
@@ -3409,48 +3388,28 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     {formData.observations.filter((o) => o.type === 'QSC').length}
                   </span>
                 </div>
-
-                {/* Interactive ON/OFF Toggle Switch */}
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={formData.enableQsc !== false}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFormData((prev) => ({ ...prev, enableQsc: !(prev.enableQsc !== false) }));
-                  }}
-                  title="Aktifkan / Nonaktifkan Halaman QSC"
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    formData.enableQsc !== false ? 'bg-emerald-600' : 'bg-slate-300'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center text-[8px] font-black ${
-                      formData.enableQsc !== false
-                        ? 'translate-x-5 text-emerald-700'
-                        : 'translate-x-0 text-slate-400'
-                    }`}
-                  >
-                    {formData.enableQsc !== false ? 'ON' : 'OFF'}
+                {obsSubTab === 'qsc' && (
+                  <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-lg shrink-0">
+                    Aktif
                   </span>
-                </button>
-              </div>
+                )}
+              </button>
 
               {/* OPI Sub-Section Tab */}
-              <div
+              <button
+                type="button"
                 onClick={() => {
                   setObsSubTab('opi');
                   setActiveObsIdx(0);
                 }}
                 className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl transition cursor-pointer ${
                   obsSubTab === 'opi'
-                    ? 'bg-white text-amber-950 shadow-sm border border-amber-200/80'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-amber-950 shadow-sm border border-amber-200/80 font-black'
+                    : 'text-slate-600 hover:text-slate-900 font-bold'
                 }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-black text-xs sm:text-sm truncate">OPI</span>
-                  {/* Circle Number Badge Only */}
+                  <span className="text-xs sm:text-sm truncate">Project OPI Store</span>
                   <span
                     className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
                       obsSubTab === 'opi'
@@ -3461,105 +3420,54 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     {formData.observations.filter((o) => o.type === 'OPI').length}
                   </span>
                 </div>
-
-                {/* Interactive ON/OFF Toggle Switch */}
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={formData.enableOpi !== false}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFormData((prev) => ({ ...prev, enableOpi: !(prev.enableOpi !== false) }));
-                  }}
-                  title="Aktifkan / Nonaktifkan Halaman OPI"
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    formData.enableOpi !== false ? 'bg-amber-500' : 'bg-slate-300'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center text-[8px] font-black ${
-                      formData.enableOpi !== false
-                        ? 'translate-x-5 text-amber-700'
-                        : 'translate-x-0 text-slate-400'
-                    }`}
-                  >
-                    {formData.enableOpi !== false ? 'ON' : 'OFF'}
+                {obsSubTab === 'opi' && (
+                  <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-lg shrink-0">
+                    Aktif
                   </span>
-                </button>
+                )}
+              </button>
+            </div>
+
+            {/* Quick-Jump Bar */}
+            <div className="w-full overflow-x-auto no-scrollbar py-1.5 px-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 pl-1">
+                Temuan:
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {currentObsList.map((obs, idx) => {
+                  const isActiveCard = activeObsIdx === idx;
+                  return (
+                    <button
+                      key={obs.id || idx}
+                      type="button"
+                      onClick={() => handleJumpToObsCard(idx, currentObsList)}
+                      className={`px-3 py-1 h-7 rounded-lg text-xs font-black transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer shrink-0 ${
+                        isActiveCard
+                          ? 'bg-teal-600 text-white shadow-xs scale-[1.02]'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:border-teal-400 hover:text-teal-700'
+                      }`}
+                      title={`Lompat ke Temuan #${idx + 1}`}
+                    >
+                      <span>Temuan #{idx + 1}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* 7A. Horizontal Elongated Quick-Jump Bar (Tanpa Text Total) */}
-            {isCurrentObsSubTabEnabled && (
-              <div className="w-full overflow-x-auto no-scrollbar py-1.5 px-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 pl-1">
-                  Temuan:
-                </span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {currentObsList.map((obs, idx) => {
-                    const isActiveCard = activeObsIdx === idx;
-                    return (
-                      <button
-                        key={obs.id || idx}
-                        type="button"
-                        onClick={() => handleJumpToObsCard(idx, currentObsList)}
-                        className={`px-3 py-1 h-7 rounded-lg text-xs font-black transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer shrink-0 ${
-                          isActiveCard
-                            ? 'bg-teal-600 text-white shadow-xs scale-[1.02]'
-                            : 'bg-white border border-slate-200 text-slate-700 hover:border-teal-400 hover:text-teal-700'
-                        }`}
-                        title={`Lompat ke Temuan #${idx + 1}`}
-                      >
-                        <span>Temuan #{idx + 1}</span>
-                      </button>
-                    );
-                  })}
+            {/* Observation Cards List */}
+            <div className="space-y-4">
+              {currentObsList.length === 0 ? (
+                <div className="py-10 px-4 text-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/60 space-y-2">
+                  <FileText className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                  <p className="text-xs font-bold text-slate-600">
+                    Belum ada temuan observasi {obsSubTab.toUpperCase()}.
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    Gunakan tombol AI TARO di atas untuk analisa otomatis atau tombol (+) di pojok kanan bawah.
+                  </p>
                 </div>
-              </div>
-            )}
-
-            {/* Observation Cards List (or Disabled State if Switch is OFF) */}
-            {!isCurrentObsSubTabEnabled ? (
-              <div className="py-10 px-4 text-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 space-y-2">
-                <div className="w-12 h-12 rounded-2xl bg-slate-200/80 text-slate-500 flex items-center justify-center mx-auto">
-                  <Sliders className="w-6 h-6" />
-                </div>
-                <h4 className="text-sm font-black text-slate-700">
-                  Sub-Section {obsSubTab.toUpperCase()} Dinonaktifkan (OFF)
-                </h4>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Geser switch <strong>ON</strong> pada tab <strong>{obsSubTab.toUpperCase()}</strong> di atas jika Anda ingin mengaktifkan halaman ini dan menambahkan temuan observasi.
-                </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      [obsSubTab === 'qsc' ? 'enableQsc' : 'enableOpi']: true,
-                    }))
-                  }
-                  className="mt-2 px-4 py-2 rounded-xl bg-teal-600 text-white font-extrabold text-xs shadow-xs hover:bg-teal-700 transition cursor-pointer"
-                >
-                  Aktifkan {obsSubTab.toUpperCase()} Sekarang (ON)
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {currentObsList.length === 0 ? (
-                  <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50">
-                    <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-xs font-semibold text-slate-500">
-                      Belum ada temuan observasi {obsSubTab.toUpperCase()}.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => handleAddObservation(obsSubTab.toUpperCase() as any)}
-                      className="mt-2 text-xs font-bold text-teal-700 hover:underline"
-                    >
-                      + Tambah Temuan {obsSubTab.toUpperCase()}
-                    </button>
-                  </div>
-                ) : (
+              ) : (
                   currentObsList.map((obs, idx) => {
                     const isListeningFinding = activeVoiceKey === `${obs.id}-auditFinding`;
                     return (
@@ -3836,7 +3744,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   })
                 )}
               </div>
-            )}
 
             {/* Footer Navigation Section 3 (Observasi) */}
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
@@ -3874,7 +3781,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           - Section 3 (Bukti): Tombol Icon Camera & Gallery (Liquid Glass)
           Selalu aktif dan tidak menghilang saat scroll ke bawah
           ===================================================================== */}
-      {activeSection === 3 && isCurrentObsSubTabEnabled && (
+      {activeSection === 3 && (
         <div
           className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             isScrolled
