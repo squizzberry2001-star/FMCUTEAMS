@@ -3281,17 +3281,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap leading-tight">
-                      <span className="font-extrabold text-xs text-white tracking-tight truncate">
-                        T.A.R.O AI
-                      </span>
-                      {formData.evidencePhotos.filter((p) => p.caption && p.caption.trim().length > 0).length > 0 && (
-                        <span className="text-[8.5px] font-black uppercase px-1.5 py-0.2 rounded-md bg-teal-500/20 text-teal-300 border border-teal-400/30 shrink-0">
-                          {formData.evidencePhotos.filter((p) => p.caption && p.caption.trim().length > 0).length} Bukti Siap
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors truncate mt-0.5">
+                    <span className="font-extrabold text-xs sm:text-[13px] text-white tracking-tight block leading-tight">
+                      T.A.R.O AI
+                    </span>
+                    <p className="text-[10.5px] sm:text-[11px] text-slate-300 group-hover:text-teal-100 transition-colors mt-0.5 leading-snug">
                       Bantu kamu buat observasi dari deskripsi foto yang kamu tulis.
                     </p>
                   </div>
