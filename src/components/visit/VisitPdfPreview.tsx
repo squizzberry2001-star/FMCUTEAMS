@@ -32,6 +32,10 @@ import {
   FMCU_REPORT_GDRIVE_FOLDER_ID
 } from '../../services/pdfGeneratorService';
 import {
+  downloadCAAssignmentExcel,
+  getCaAssignmentFileName
+} from '../../services/caAssignmentExcelService';
+import {
   syncMobileStatusBarTheme,
   APP_THEME_COLOR_LIGHT,
   APP_THEME_COLOR_DARK
@@ -189,13 +193,14 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   };
 
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
   const [isSyncingGdrive, setIsSyncingGdrive] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncStatusStep, setSyncStatusStep] = useState<1 | 2 | 3 | 4>(1);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncResult, setSyncResult] = useState<GDriveSyncResult | null>(null);
   const [isReportSaved, setIsReportSaved] = useState<boolean>(() => {
-    return Boolean(data.status === 'SUBMITTED' || data.gasSyncStatus === 'synced');
+    return Boolean(data.gasSyncStatus === 'synced');
   });
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
@@ -430,6 +435,21 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       showToast('Gagal mengunduh berkas PDF. Silakan coba lagi.', 'error');
     } finally {
       setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleDownloadCaExcel = async () => {
+    try {
+      setIsGeneratingExcel(true);
+      const fileName = getCaAssignmentFileName(data);
+      showToast(`Menyiapkan dan mengunduh berkas ${fileName}...`, 'info');
+      await downloadCAAssignmentExcel(data);
+      showToast(`Berkas CA Assignment Excel (${fileName}) berhasil diunduh!`, 'success');
+    } catch (err: any) {
+      console.error('Download CA Assignment error:', err);
+      showToast(err?.message || 'Gagal mengunduh berkas CA Assignment Excel.', 'error');
+    } finally {
+      setIsGeneratingExcel(false);
     }
   };
 
@@ -701,19 +721,42 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                     <span>{isGeneratingPdf ? 'Membuat...' : 'Unduh PDF'}</span>
                   </button>
 
-                  {/* CA Assignment Store Button */}
+                  {/* Unduh CA Assignment Excel (.xlsx) Button */}
                   <button
                     type="button"
-                    onClick={() => {
-                      const url = data.spreadsheetUrl || syncResult?.caSpreadsheetUrl || 'https://tinyurl.com/store-caassignment';
-                      window.open(url, '_blank');
-                    }}
-                    className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-900 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 shrink-0"
-                    title="Buka Link Spreadsheet Form CA Toko"
+                    onClick={handleDownloadCaExcel}
+                    disabled={isGeneratingExcel}
+                    className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 shrink-0"
+                    title="Unduh Berkas CA Assignment Excel (.xlsx) dengan Temuan & Target Selesai Otomatis"
                   >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-teal-700" />
-                    <span className="whitespace-nowrap">CA Assignment Store</span>
+                    {isGeneratingExcel ? (
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                    )}
+                    <span className="whitespace-nowrap">
+                      {isGeneratingExcel ? 'Membuat...' : 'CA Assignment (.xlsx)'}
+                    </span>
                   </button>
+
+                  {/* CA Assignment Spreadsheet Link (Jika tersedia) */}
+                  {(data.spreadsheetUrl || syncResult?.caSpreadsheetUrl) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url =
+                          data.spreadsheetUrl ||
+                          syncResult?.caSpreadsheetUrl ||
+                          'https://tinyurl.com/store-caassignment';
+                        window.open(url, '_blank');
+                      }}
+                      className="h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-900 font-extrabold text-xs transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                      title="Buka Link Spreadsheet Form CA Toko"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-teal-700" />
+                      <span className="hidden xl:inline text-[11px]">Spreadsheet CA</span>
+                    </button>
+                  )}
 
                   {/* Re-sync Button (Kecil untuk sinkronisasi ulang) */}
                   <button
@@ -903,11 +946,11 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                     </div>
                     <div className="min-w-0">
                       <div className="font-extrabold text-xs text-slate-900 truncate">
-                        1. PDF Laporan Visit (Slide 16:9 HD)
+                        1. Hasil Laporan PDF (Slide 16:9 HD)
                       </div>
                       <div className="text-[10px] text-slate-500 font-medium truncate">
                         {syncStatusStep > 1
-                          ? 'Tata letak & foto selesai disusun'
+                          ? 'Tersimpan di GDrive & siap diunduh'
                           : 'Menyiapkan layout slide & kompresi foto...'}
                       </div>
                     </div>
@@ -953,7 +996,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                       </div>
                       <div className="text-[10px] text-slate-500 font-medium truncate">
                         {syncStatusStep > 2
-                          ? 'Form evaluasi QSC tersimpan'
+                          ? 'Tersimpan aman di Google Drive'
                           : 'Menyatukan form evaluasi QSC...'}
                       </div>
                     </div>
@@ -993,7 +1036,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                 </div>
               </div>
 
-              {/* File 3: Spreadsheet CA */}
+              {/* File 3: CA Assignment Excel */}
               <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50/80 transition-all duration-300">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -1002,12 +1045,12 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                     </div>
                     <div className="min-w-0">
                       <div className="font-extrabold text-xs text-slate-900 truncate">
-                        3. Spreadsheet Log Temuan & CA Toko
+                        3. CA Assignment Excel (.xlsx)
                       </div>
                       <div className="text-[10px] text-slate-500 font-medium truncate">
                         {syncStatusStep >= 3
-                          ? 'Daftar temuan tersinkron ke spreadsheet'
-                          : 'Mencatat baris temuan ke spreadsheet...'}
+                          ? 'Daftar temuan tersimpan & siap diunduh'
+                          : 'Menyusun berkas Excel CA Assignment...'}
                       </div>
                     </div>
                   </div>
@@ -1051,49 +1094,57 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
             {/* Footer Buttons */}
             {syncProgress === 100 ? (
               <div className="pt-2 space-y-2.5">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      setShowSyncModal(false);
                       handleDownloadPdf();
                     }}
-                    className="h-10 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+                    disabled={isGeneratingPdf}
+                    className="h-10 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm transition active:scale-95 cursor-pointer disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4 text-emerald-400" />
-                    <span>Unduh PDF</span>
+                    {isGeneratingPdf ? (
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 text-emerald-400" />
+                    )}
+                    <span>Unduh PDF Laporan</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => {
-                      const url = data.spreadsheetUrl || syncResult?.caSpreadsheetUrl || 'https://tinyurl.com/store-caassignment';
-                      window.open(url, '_blank');
+                      handleDownloadCaExcel();
                     }}
-                    className="h-10 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-900 text-xs font-black flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer"
+                    disabled={isGeneratingExcel}
+                    className="h-10 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm transition active:scale-95 cursor-pointer disabled:opacity-50"
                   >
-                    <FileSpreadsheet className="w-4 h-4 text-teal-700" />
-                    <span className="truncate">CA Assignment Store</span>
+                    {isGeneratingExcel ? (
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                    )}
+                    <span className="truncate">Unduh CA Assignment (.xlsx)</span>
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                   <a
-                    href={FMCU_REPORT_GDRIVE_FOLDER_URL}
+                    href={syncResult?.storeFolderUrl || FMCU_REPORT_GDRIVE_FOLDER_URL}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
                   >
-                    <span>Buka Folder Drive</span>
+                    <span>Buka Folder Drive Toko</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
 
                   <button
                     type="button"
                     onClick={() => setShowSyncModal(false)}
-                    className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
+                    className="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer"
                   >
-                    Selesai
+                    Tutup
                   </button>
                 </div>
               </div>

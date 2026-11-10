@@ -2138,7 +2138,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     return (
       <div className="fixed inset-0 z-50 w-full h-full overflow-hidden flex flex-col bg-slate-950">
         <PageTransitionLoader visible={isSectionTransitioning} />
-        <VisitPdfPreview data={formData} onBack={() => setShowPreview(false)} />
+        <VisitPdfPreview
+          data={formData}
+          onBack={() => setShowPreview(false)}
+          onSyncGdrive={() => {
+            setFormData((prev) => ({
+              ...prev,
+              gasSyncStatus: 'synced',
+              status: 'SUBMITTED',
+              submittedAt: prev.submittedAt || new Date().toISOString()
+            }));
+          }}
+        />
       </div>
     );
   }

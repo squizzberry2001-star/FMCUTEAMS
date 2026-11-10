@@ -1,5 +1,9 @@
 import { jsPDF } from 'jspdf';
 import { VisitReportData, ObservationFinding, EvidencePhoto } from '../types/visitReport';
+import {
+  generateCaAssignmentBase64,
+  getCaAssignmentFileName
+} from './caAssignmentExcelService';
 
 export interface HtmlSlide {
   id: string;
@@ -1522,6 +1526,7 @@ export interface GDriveSyncResult {
   pdfUrl?: string;
   qscPdfUrl?: string;
   caSpreadsheetUrl?: string;
+  caExcelUrl?: string;
   storeFolderUrl?: string;
   visitorFolderUrl?: string;
   yearFolderUrl?: string;
@@ -1718,16 +1723,21 @@ export async function syncReportToGoogleDrive(
   report: VisitReportData,
   onProgress?: (pct: number, stage: string) => void
 ): Promise<GDriveSyncResult> {
-  onProgress?.(25, 'Merender dokumen PDF HD 16:9 & menyusun Lembar QSC...');
-  const [doc, qscDoc] = await Promise.all([
+  onProgress?.(25, 'Merender dokumen PDF HD 16:9, Lembar QSC & CA Assignment Excel...');
+  const [doc, qscDoc, caExcelBase64] = await Promise.all([
     generatePdfDoc(report),
     generateVerticalQscCollagePdf(report),
+    generateCaAssignmentBase64(report).catch((err) => {
+      console.warn('CA Assignment generation warning during sync:', err);
+      return '';
+    }),
   ]);
   const pdfBase64 = doc.output('datauristring');
   const qscPdfBase64 = qscDoc ? qscDoc.output('datauristring') : '';
   const fileName = getPdfFileName(report);
+  const caFileName = getCaAssignmentFileName(report);
 
-  onProgress?.(65, 'Mengunggah laporan PDF & Lembar QSC ke Google Apps Script & Google Drive...');
+  onProgress?.(65, 'Mengunggah 3 berkas laporan (PDF, Lembar QSC & CA Assignment) ke Google Apps Script & Google Drive...');
 
   const sanitizedReport = {
     id: report.id,
@@ -1758,7 +1768,9 @@ export async function syncReportToGoogleDrive(
     visitorName: report.visitorName || 'Visitor',
     pdfBase64,
     qscPdfBase64,
+    caExcelBase64,
     fileName,
+    caFileName,
     gdriveFolderId: FMCU_REPORT_GDRIVE_FOLDER_ID,
     sendEmail: false
   };
@@ -1783,6 +1795,7 @@ export async function syncReportToGoogleDrive(
     pdfUrl: result.pdfUrl,
     qscPdfUrl: result.qscPdfUrl,
     caSpreadsheetUrl: result.caSpreadsheetUrl,
+    caExcelUrl: result.caExcelUrl || result.caSpreadsheetUrl,
     storeFolderUrl: result.storeFolderUrl,
     visitorFolderUrl: result.visitorFolderUrl,
     yearFolderUrl: result.yearFolderUrl,
