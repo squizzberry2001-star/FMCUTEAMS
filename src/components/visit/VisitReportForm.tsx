@@ -94,7 +94,7 @@ interface VisitReportFormProps {
 // ============================================================================
 // ============================================================================
 // AUTO-RESIZE TEXTAREA WITH 60FPS SOFT SPRING ANIMATION
-// Tumbuh/menyusut baris demi baris secara mulus & responsif dengan soft spring
+// Tumbuh/menyusut baris demi baris secara elastis & lembut dengan Web Animations API spring overshoot
 // ============================================================================
 interface AutoResizeTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   value?: string;
@@ -110,86 +110,140 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   ...props
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const ghostRef = useRef<HTMLTextAreaElement | null>(null);
   const isInitializedRef = useRef(false);
-  const prevTargetHeightRef = useRef<number>(0);
+  const currentHeightRef = useRef<number>(0);
+  const activeAnimationRef = useRef<Animation | null>(null);
 
-  const adjustHeight = useCallback(
+  const updateHeight = useCallback(
     (animate = true) => {
       const el = textareaRef.current;
-      if (!el) return;
+      const ghost = ghostRef.current;
+      if (!el || !ghost) return;
 
-      // 1. Matikan transisi sementara untuk mengukur scrollHeight murni tanpa delay
-      const currentHeight = el.getBoundingClientRect().height;
-      el.style.transition = 'none';
-      el.style.height = 'auto';
+      // 1. Sinkronisasi lebar dan isi konten ke elemen ghost
+      const width = el.getBoundingClientRect().width || el.clientWidth;
+      if (width > 0) {
+        ghost.style.width = `${width}px`;
+      }
+      ghost.value = el.value || '';
 
-      // 2. Ukur line-height & padding aktual elemen
+      // 2. Ukur tinggi minimum berdasarkan line-height dan padding aktual
       const computed = window.getComputedStyle(el);
       const paddingTop = parseFloat(computed.paddingTop) || 10;
       const paddingBottom = parseFloat(computed.paddingBottom) || 10;
       const lineHeight = parseFloat(computed.lineHeight) || 17;
       const minHeight = minRows * lineHeight + paddingTop + paddingBottom;
 
-      const targetHeight = Math.max(minHeight, Math.ceil(el.scrollHeight));
+      // 3. Baca scrollHeight murni dari ghost element tanpa mengganggu textarea aktif
+      const targetHeight = Math.max(minHeight, Math.ceil(ghost.scrollHeight));
 
-      // 3. Load awal / mount: Set tinggi langsung tanpa loncatan animasi
+      // 4. Initial render: pasang tinggi target langsung tanpa animasi
       if (!isInitializedRef.current || !animate) {
         isInitializedRef.current = true;
-        prevTargetHeightRef.current = targetHeight;
+        currentHeightRef.current = targetHeight;
         el.style.height = `${targetHeight}px`;
         return;
       }
 
-      // 4. Jika jumlah baris tidak berubah, pertahankan tinggi stabil
-      if (Math.abs(prevTargetHeightRef.current - targetHeight) < 1) {
+      const prevHeight = currentHeightRef.current || el.getBoundingClientRect().height;
+
+      // 5. Jika tinggi baris sama persis, pertahankan posisi stabil
+      if (Math.abs(prevHeight - targetHeight) < 1.5) {
         el.style.height = `${targetHeight}px`;
         return;
       }
 
-      // 5. Kembalikan tinggi sebelumnya sebelum memicu transisi elastis
-      const startHeight = prevTargetHeightRef.current || currentHeight;
-      el.style.height = `${startHeight}px`;
+      // 6. Terjadi perubahan baris teks (bertambah / berkurang 1 baris atau lebih)
+      if (activeAnimationRef.current) {
+        activeAnimationRef.current.cancel();
+      }
 
-      // 6. Force reflow agar browser mendaftarkan titik awal animasi
-      void el.offsetHeight;
+      const isExpanding = targetHeight > prevHeight;
+      // Kurva Soft Spring: Overshoot elastis lembut (+6px saat melebar, -3.5px saat menyusut)
+      const overshoot = isExpanding
+        ? targetHeight + 6.0
+        : Math.max(minHeight, targetHeight - 3.5);
 
-      // 7. Animasi 60fps soft spring: Tumbuh/menyusut 1 baris sekaligus dengan kurva elastis lembut
-      // Easing: cubic-bezier(0.34, 1.45, 0.64, 1) memberikan responsif Apple fluid spring
-      el.style.transition = 'height 260ms cubic-bezier(0.34, 1.45, 0.64, 1)';
-      el.style.willChange = 'height';
-      el.style.height = `${targetHeight}px`;
+      if (typeof el.animate === 'function') {
+        // Eksekusi animasi hardware-accelerated 60fps dengan Web Animations API
+        const anim = el.animate(
+          [
+            { height: `${prevHeight}px`, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' },
+            { height: `${overshoot}px`, offset: 0.62, easing: 'cubic-bezier(0.35, 1.4, 0.65, 1)' },
+            { height: `${targetHeight}px`, offset: 1.0 },
+          ],
+          {
+            duration: 380, // Durasi 380ms yang terasa sangat empuk, elastis, dan memuaskan
+            fill: 'forwards',
+          }
+        );
 
-      prevTargetHeightRef.current = targetHeight;
+        activeAnimationRef.current = anim;
+        anim.onfinish = () => {
+          el.style.height = `${targetHeight}px`;
+          currentHeightRef.current = targetHeight;
+          if (activeAnimationRef.current === anim) {
+            activeAnimationRef.current = null;
+          }
+        };
+      } else {
+        // Fallback CSS transition jika browser lawas
+        el.style.transition = 'height 380ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+        el.style.height = `${targetHeight}px`;
+        currentHeightRef.current = targetHeight;
+      }
+
+      currentHeightRef.current = targetHeight;
     },
     [minRows]
   );
 
   useEffect(() => {
-    adjustHeight(isInitializedRef.current);
-  }, [value, adjustHeight]);
+    updateHeight(isInitializedRef.current);
+  }, [value, updateHeight]);
 
   useEffect(() => {
-    const handleResize = () => adjustHeight(false);
+    const handleResize = () => updateHeight(false);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [adjustHeight]);
+  }, [updateHeight]);
 
   return (
-    <textarea
-      ref={textareaRef}
-      rows={minRows}
-      value={value}
-      onChange={(e) => {
-        if (onChange) onChange(e);
-        adjustHeight(true);
-      }}
-      style={{
-        ...style,
-        boxSizing: 'border-box',
-      }}
-      className={`overflow-hidden resize-none ${className}`}
-      {...props}
-    />
+    <>
+      <textarea
+        ref={textareaRef}
+        rows={minRows}
+        value={value}
+        onChange={(e) => {
+          if (onChange) onChange(e);
+          updateHeight(true);
+        }}
+        style={{
+          ...style,
+          boxSizing: 'border-box',
+          willChange: 'height',
+        }}
+        className={`overflow-hidden resize-none ${className}`}
+        {...props}
+      />
+      <textarea
+        ref={ghostRef}
+        tabIndex={-1}
+        aria-hidden="true"
+        readOnly
+        rows={minRows}
+        className={`fixed -top-[9999px] -left-[9999px] opacity-0 pointer-events-none overflow-hidden resize-none ${className}`}
+        style={{
+          ...style,
+          boxSizing: 'border-box',
+          height: 'auto',
+          minHeight: '0px',
+          maxHeight: 'none',
+          visibility: 'hidden',
+        }}
+      />
+    </>
   );
 };
 
