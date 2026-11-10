@@ -577,3 +577,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0;
   cursor: pointer;
 }
+
+/* Continuous Flowing Shimmer Bar for GDrive Sync Progress */
+@keyframes flowingShimmerBar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.animate-flowing-shimmer {
+  animation: flowingShimmerBar 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}

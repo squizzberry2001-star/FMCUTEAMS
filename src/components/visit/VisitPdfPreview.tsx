@@ -16,7 +16,8 @@ import {
   Images,
   Check,
   Eye,
-  Maximize2
+  Maximize2,
+  Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { VisitReportData } from '../../types/visitReport';
@@ -202,6 +203,8 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   const [isReportSaved, setIsReportSaved] = useState<boolean>(() => {
     return Boolean(data.gasSyncStatus === 'synced');
   });
+  // Top Banner: Unduh PDF & CA Assignment otomatis muncul HANYA disaat user tutup modal loading save
+  const [hasClosedSaveModalAfterSync, setHasClosedSaveModalAfterSync] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   // Real PDF Rendering State (Instant Direct Canvas)
@@ -236,11 +239,15 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
     ].join('::');
   }, [data]);
 
-  // Pinch-to-zoom & Smooth Gestures
+  // Zoom & Flexible Pan Geser Kanan-Kiri
   const [zoomScale, setZoomScale] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const pinchStartDistRef = useRef<number | null>(null);
   const pinchStartScaleRef = useRef<number>(1);
   const isPinchingRef = useRef<boolean>(false);
+  const isDraggingRef = useRef<boolean>(false);
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastTapRef = useRef<number>(0);
   const animFrameRef = useRef<number | null>(null);
 
@@ -249,22 +256,36 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
     if (e.touches.length === 1) {
       const now = Date.now();
       if (now - lastTapRef.current < 280) {
-        setZoomScale((prev) => (prev > 1.15 ? 1 : 1.75));
+        if (zoomScale > 1.1) {
+          setZoomScale(1);
+          setPanOffset({ x: 0, y: 0 });
+        } else {
+          setZoomScale(1.75);
+        }
         lastTapRef.current = 0;
+        isDraggingRef.current = false;
         return;
       }
       lastTapRef.current = now;
+
+      // Start drag tracking for 1-finger horizontal/vertical panning
+      const touch = e.touches[0];
+      dragStartRef.current = { x: touch.clientX, y: touch.clientY };
+      panStartRef.current = { ...panOffset };
+      isDraggingRef.current = true;
     }
 
     // 2. Pinch start with 2 fingers
     if (e.touches.length === 2) {
       isPinchingRef.current = true;
+      isDraggingRef.current = false;
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
       pinchStartDistRef.current = dist;
       pinchStartScaleRef.current = zoomScale;
+      panStartRef.current = { ...panOffset };
     }
   };
 
@@ -279,21 +300,76 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
 
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = requestAnimationFrame(() => {
-        setZoomScale(Number(targetScale.toFixed(2)));
+        const roundedScale = Number(targetScale.toFixed(2));
+        setZoomScale(roundedScale);
+        if (roundedScale <= 1.05) {
+          setPanOffset({ x: 0, y: 0 });
+        }
+      });
+    } else if (e.touches.length === 1 && isDraggingRef.current && zoomScale > 1.05) {
+      const touch = e.touches[0];
+      const dx = touch.clientX - dragStartRef.current.x;
+      const dy = touch.clientY - dragStartRef.current.y;
+
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 500;
+      const maxPanX = Math.max(120, ((viewportWidth * (zoomScale - 1)) / 1.5) + 140);
+      const nextX = Math.min(maxPanX, Math.max(-maxPanX, panStartRef.current.x + dx));
+
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = requestAnimationFrame(() => {
+        setPanOffset((prev) => ({
+          ...prev,
+          x: nextX,
+          y: Math.min(160, Math.max(-160, panStartRef.current.y + dy * 0.35)),
+        }));
       });
     }
   };
 
   const handleTouchEnd = () => {
     isPinchingRef.current = false;
+    isDraggingRef.current = false;
     pinchStartDistRef.current = null;
+    if (zoomScale <= 1.05) {
+      setPanOffset({ x: 0, y: 0 });
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomScale > 1.05 && e.button === 0) {
+      isDraggingRef.current = true;
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      panStartRef.current = { ...panOffset };
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDraggingRef.current && zoomScale > 1.05) {
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 800;
+      const maxPanX = Math.max(150, ((viewportWidth * (zoomScale - 1)) / 1.5) + 180);
+      const nextX = Math.min(maxPanX, Math.max(-maxPanX, panStartRef.current.x + dx));
+      setPanOffset({
+        x: nextX,
+        y: Math.min(220, Math.max(-220, panStartRef.current.y + dy * 0.4)),
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
   };
 
   const handleWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoomScale((prev) => Math.min(3.0, Math.max(0.65, Number((prev + delta).toFixed(2)))));
+      setZoomScale((prev) => {
+        const next = Math.min(3.0, Math.max(0.65, Number((prev + delta).toFixed(2))));
+        if (next <= 1.05) setPanOffset({ x: 0, y: 0 });
+        return next;
+      });
     }
   };
 
@@ -493,32 +569,43 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
     }
   }, [syncProgress]);
 
+  const handleCloseSyncModal = () => {
+    setShowSyncModal(false);
+    // User menutup modal loading save -> aktifkan tombol download PDF & CA Assignment di top banner!
+    if (isReportSaved || syncProgress === 100) {
+      setHasClosedSaveModalAfterSync(true);
+    }
+  };
+
   const handleOpenGdriveSync = async () => {
     setShowSyncModal(true);
     setIsSyncingGdrive(true);
-    setSyncProgress(12);
+    setSyncProgress(15);
     setSyncStatusStep(1);
 
-    // Manipulasi Animasi Loading Dinamis (Simulated Dynamic Progress Ticker)
-    // Berjalan halus dari 12% hingga 95% secara non-linier agar user tidak mengira web stuck
-    let simulatedPct = 12;
+    // Animasi Loading Dinamis & Kontinu: Berjalan halus dan terus bergerak (tidak pernah stuck di 95%)
+    let simulatedPct = 15;
     const ticker = setInterval(() => {
-      if (simulatedPct < 38) {
+      if (simulatedPct < 35) {
         simulatedPct += Math.floor(Math.random() * 4) + 3; // +3 to +6%
-      } else if (simulatedPct < 70) {
+      } else if (simulatedPct < 65) {
         simulatedPct += Math.floor(Math.random() * 3) + 2; // +2 to +4%
-      } else if (simulatedPct < 88) {
+      } else if (simulatedPct < 85) {
         simulatedPct += Math.floor(Math.random() * 2) + 1; // +1 to +2%
-      } else if (simulatedPct < 95) {
-        simulatedPct += 0.4; // Melambat halus mendekati 95%
+      } else if (simulatedPct < 94) {
+        simulatedPct += 0.6; // +0.6%
+      } else if (simulatedPct < 98.8) {
+        // Tetap bergerak stabil mendekati 99% selagi menunggu respon GAS di background agar tidak terkesan stuck
+        simulatedPct += 0.16;
       }
-      const rounded = Math.min(95, Math.round(simulatedPct));
+      const rounded = Math.min(99, Math.round(simulatedPct));
       setSyncProgress(rounded);
 
-      if (rounded >= 80) setSyncStatusStep(3);
-      else if (rounded >= 40) setSyncStatusStep(2);
+      if (rounded >= 88) setSyncStatusStep(4);
+      else if (rounded >= 65) setSyncStatusStep(3);
+      else if (rounded >= 35) setSyncStatusStep(2);
       else setSyncStatusStep(1);
-    }, 260);
+    }, 250);
 
     try {
       const result = await syncReportToGoogleDrive(data);
@@ -678,28 +765,22 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
               </button>
             </div>
 
-            {/* Right Core Actions: Arahkan user untuk Simpan Laporan Dahulu, setelah itu berikan Unduh PDF & CA Assignment Store */}
-            <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end flex-wrap sm:flex-nowrap">
-              {!isReportSaved ? (
-                <>
-                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 text-xs font-bold">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span>Simpan laporan terlebih dahulu</span>
-                  </span>
-
-                  {/* SIMPAN LAPORAN Button (Primary Prominent Action) */}
-                  <button
-                    type="button"
-                    onClick={handleOpenGdriveSync}
-                    className="h-9 sm:h-10 px-4 sm:px-6 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-[#009944] hover:brightness-105 text-white font-black text-xs tracking-wide transition flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg active:scale-95 shrink-0 ring-2 ring-emerald-400/40"
-                    title="Simpan Laporan & Sinkronisasikan ke Google Drive Toko"
-                  >
-                    <CloudUpload className="w-4 h-4 text-emerald-100" />
-                    <span className="whitespace-nowrap">SIMPAN LAPORAN</span>
-                  </button>
-                </>
+            {/* Right Core Actions: Arahkan user untuk Simpan Laporan Dahulu, setelah tutup modal baru berikan Unduh PDF & CA Assignment */}
+            <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+              {!hasClosedSaveModalAfterSync ? (
+                /* Primary Large & Proportional Save Button */
+                <button
+                  type="button"
+                  onClick={handleOpenGdriveSync}
+                  className="w-full sm:w-auto h-10 sm:h-11 px-5 sm:px-8 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-[#009944] hover:brightness-105 text-white font-black text-xs sm:text-sm tracking-wide transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-md hover:shadow-lg active:scale-98 shrink-0 ring-2 ring-emerald-400/40"
+                  title="Simpan Laporan & Sinkronisasikan ke Google Drive Toko"
+                >
+                  <CloudUpload className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-pulse" />
+                  <span className="whitespace-nowrap">SIMPAN KE GOOGLE DRIVE</span>
+                </button>
               ) : (
-                <>
+                /* Download Buttons appear automatically once user completes save & closes modal */
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-end animate-in fade-in duration-300">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-black shrink-0">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     <span className="hidden sm:inline">Tersimpan</span>
@@ -710,7 +791,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                     type="button"
                     onClick={handleDownloadPdf}
                     disabled={isGeneratingPdf}
-                    className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 shrink-0"
+                    className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-slate-900 hover:bg-black text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 shrink-0"
                     title="Unduh Berkas PDF Lengkap (16:9 Landscape)"
                   >
                     {isGeneratingPdf ? (
@@ -739,37 +820,16 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                     </span>
                   </button>
 
-                  {/* CA Assignment Spreadsheet Link (Jika tersedia dan bukan default tinyurl) */}
-                  {(syncResult?.caSpreadsheetUrl || (data.spreadsheetUrl && !data.spreadsheetUrl.includes('tinyurl.com'))) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url =
-                          syncResult?.caSpreadsheetUrl ||
-                          (data.spreadsheetUrl && !data.spreadsheetUrl.includes('tinyurl.com') ? data.spreadsheetUrl : '');
-                        if (url) {
-                          window.open(url, '_blank');
-                        }
-                      }}
-                      className="h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-900 font-extrabold text-xs transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
-                      title="Buka Link Spreadsheet Form CA Toko"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 text-teal-700" />
-                      <span className="hidden xl:inline text-[11px]">Spreadsheet CA</span>
-                    </button>
-                  )}
-
                   {/* Re-sync Button (Kecil untuk sinkronisasi ulang) */}
                   <button
                     type="button"
                     onClick={handleOpenGdriveSync}
-                    className="h-9 sm:h-10 px-2 sm:px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                    className="h-9 sm:h-10 w-9 sm:w-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 shrink-0"
                     title="Sinkronisasi Ulang ke Google Drive Toko"
                   >
-                    <CloudUpload className="w-3.5 h-3.5 text-teal-600" />
-                    <span className="hidden md:inline text-[11px]">Sinkron Ulang</span>
+                    <CloudUpload className="w-4 h-4 text-teal-600" />
                   </button>
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -791,21 +851,32 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
         )}
 
         {/* ================================================================== */}
-        {/* CONTINUOUS REAL PDF PAGES STREAM (SEMUA HALAMAN DENGAN PINCH ZOOM) */}
+        {/* CONTINUOUS REAL PDF PAGES STREAM (SEMUA HALAMAN DENGAN PINCH & PAN ZOOM) */}
         {/* ================================================================== */}
         {!isLoadingPdf && !useIframeFallback && pdfDocInstance && totalPagesCount > 0 && (
           <div
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
-            className="w-full flex-1 touch-pan-y transition-all"
+            className={`w-full flex-1 transition-all ${
+              zoomScale > 1.05
+                ? 'cursor-grab active:cursor-grabbing touch-none select-none'
+                : 'touch-pan-y'
+            }`}
           >
             <div
               style={{
-                transform: `scale(${zoomScale}) translateZ(0)`,
+                transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${zoomScale})`,
                 transformOrigin: 'top center',
-                transition: isPinchingRef.current ? 'none' : 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)',
+                transition:
+                  isPinchingRef.current || isDraggingRef.current
+                    ? 'none'
+                    : 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
               className="space-y-6 max-w-5xl mx-auto w-full transition-transform will-change-transform"
             >
@@ -822,12 +893,18 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
           </div>
         )}
 
-        {/* Floating Zoom Controls Bar (Pinch-to-zoom & Mouse Wheel Indicator) */}
+        {/* Floating Zoom Controls Bar (Pinch-to-zoom, Mouse Wheel & Pan Nudge Controls) */}
         {!isLoadingPdf && totalPagesCount > 0 && (
           <div className="fixed bottom-6 right-6 z-40 bg-slate-900/90 backdrop-blur-xl border border-white/20 text-white rounded-full p-1.5 shadow-2xl flex items-center gap-1 select-none print:hidden">
             <button
               type="button"
-              onClick={() => setZoomScale((prev) => Math.max(0.6, Number((prev - 0.15).toFixed(2))))}
+              onClick={() => {
+                setZoomScale((prev) => {
+                  const next = Math.max(0.6, Number((prev - 0.15).toFixed(2)));
+                  if (next <= 1.05) setPanOffset({ x: 0, y: 0 });
+                  return next;
+                });
+              }}
               className="w-8 h-8 rounded-full hover:bg-white/20 active:scale-95 flex items-center justify-center font-bold text-base transition cursor-pointer"
               title="Perkecil Halaman PDF (Zoom Out)"
             >
@@ -835,7 +912,10 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setZoomScale(1)}
+              onClick={() => {
+                setZoomScale(1);
+                setPanOffset({ x: 0, y: 0 });
+              }}
               className="px-2.5 py-1 rounded-full hover:bg-white/20 text-[11px] font-black text-teal-300 transition cursor-pointer"
               title="Reset Zoom ke 100% (Fit Layar)"
             >
@@ -849,6 +929,28 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
             >
               +
             </button>
+
+            {/* Quick Pan Controls when Zoomed in */}
+            {zoomScale > 1.05 && (
+              <div className="flex items-center gap-1 border-l border-white/20 pl-1 ml-0.5 animate-in fade-in">
+                <button
+                  type="button"
+                  onClick={() => setPanOffset((prev) => ({ ...prev, x: prev.x + 90 }))}
+                  className="w-7 h-7 rounded-full hover:bg-white/20 active:scale-90 flex items-center justify-center text-xs font-bold text-slate-200 transition cursor-pointer"
+                  title="Geser Tampilan ke Kiri"
+                >
+                  ◀
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPanOffset((prev) => ({ ...prev, x: prev.x - 90 }))}
+                  className="w-7 h-7 rounded-full hover:bg-white/20 active:scale-90 flex items-center justify-center text-xs font-bold text-slate-200 transition cursor-pointer"
+                  title="Geser Tampilan ke Kanan"
+                >
+                  ▶
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -879,29 +981,64 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       {/* GOOGLE DRIVE SYNC MODAL                                            */}
       {/* ================================================================== */}
       {showSyncModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-4 z-[999999] overflow-y-auto animate-in fade-in duration-200">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseSyncModal();
+          }}
+          className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-4 z-[999999] overflow-y-auto animate-in fade-in duration-200"
+        >
           <div className="relative bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-3xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-4 my-auto animate-in zoom-in-95 duration-200">
-            {/* Header: Logo Drive & Persentase */}
+            {/* Header: Logo Drive & Persentase with SVG Circular Loading Ring */}
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="relative w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-xl shadow-md shrink-0">
-                  <CloudUpload className="w-6 h-6 text-white" />
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 border-2 border-white rounded-full animate-ping" />
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 border-2 border-white rounded-full" />
+                <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-xl shadow-md shrink-0">
+                  {syncProgress === 100 ? (
+                    <Check className="w-6 h-6 text-white stroke-[3]" />
+                  ) : (
+                    <>
+                      {/* SVG Circular Progress Ring */}
+                      <svg className="w-12 h-12 absolute inset-0 -rotate-90">
+                        <circle
+                          cx="24"
+                          cy="24"
+                          r="19"
+                          className="stroke-white/20"
+                          strokeWidth="3.5"
+                          fill="transparent"
+                        />
+                        <circle
+                          cx="24"
+                          cy="24"
+                          r="19"
+                          className="stroke-white transition-all duration-300 ease-out"
+                          strokeWidth="3.5"
+                          strokeDasharray={119.4}
+                          strokeDashoffset={119.4 - (119.4 * syncProgress) / 100}
+                          strokeLinecap="round"
+                          fill="transparent"
+                        />
+                      </svg>
+                      <Loader2 className="w-5 h-5 text-white animate-spin" />
+                    </>
+                  )}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="font-black text-slate-900 text-sm sm:text-base tracking-tight truncate">
-                      Menyimpan ke Google Drive
+                      {syncProgress === 100 ? 'Tersimpan di Google Drive' : 'Menyimpan ke Google Drive'}
                     </h3>
                     <span
-                      className={`text-xs font-black px-2.5 py-0.5 rounded-full border shrink-0 flex items-center gap-1 ${
+                      className={`text-xs font-black px-2.5 py-0.5 rounded-full border shrink-0 flex items-center gap-1.5 ${
                         syncProgress === 100
                           ? 'text-emerald-800 bg-emerald-100 border-emerald-300 shadow-xs ring-2 ring-emerald-400/40'
-                          : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                          : 'text-teal-700 bg-teal-50 border-teal-200'
                       }`}
                     >
-                      {syncProgress === 100 && <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[3]" />}
+                      {syncProgress === 100 ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[3]" />
+                      ) : (
+                        <Loader2 className="w-3.5 h-3.5 text-teal-600 animate-spin" />
+                      )}
                       <span>{syncProgress}%</span>
                     </span>
                   </div>
@@ -911,16 +1048,18 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                         ? 'Menyiapkan layout slide & kompresi foto...'
                         : syncProgress < 65
                         ? 'Menyusun lembar QSC & mengenkripsi dokumen...'
-                        : syncProgress < 85
+                        : syncStatusStep === 3
+                        ? 'Menyusun berkas CA Assignment Excel (.xlsx)...'
+                        : syncProgress < 95
                         ? 'Mentransmisikan data ke Google Drive FMCU...'
-                        : 'Memvalidasi direktori toko & merapikan berkas...'
+                        : 'Memvalidasi direktori toko & menyelesaikan sinkronisasi...'
                       : 'Sinkronisasi berkas sukses selesai!'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowSyncModal(false)}
+                onClick={handleCloseSyncModal}
                 className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition shrink-0 cursor-pointer"
                 title="Tutup Modal"
               >
@@ -928,12 +1067,16 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
               </button>
             </div>
 
-            {/* Overall Animated Progress Bar */}
-            <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
+            {/* Overall Animated Flowing Progress Bar (Never Looks Stuck) */}
+            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80 relative">
               <div
-                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-[#009944] rounded-full transition-all duration-500 ease-out shadow-xs"
+                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-[#009944] rounded-full transition-all duration-300 ease-out shadow-xs relative overflow-hidden"
                 style={{ width: `${syncProgress}%` }}
-              />
+              >
+                {syncProgress < 100 && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent w-full h-full animate-flowing-shimmer" />
+                )}
+              </div>
             </div>
 
             {/* 3 Files Status Cards */}
@@ -965,12 +1108,12 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                   >
                     {syncStatusStep > 1 ? (
                       <>
-                        <Check className="w-3 h-3 text-emerald-700" />
+                        <Check className="w-3 h-3 text-emerald-700 stroke-[2.5]" />
                         <span>Selesai</span>
                       </>
                     ) : (
                       <>
-                        <Clock className="w-3 h-3 text-amber-600 animate-spin" />
+                        <Loader2 className="w-3 h-3 text-amber-600 animate-spin" />
                         <span>Memproses</span>
                       </>
                     )}
@@ -998,7 +1141,9 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                       <div className="text-[10px] text-slate-500 font-medium truncate">
                         {syncStatusStep > 2
                           ? 'Tersimpan aman di Google Drive'
-                          : 'Menyatukan form evaluasi QSC...'}
+                          : syncStatusStep === 2
+                          ? 'Menyatukan form evaluasi QSC...'
+                          : 'Menunggu giliran kompresi...'}
                       </div>
                     </div>
                   </div>
@@ -1013,12 +1158,12 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                   >
                     {syncStatusStep > 2 ? (
                       <>
-                        <Check className="w-3 h-3 text-emerald-700" />
+                        <Check className="w-3 h-3 text-emerald-700 stroke-[2.5]" />
                         <span>Selesai</span>
                       </>
                     ) : syncStatusStep === 2 ? (
                       <>
-                        <Clock className="w-3 h-3 text-amber-600 animate-spin" />
+                        <Loader2 className="w-3 h-3 text-amber-600 animate-spin" />
                         <span>Memproses</span>
                       </>
                     ) : (
@@ -1049,23 +1194,32 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                         3. CA Assignment Excel (.xlsx)
                       </div>
                       <div className="text-[10px] text-slate-500 font-medium truncate">
-                        {syncStatusStep >= 3
+                        {syncStatusStep > 3 || syncProgress === 100
                           ? 'Daftar temuan tersimpan & siap diunduh'
-                          : 'Menyusun berkas Excel CA Assignment...'}
+                          : syncStatusStep === 3
+                          ? 'Menyusun berkas Excel CA Assignment...'
+                          : 'Menunggu giliran format Excel...'}
                       </div>
                     </div>
                   </div>
                   <div
                     className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                      syncStatusStep >= 3
+                      syncStatusStep > 3 || syncProgress === 100
                         ? 'bg-emerald-100 text-emerald-800'
+                        : syncStatusStep === 3
+                        ? 'bg-amber-100 text-amber-800'
                         : 'bg-slate-100 text-slate-600'
                     }`}
                   >
-                    {syncStatusStep >= 3 ? (
+                    {syncStatusStep > 3 || syncProgress === 100 ? (
                       <>
-                        <Check className="w-3 h-3 text-emerald-700" />
+                        <Check className="w-3 h-3 text-emerald-700 stroke-[2.5]" />
                         <span>Selesai</span>
+                      </>
+                    ) : syncStatusStep === 3 ? (
+                      <>
+                        <Loader2 className="w-3 h-3 text-amber-600 animate-spin" />
+                        <span>Memproses</span>
                       </>
                     ) : (
                       <span>Menunggu</span>
@@ -1075,7 +1229,14 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                 <div className="w-full h-1.5 bg-slate-200/80 rounded-full mt-2 overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                    style={{ width: syncStatusStep >= 3 ? '100%' : '0%' }}
+                    style={{
+                      width:
+                        syncStatusStep > 3 || syncProgress === 100
+                          ? '100%'
+                          : syncStatusStep === 3
+                          ? '50%'
+                          : '0%',
+                    }}
                   />
                 </div>
               </div>
@@ -1142,8 +1303,8 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setShowSyncModal(false)}
-                    className="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer"
+                    onClick={handleCloseSyncModal}
+                    className="h-8 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition active:scale-95 cursor-pointer shadow-sm"
                   >
                     Tutup
                   </button>
@@ -1163,7 +1324,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setShowSyncModal(false)}
+                  onClick={handleCloseSyncModal}
                   className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition cursor-pointer"
                 >
                   Tutup
