@@ -3325,7 +3325,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </div>
             </div>
 
-            {/* 4. Sub-Section Switcher: QSC & OPI Tab Switcher (Ramping & Proporsional Tanpa Terpotong) */}
+            {/* 4. Sub-Section Switcher: QSC & OPI Tab Switcher */}
             <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
               {/* QSC Sub-Section Tab */}
               <button
@@ -3334,29 +3334,22 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   setObsSubTab('qsc');
                   setActiveObsIdx(0);
                 }}
-                className={`flex items-center justify-between px-3 py-2 rounded-xl transition cursor-pointer ${
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl transition cursor-pointer ${
                   obsSubTab === 'qsc'
                     ? 'bg-white text-emerald-950 shadow-sm border border-emerald-200/80 font-black'
                     : 'text-slate-600 hover:text-slate-900 font-bold'
                 }`}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xs sm:text-sm truncate">QSC Store</span>
-                  <span
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                      obsSubTab === 'qsc'
-                        ? 'bg-emerald-600 text-white shadow-2xs'
-                        : 'bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {formData.observations.filter((o) => o.type === 'QSC').length}
-                  </span>
-                </div>
-                {obsSubTab === 'qsc' && (
-                  <span className="text-[9.5px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.2 rounded-md shrink-0">
-                    Aktif
-                  </span>
-                )}
+                <span className="text-xs sm:text-sm truncate">QSC Store</span>
+                <span
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                    obsSubTab === 'qsc'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {formData.observations.filter((o) => o.type === 'QSC').length}
+                </span>
               </button>
 
               {/* OPI Sub-Section Tab */}
@@ -3366,29 +3359,22 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   setObsSubTab('opi');
                   setActiveObsIdx(0);
                 }}
-                className={`flex items-center justify-between px-3 py-2 rounded-xl transition cursor-pointer ${
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl transition cursor-pointer ${
                   obsSubTab === 'opi'
                     ? 'bg-white text-amber-950 shadow-sm border border-amber-200/80 font-black'
                     : 'text-slate-600 hover:text-slate-900 font-bold'
                 }`}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xs sm:text-sm truncate">OPI Store</span>
-                  <span
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                      obsSubTab === 'opi'
-                        ? 'bg-amber-500 text-white shadow-2xs'
-                        : 'bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {formData.observations.filter((o) => o.type === 'OPI').length}
-                  </span>
-                </div>
-                {obsSubTab === 'opi' && (
-                  <span className="text-[9.5px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.2 rounded-md shrink-0">
-                    Aktif
-                  </span>
-                )}
+                <span className="text-xs sm:text-sm truncate">OPI Store</span>
+                <span
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                    obsSubTab === 'opi'
+                      ? 'bg-amber-500 text-white shadow-2xs'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {formData.observations.filter((o) => o.type === 'OPI').length}
+                </span>
               </button>
             </div>
 
