@@ -92,37 +92,86 @@ interface VisitReportFormProps {
 }
 
 // ============================================================================
-// AUTO-RESIZE TEXTAREA COMPONENT (Melebar / Memanjang Otomatis Sesuai Isi Text)
+// ============================================================================
+// AUTO-RESIZE TEXTAREA WITH 60FPS SOFT SPRING ANIMATION
+// Tumbuh/menyusut baris demi baris secara mulus & responsif dengan soft spring
 // ============================================================================
 interface AutoResizeTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
-  value: string;
+  value?: string;
   minRows?: number;
 }
 
 const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
-  value,
+  value = '',
   onChange,
   minRows = 2,
   className = '',
+  style,
   ...props
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isInitializedRef = useRef(false);
+  const prevTargetHeightRef = useRef<number>(0);
 
-  const adjustHeight = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    const minHeight = minRows * 22 + 18;
-    el.style.height = `${Math.max(minHeight, el.scrollHeight)}px`;
-  }, [minRows]);
+  const adjustHeight = useCallback(
+    (animate = true) => {
+      const el = textareaRef.current;
+      if (!el) return;
+
+      // 1. Matikan transisi sementara untuk mengukur scrollHeight murni tanpa delay
+      const currentHeight = el.getBoundingClientRect().height;
+      el.style.transition = 'none';
+      el.style.height = 'auto';
+
+      // 2. Ukur line-height & padding aktual elemen
+      const computed = window.getComputedStyle(el);
+      const paddingTop = parseFloat(computed.paddingTop) || 10;
+      const paddingBottom = parseFloat(computed.paddingBottom) || 10;
+      const lineHeight = parseFloat(computed.lineHeight) || 17;
+      const minHeight = minRows * lineHeight + paddingTop + paddingBottom;
+
+      const targetHeight = Math.max(minHeight, Math.ceil(el.scrollHeight));
+
+      // 3. Load awal / mount: Set tinggi langsung tanpa loncatan animasi
+      if (!isInitializedRef.current || !animate) {
+        isInitializedRef.current = true;
+        prevTargetHeightRef.current = targetHeight;
+        el.style.height = `${targetHeight}px`;
+        return;
+      }
+
+      // 4. Jika jumlah baris tidak berubah, pertahankan tinggi stabil
+      if (Math.abs(prevTargetHeightRef.current - targetHeight) < 1) {
+        el.style.height = `${targetHeight}px`;
+        return;
+      }
+
+      // 5. Kembalikan tinggi sebelumnya sebelum memicu transisi elastis
+      const startHeight = prevTargetHeightRef.current || currentHeight;
+      el.style.height = `${startHeight}px`;
+
+      // 6. Force reflow agar browser mendaftarkan titik awal animasi
+      void el.offsetHeight;
+
+      // 7. Animasi 60fps soft spring: Tumbuh/menyusut 1 baris sekaligus dengan kurva elastis lembut
+      // Easing: cubic-bezier(0.34, 1.45, 0.64, 1) memberikan responsif Apple fluid spring
+      el.style.transition = 'height 260ms cubic-bezier(0.34, 1.45, 0.64, 1)';
+      el.style.willChange = 'height';
+      el.style.height = `${targetHeight}px`;
+
+      prevTargetHeightRef.current = targetHeight;
+    },
+    [minRows]
+  );
 
   useEffect(() => {
-    adjustHeight();
+    adjustHeight(isInitializedRef.current);
   }, [value, adjustHeight]);
 
   useEffect(() => {
-    window.addEventListener('resize', adjustHeight);
-    return () => window.removeEventListener('resize', adjustHeight);
+    const handleResize = () => adjustHeight(false);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [adjustHeight]);
 
   return (
@@ -132,7 +181,11 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
       value={value}
       onChange={(e) => {
         if (onChange) onChange(e);
-        adjustHeight();
+        adjustHeight(true);
+      }}
+      style={{
+        ...style,
+        boxSizing: 'border-box',
       }}
       className={`overflow-hidden resize-none ${className}`}
       {...props}
@@ -2796,7 +2849,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 onClick={() => handleSwitchSection(2)}
                 className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-xs transition flex items-center gap-2 cursor-pointer"
               >
-                <span>Lanjut ke Section 2: Observation (OPI &amp; QSC)</span>
+                <span>Lanjut ke Section 2: Bukti Foto (Finding &amp; CA)</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -2804,14 +2857,251 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         )}
 
         {/* ============================================================
-            SECTION 2: OBSERVATION (OPI PROJECT & QSC OBSERVATION)
+            SECTION 2: EVIDENCE (BUKTI TEMUAN & HASIL PERBAIKAN CA)
+            TANPA BANNER ACTUAL IN/OUT
             ============================================================ */}
         {activeSection === 2 && (
-          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-5 animate-in fade-in">
             {/* Header Section 2 */}
             <div className="border-b border-slate-100 pb-3">
               <h3 className="font-black text-base sm:text-lg text-slate-900">
-                Observation
+                Evidence (Bukti Foto)
+              </h3>
+            </div>
+
+            {/* Sub-section Switcher Tabs: Bukti Temuan vs Hasil Perbaikan */}
+            <div className="grid grid-cols-2 gap-2.5 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+              <div
+                onClick={() => setEvidenceSubTab('finding')}
+                className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl transition cursor-pointer ${
+                  evidenceSubTab === 'finding'
+                    ? 'bg-white text-slate-900 font-black shadow-xs border border-emerald-200/80'
+                    : 'text-slate-600 font-bold hover:text-slate-900'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Camera className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs sm:text-sm truncate">Bukti Temuan</span>
+                  <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-[11px] font-black flex items-center justify-center shrink-0">
+                    {formData.evidencePhotos.length}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                onClick={() => setEvidenceSubTab('ca')}
+                className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl transition cursor-pointer ${
+                  evidenceSubTab === 'ca'
+                    ? 'bg-white text-slate-900 font-black shadow-xs border border-blue-200/80'
+                    : 'text-slate-600 font-bold hover:text-slate-900'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-xs sm:text-sm truncate">Hasil Perbaikan (CA)</span>
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-black flex items-center justify-center shrink-0">
+                    {formData.caPhotos?.length || 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Hidden Photo Inputs for Camera Capture & Gallery Picker */}
+            <input
+              type="file"
+              ref={evidenceCameraInputRef}
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => handleAddEvidencePhoto(e, evidenceSubTab === 'ca')}
+              className="hidden"
+            />
+            <input
+              type="file"
+              ref={evidenceGalleryInputRef}
+              accept="image/*"
+              multiple
+              onChange={(e) => handleAddEvidencePhoto(e, evidenceSubTab === 'ca')}
+              className="hidden"
+            />
+
+            {/* Evidence Photo Grid Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(evidenceSubTab === 'finding' ? formData.evidencePhotos : formData.caPhotos || []).map(
+                (ev, idx) => (
+                  <div
+                    key={ev.id || idx}
+                    className="border border-slate-200 rounded-2xl p-3 bg-white space-y-2.5 relative shadow-xs"
+                  >
+                    {/* Viewfinder Thumbnail with Blurry Ambient Fill & Natural Aspect Ratio */}
+                    <div className="h-44 bg-slate-950 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200/90 group shadow-inner">
+                      {/* Tombol Icon Pencil di Kiri Atas Foto untuk Edit Foto & Keterangan (1x Klik Responsif) */}
+                      <button
+                        type="button"
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          handleOpenEditPhotoModal(ev, idx, evidenceSubTab === 'ca');
+                        }}
+                        className="absolute top-2 left-2 z-30 w-9 h-9 rounded-full bg-slate-900/85 hover:bg-black text-white flex items-center justify-center shadow-lg backdrop-blur-md transition active:scale-90 cursor-pointer border border-white/40 touch-manipulation"
+                        title="Edit Foto (Potong, Beri Tanda, Putar 90°, Keterangan)"
+                      >
+                        <Pencil className="w-4 h-4 text-teal-300 pointer-events-none" />
+                      </button>
+
+                      {/* Badge Index Foto di Kanan Atas */}
+                      <span className="absolute top-2 right-2 z-20 text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-xs text-white border border-white/20 pointer-events-none select-none">
+                        #{idx + 1}
+                      </span>
+
+                      {/* Blurry Ambient Background Layer (Fills canvas sides seamlessly without stretching distortions) */}
+                      <img
+                        src={ev.photoUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-55 pointer-events-none select-none"
+                      />
+
+                      {/* Sharp Natural Aspect Ratio Photo Centered */}
+                      <img
+                        src={ev.photoUrl}
+                        alt={`Evidence ${idx + 1}`}
+                        className="relative z-10 max-w-full max-h-full object-contain cursor-zoom-in select-none drop-shadow-md"
+                        onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
+                      />
+                      {/* Desktop Hover Overlay (pointer-events-none so it NEVER blocks mobile taps) */}
+                      <div
+                        className="absolute inset-0 z-20 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
+                      >
+                        <span className="bg-slate-900/85 text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                          <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
+                          <span>Perbesar (Tap / Swipe)</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Keterangan & Actions */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                        <span>KETERANGAN FOTO #{idx + 1}</span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleToggleVoiceDictation(
+                                `ev-${ev.id}`,
+                                ev.caption,
+                                (val) => handleUpdateEvidenceCaption(ev.id, val, evidenceSubTab === 'ca')
+                              )
+                            }
+                            className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1 cursor-pointer ${
+                              activeVoiceKey === `ev-${ev.id}`
+                                ? 'bg-rose-600 text-white animate-pulse'
+                                : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
+                            }`}
+                          >
+                            <Mic className="w-3 h-3 text-rose-500" />
+                            <span>{activeVoiceKey === `ev-${ev.id}` ? 'Stop' : 'Dikte'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEvidencePhoto(ev.id, evidenceSubTab === 'ca')}
+                            className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+
+                      <AutoResizeTextarea
+                        minRows={2}
+                        value={ev.caption}
+                        onChange={(e) =>
+                          handleUpdateEvidenceCaption(ev.id, e.target.value, evidenceSubTab === 'ca')
+                        }
+                        placeholder="Tuliskan deskripsi temuan foto ini..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[11.6px] text-slate-800 focus:bg-white focus:border-teal-500 outline-none leading-[1.45]"
+                      />
+
+                      <div className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center justify-between gap-1">
+                        <span className="flex items-center gap-1 truncate">
+                          <Cloud className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span>Tersimpan di GDrive (GAS)</span>
+                        </span>
+                        <span className="text-[9px] text-emerald-600 shrink-0">{ev.timestamp}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+
+              {/* Add Photo Card Placeholder */}
+              <div className="border-2 border-dashed border-slate-300 bg-slate-50/70 rounded-2xl p-5 flex flex-col items-center justify-center text-center min-h-[220px] space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 text-teal-600 flex items-center justify-center shadow-xs">
+                  <Camera className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-slate-800 block">
+                    Tambah Foto {evidenceSubTab === 'finding' ? 'Bukti Temuan' : 'Hasil Perbaikan (CA)'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                    Auto-Watermark & Auto-Upload Google Drive (GAS)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => evidenceCameraInputRef.current?.click()}
+                    className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Kamera</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => evidenceGalleryInputRef.current?.click()}
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>Galeri</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Navigation Section 2 (Bukti) */}
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => handleSwitchSection(1)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
+              >
+                &larr; Kembali ke Section 1
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSwitchSection(3)}
+                className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-sm transition flex items-center gap-2 cursor-pointer"
+              >
+                <span>Lanjut ke Section 3: Observasi &amp; Temuan</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================
+            SECTION 3: OBSERVATION (OPI PROJECT & QSC OBSERVATION)
+            ============================================================ */}
+        {activeSection === 3 && (
+          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-4 animate-in fade-in">
+            {/* Header Section 3 */}
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="font-black text-base sm:text-lg text-slate-900">
+                Observation (Observasi &amp; Temuan)
               </h3>
             </div>
 
@@ -3386,243 +3676,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </div>
             )}
 
-            {/* Footer Navigation Section 2 */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => handleSwitchSection(1)}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
-              >
-                &larr; Kembali ke Section 1
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSwitchSection(3)}
-                className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-sm transition flex items-center gap-2 cursor-pointer"
-              >
-                <span>Lanjut ke Section 3: Evidence</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ============================================================
-            SECTION 3: EVIDENCE (BUKTI TEMUAN & HASIL PERBAIKAN CA)
-            TANPA BANNER ACTUAL IN/OUT
-            ============================================================ */}
-        {activeSection === 3 && (
-          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-5 animate-in fade-in">
-            {/* Header Section 3 */}
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="font-black text-base sm:text-lg text-slate-900">
-                Evidence
-              </h3>
-            </div>
-
-            {/* Sub-section Switcher Tabs: Bukti Temuan vs Hasil Perbaikan */}
-            <div className="grid grid-cols-2 gap-2.5 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
-              <div
-                onClick={() => setEvidenceSubTab('finding')}
-                className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl transition cursor-pointer ${
-                  evidenceSubTab === 'finding'
-                    ? 'bg-white text-slate-900 font-black shadow-xs border border-emerald-200/80'
-                    : 'text-slate-600 font-bold hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Camera className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-xs sm:text-sm truncate">Bukti Temuan</span>
-                  <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-[11px] font-black flex items-center justify-center shrink-0">
-                    {formData.evidencePhotos.length}
-                  </span>
-                </div>
-              </div>
-
-              <div
-                onClick={() => setEvidenceSubTab('ca')}
-                className={`flex items-center justify-between px-3 sm:px-4 py-2.5 rounded-xl transition cursor-pointer ${
-                  evidenceSubTab === 'ca'
-                    ? 'bg-white text-slate-900 font-black shadow-xs border border-blue-200/80'
-                    : 'text-slate-600 font-bold hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <CheckCheck className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="text-xs sm:text-sm truncate">Hasil Perbaikan (CA)</span>
-                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-black flex items-center justify-center shrink-0">
-                    {formData.caPhotos?.length || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Hidden Photo Inputs for Camera Capture & Gallery Picker */}
-            <input
-              type="file"
-              ref={evidenceCameraInputRef}
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => handleAddEvidencePhoto(e, evidenceSubTab === 'ca')}
-              className="hidden"
-            />
-            <input
-              type="file"
-              ref={evidenceGalleryInputRef}
-              accept="image/*"
-              multiple
-              onChange={(e) => handleAddEvidencePhoto(e, evidenceSubTab === 'ca')}
-              className="hidden"
-            />
-
-            {/* Evidence Photo Grid Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(evidenceSubTab === 'finding' ? formData.evidencePhotos : formData.caPhotos || []).map(
-                (ev, idx) => (
-                  <div
-                    key={ev.id || idx}
-                    className="border border-slate-200 rounded-2xl p-3 bg-white space-y-2.5 relative shadow-xs"
-                  >
-                    {/* Viewfinder Thumbnail with Blurry Ambient Fill & Natural Aspect Ratio */}
-                    <div className="h-44 bg-slate-950 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200/90 group shadow-inner">
-                      {/* Tombol Icon Pencil di Kiri Atas Foto untuk Edit Foto & Keterangan (1x Klik Responsif) */}
-                      <button
-                        type="button"
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          handleOpenEditPhotoModal(ev, idx, evidenceSubTab === 'ca');
-                        }}
-                        className="absolute top-2 left-2 z-30 w-9 h-9 rounded-full bg-slate-900/85 hover:bg-black text-white flex items-center justify-center shadow-lg backdrop-blur-md transition active:scale-90 cursor-pointer border border-white/40 touch-manipulation"
-                        title="Edit Foto (Potong, Beri Tanda, Putar 90°, Keterangan)"
-                      >
-                        <Pencil className="w-4 h-4 text-teal-300 pointer-events-none" />
-                      </button>
-
-                      {/* Badge Index Foto di Kanan Atas */}
-                      <span className="absolute top-2 right-2 z-20 text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-xs text-white border border-white/20 pointer-events-none select-none">
-                        #{idx + 1}
-                      </span>
-
-                      {/* Blurry Ambient Background Layer (Fills canvas sides seamlessly without stretching distortions) */}
-                      <img
-                        src={ev.photoUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-55 pointer-events-none select-none"
-                      />
-
-                      {/* Sharp Natural Aspect Ratio Photo Centered */}
-                      <img
-                        src={ev.photoUrl}
-                        alt={`Evidence ${idx + 1}`}
-                        className="relative z-10 max-w-full max-h-full object-contain cursor-zoom-in select-none drop-shadow-md"
-                        onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
-                      />
-                      {/* Desktop Hover Overlay (pointer-events-none so it NEVER blocks mobile taps) */}
-                      <div
-                        className="absolute inset-0 z-20 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
-                      >
-                        <span className="bg-slate-900/85 text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
-                          <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
-                          <span>Perbesar (Tap / Swipe)</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Keterangan & Actions */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                        <span>KETERANGAN FOTO #{idx + 1}</span>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleToggleVoiceDictation(
-                                `ev-${ev.id}`,
-                                ev.caption,
-                                (val) => handleUpdateEvidenceCaption(ev.id, val, evidenceSubTab === 'ca')
-                              )
-                            }
-                            className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1 cursor-pointer ${
-                              activeVoiceKey === `ev-${ev.id}`
-                                ? 'bg-rose-600 text-white animate-pulse'
-                                : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
-                            }`}
-                          >
-                            <Mic className="w-3 h-3 text-rose-500" />
-                            <span>{activeVoiceKey === `ev-${ev.id}` ? 'Stop' : 'Dikte'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEvidencePhoto(ev.id, evidenceSubTab === 'ca')}
-                            className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
-                          >
-                            Hapus
-                          </button>
-                        </div>
-                      </div>
-
-                      <AutoResizeTextarea
-                        minRows={2}
-                        value={ev.caption}
-                        onChange={(e) =>
-                          handleUpdateEvidenceCaption(ev.id, e.target.value, evidenceSubTab === 'ca')
-                        }
-                        placeholder="Tuliskan deskripsi temuan foto ini..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[11.6px] text-slate-800 focus:bg-white focus:border-teal-500 outline-none leading-[1.45]"
-                      />
-
-                      <div className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center justify-between gap-1">
-                        <span className="flex items-center gap-1 truncate">
-                          <Cloud className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <span>Tersimpan di GDrive (GAS)</span>
-                        </span>
-                        <span className="text-[9px] text-emerald-600 shrink-0">{ev.timestamp}</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              )}
-
-              {/* Add Photo Card Placeholder */}
-              <div className="border-2 border-dashed border-slate-300 bg-slate-50/70 rounded-2xl p-5 flex flex-col items-center justify-center text-center min-h-[220px] space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 text-teal-600 flex items-center justify-center shadow-xs">
-                  <Camera className="w-6 h-6" />
-                </div>
-                <div>
-                  <span className="text-xs font-black text-slate-800 block">
-                    Tambah Foto {evidenceSubTab === 'finding' ? 'Bukti Temuan' : 'Hasil Perbaikan (CA)'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
-                    Auto-Watermark & Auto-Upload Google Drive (GAS)
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => evidenceCameraInputRef.current?.click()}
-                    className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>Kamera</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => evidenceGalleryInputRef.current?.click()}
-                    className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    <span>Galeri</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Navigation Section 3 */}
+            {/* Footer Navigation Section 3 (Observasi) */}
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
               <button
                 type="button"
@@ -3641,7 +3695,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 className="px-6 py-3 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-xs sm:text-sm shadow-md transition flex items-center gap-2 cursor-pointer"
               >
                 <FileText className="w-4 h-4 text-rose-400" />
-                <span>Simpan & Buka Preview PDF 16:9</span>
+                <span>Simpan &amp; Buka Preview PDF 16:9</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -3658,7 +3712,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           - Section 3 (Bukti): Tombol Icon Camera & Gallery (Liquid Glass)
           Selalu aktif dan tidak menghilang saat scroll ke bawah
           ===================================================================== */}
-      {activeSection === 2 && isCurrentObsSubTabEnabled && (
+      {activeSection === 3 && isCurrentObsSubTabEnabled && (
         <div
           className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             isScrolled
@@ -3705,7 +3759,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         </div>
       )}
 
-      {activeSection === 3 && (
+      {activeSection === 2 && (
         <div
           className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             isScrolled
@@ -3798,7 +3852,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             </span>
           </button>
 
-          {/* Section 2 = Observasi */}
+          {/* Section 2 = BUKTI */}
           <button
             type="button"
             onPointerDown={handleResetScale}
@@ -3809,45 +3863,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
           >
             <div className="relative flex items-center justify-center">
-              <ClipboardCheck
-                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                  activeSection === 2
-                    ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
-                    : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
-                }`}
-              />
-
-              {formData.observations.length > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-[#FF3B30] text-white px-1.5 py-0.2 rounded-full shadow-sm ring-2 ring-white leading-none">
-                  {formData.observations.length}
-                </span>
-              )}
-            </div>
-            <span
-              className={`tracking-tight leading-none text-[10px] transition-all duration-300 ${
-                activeSection === 2
-                  ? 'text-white font-black scale-[1.02]'
-                  : 'text-slate-600 font-bold group-hover:text-black'
-              }`}
-            >
-              Observasi
-            </span>
-          </button>
-
-          {/* Section 3 = BUKTI */}
-          <button
-            type="button"
-            onPointerDown={handleResetScale}
-            onClick={() => {
-              handleSwitchSection(3);
-              handleResetScale();
-            }}
-            className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
-          >
-            <div className="relative flex items-center justify-center">
               <Camera
                 className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                  activeSection === 3
+                  activeSection === 2
                     ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
                     : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                 }`}
@@ -3861,12 +3879,48 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             </div>
             <span
               className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
-                activeSection === 3
+                activeSection === 2
                   ? 'text-white font-black scale-[1.02]'
                   : 'text-slate-600 font-bold group-hover:text-black'
               }`}
             >
               BUKTI
+            </span>
+          </button>
+
+          {/* Section 3 = Observasi */}
+          <button
+            type="button"
+            onPointerDown={handleResetScale}
+            onClick={() => {
+              handleSwitchSection(3);
+              handleResetScale();
+            }}
+            className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
+          >
+            <div className="relative flex items-center justify-center">
+              <ClipboardCheck
+                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
+                  activeSection === 3
+                    ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                    : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
+                }`}
+              />
+
+              {formData.observations.length > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-[#FF3B30] text-white px-1.5 py-0.2 rounded-full shadow-sm ring-2 ring-white leading-none">
+                  {formData.observations.length}
+                </span>
+              )}
+            </div>
+            <span
+              className={`tracking-tight leading-none text-[10px] transition-all duration-300 ${
+                activeSection === 3
+                  ? 'text-white font-black scale-[1.02]'
+                  : 'text-slate-600 font-bold group-hover:text-black'
+              }`}
+            >
+              Observasi
             </span>
           </button>
         </div>
