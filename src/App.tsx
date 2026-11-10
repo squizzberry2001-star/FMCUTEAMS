@@ -42,6 +42,9 @@ import { GpsEnforcerGuard } from './components/common/GpsEnforcerGuard';
 const AdminPortal = lazy(() =>
   import('./components/admin/AdminPortal').then((m) => ({ default: m.AdminPortal }))
 );
+const ExecutivePortal = lazy(() =>
+  import('./components/executive/ExecutivePortal').then((m) => ({ default: m.ExecutivePortal }))
+);
 const DesktopDashboard = lazy(() =>
   import('./components/DesktopDashboard').then((m) => ({ default: m.DesktopDashboard }))
 );
@@ -189,6 +192,7 @@ export const App: React.FC = () => {
   // Eagerly preload heavy bundles in background during splash so there is ZERO suspense lag when dissolving
   useEffect(() => {
     import('./components/admin/AdminPortal');
+    import('./components/executive/ExecutivePortal');
     import('./components/DesktopDashboard');
     import('./components/visit/VisitReportForm');
   }, []);
@@ -569,7 +573,44 @@ export const App: React.FC = () => {
     );
   }
 
-  // 2. If logged in as ADMIN and not in preview mode, render dedicated Admin Portal
+  // 2. If logged in as EXECUTIVE VIEWER and not in preview mode, render dedicated Executive Portal
+  if ((user.isExecutiveViewer || user.accessLevel === 'EXECUTIVE_VIEWER') && !adminPreviewMode) {
+    return (
+      <GpsEnforcerGuard>
+        {showSplash && (
+          <SplashScreen
+            onComplete={handleSplashComplete}
+            user={user}
+            targetThemeColor="#FFFFFF"
+          />
+        )}
+        <PwaInstallPrompt readyToShow={!showSplash} />
+        <PageTransitionLoader visible={isPageTransitioning} />
+        <Suspense fallback={<PageTransitionLoader visible={true} />}>
+          <ExecutivePortal
+            executiveUser={user}
+            agendas={agendas}
+            users={users}
+            onLogout={handleLogout}
+            onSwitchToUserView={() => setAdminPreviewMode(true)}
+            onReplaySplash={() => setShowSplash(true)}
+            onOpenLiveMaps={() => setShowLiveMapsModal(true)}
+          />
+        </Suspense>
+        <LiveStoreMapsModal
+          isOpen={showLiveMapsModal}
+          onClose={() => setShowLiveMapsModal(false)}
+          currentUser={user}
+          users={users}
+          agendas={agendas}
+          selectedDate={selectedDate}
+          onSelectAgenda={handleSelectAgenda}
+        />
+      </GpsEnforcerGuard>
+    );
+  }
+
+  // 3. If logged in as ADMIN and not in preview mode, render dedicated Admin Portal
   if (user.isAdmin && !adminPreviewMode) {
     return (
       <GpsEnforcerGuard>
