@@ -228,3 +228,176 @@ Berikan output JSON murni tanpa pembungkus markdown lain, dengan struktur:
 
   return null;
 }
+
+export interface TaroClassifiedFinding {
+  title: string;
+  type: 'QSC' | 'OPI';
+  category: string;
+  auditFinding: string;
+  idealCondition: string;
+  operationalImpact: string;
+  rootCause: string;
+  actionPlan: string;
+  expectedResult: string;
+}
+
+export interface TaroBatchAnalysisResult {
+  summary: string;
+  findings: TaroClassifiedFinding[];
+}
+
+/**
+ * Menganalisa kumpulan seluruh deskripsi foto bukti secara holistik
+ * dan mengklasifikasikannya ke dalam kelompok temuan & ringkasan eksekutif.
+ */
+export async function generateTaroBatchAnalysis(
+  allCaptions: { index: number; caption: string }[]
+): Promise<TaroBatchAnalysisResult | null> {
+  if (!allCaptions || allCaptions.length === 0) return null;
+
+  const captionListStr = allCaptions
+    .map((c) => `[Foto #${c.index}]: ${c.caption}`)
+    .join('\n');
+
+  const prompt = `Anda adalah "T.A.R.O (Trainer Asyik Rekan Operasional) AI" di FamilyMart Indonesia (FMCU).
+
+TUGAS:
+Berikut adalah KUMPULAN SEMUA DESKRIPSI FOTO TEMUAN dari visit toko yang ditulis oleh personil lapangan:
+${captionListStr}
+
+PEDOMAN KERJA ANALISA HOLISTIK:
+1. JANGAN analisa terpisah satu per satu tanpa korelasi. Analisalah KUMPULAN SEMUA DESKRIPSI secara menyeluruh!
+2. KLASIFIKASIKAN kumpulan temuan tersebut ke dalam kelompok temuan yang terstruktur (misal: Food Safety & Holding Time / Kebersihan & Sanitasi / Standar Atribut & Seragam / Fasilitas & Mesin / Kasir & Barista).
+3. Gabungkan deskripsi yang membahas area atau masalah yang saling berkaitan menjadi satu temuan terpadu agar tidak terjadi duplikasi.
+4. Tentukan tipenya: 'QSC' (Quality, Service, Cleanliness) atau 'OPI' (Operational Improvement Project).
+5. Tuliskan teks secara alami, lugas, profesional seperti catatan Trainer FamilyMart lapangan, TANPA simbol markdown asterisks (*, **), bullet points, atau simbol aneh.
+6. Berikan juga "summary" (1-2 paragraf ringkasan eksekutif menyeluruh mengenai kondisi toko dan prioritas tindakan perbaikan).
+
+STRUKTUR OUTPUT JSON MURNI:
+{
+  "summary": "Ringkasan eksekutif menyeluruh hasil temuan visit toko...",
+  "findings": [
+    {
+      "title": "Judul singkat temuan (maks 45 karakter)",
+      "type": "QSC",
+      "category": "Kategori Standar (misal: Food Safety & Holding Time)",
+      "auditFinding": "Rangkuman fakta temuan lapangan dari deskripsi foto terkait",
+      "idealCondition": "Kondisi ideal semestinya sesuai SOP FamilyMart",
+      "operationalImpact": "Dampak nyata operasional dan kepuasan pelanggan jika dibiarkan",
+      "rootCause": "Akar masalah mendasar kenapa temuan ini terjadi",
+      "actionPlan": "Action plan konkret 1x24 jam dan pencegahan berulang",
+      "expectedResult": "Hasil yang diharapkan terlihat pada visit berikutnya"
+    }
+  ]
+}`;
+
+  // 1. Coba rotasi Gemini API Keys
+  for (let keyIdx = 0; keyIdx < GEMINI_API_KEYS.length; keyIdx++) {
+    const apiKey = GEMINI_API_KEYS[keyIdx];
+    if (!apiKey) continue;
+
+    for (const model of GEMINI_MODELS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: 'application/json'
+            }
+          }),
+          signal: typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(9000) : undefined
+        });
+
+        if (res.status === 429 || res.status === 403) {
+          console.warn(`[TARO AI Batch] API Key #${keyIdx + 1} limit reached. Switching...`);
+          break;
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (raw) {
+            const cleanJson = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+            const parsed = JSON.parse(cleanJson);
+            if (Array.isArray(parsed.findings) && parsed.findings.length > 0) {
+              return {
+                summary: cleanHumanText(parsed.summary) || 'Ringkasan temuan visit toko telah teridentifikasi.',
+                findings: parsed.findings.map((f: any, idx: number) => ({
+                  title: cleanHumanText(f.title) || `Temuan Terklasifikasi #${idx + 1}`,
+                  type: (f.type?.toUpperCase() === 'OPI' ? 'OPI' : 'QSC') as 'QSC' | 'OPI',
+                  category: cleanHumanText(f.category) || 'Food Safety & Holding Time',
+                  auditFinding: cleanHumanText(f.auditFinding) || '',
+                  idealCondition: cleanHumanText(f.idealCondition) || '',
+                  operationalImpact: cleanHumanText(f.operationalImpact) || '',
+                  rootCause: cleanHumanText(f.rootCause) || '',
+                  actionPlan: cleanHumanText(f.actionPlan) || '',
+                  expectedResult: cleanHumanText(f.expectedResult) || 'Akan dimonitoring pada visit berikutnya'
+                }))
+              };
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  // 2. Fallback ke Groq LPU
+  const groqKey = getGroqKey();
+  if (groqKey) {
+    for (const gModel of GROQ_MODELS) {
+      try {
+        const gRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${groqKey}`
+          },
+          body: JSON.stringify({
+            model: gModel,
+            messages: [
+              {
+                role: 'system',
+                content: 'Anda adalah T.A.R.O AI FamilyMart. Balas HANYA dengan JSON valid berisi: summary dan array findings [{title, type, category, auditFinding, idealCondition, operationalImpact, rootCause, actionPlan, expectedResult}].'
+              },
+              { role: 'user', content: prompt }
+            ],
+            temperature: 0.2,
+            response_format: { type: 'json_object' }
+          }),
+          signal: typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(9000) : undefined
+        });
+
+        if (gRes.ok) {
+          const gData = await gRes.json();
+          const raw = gData.choices?.[0]?.message?.content;
+          if (raw) {
+            const cleanJson = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+            const parsed = JSON.parse(cleanJson);
+            if (Array.isArray(parsed.findings) && parsed.findings.length > 0) {
+              return {
+                summary: cleanHumanText(parsed.summary) || 'Ringkasan temuan visit toko telah teridentifikasi.',
+                findings: parsed.findings.map((f: any, idx: number) => ({
+                  title: cleanHumanText(f.title) || `Temuan Terklasifikasi #${idx + 1}`,
+                  type: (f.type?.toUpperCase() === 'OPI' ? 'OPI' : 'QSC') as 'QSC' | 'OPI',
+                  category: cleanHumanText(f.category) || 'Food Safety & Holding Time',
+                  auditFinding: cleanHumanText(f.auditFinding) || '',
+                  idealCondition: cleanHumanText(f.idealCondition) || '',
+                  operationalImpact: cleanHumanText(f.operationalImpact) || '',
+                  rootCause: cleanHumanText(f.rootCause) || '',
+                  actionPlan: cleanHumanText(f.actionPlan) || '',
+                  expectedResult: cleanHumanText(f.expectedResult) || 'Akan dimonitoring pada visit berikutnya'
+                }))
+              };
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  return null;
+}

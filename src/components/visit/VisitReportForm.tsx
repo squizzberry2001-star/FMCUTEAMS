@@ -61,7 +61,7 @@ import { HoldingTimeR23Modal } from './HoldingTimeR23Modal';
 import { PhotoEditModal } from './PhotoEditModal';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { stitchTwoImagesVertically } from '../../services/pdfGeneratorService';
-import { generateTaroObservationAnalysis } from '../../services/taroAiService';
+import { generateTaroObservationAnalysis, generateTaroBatchAnalysis } from '../../services/taroAiService';
 import {
   findMasterStoreByCodeOrName,
   getStoresWithOwnership,
@@ -535,26 +535,45 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   // Step Nav: 1 (General Info & QSC), 2 (Observation), 3 (Evidence)
   const [activeSection, setActiveSection] = useState<number>(1);
+  const activeSectionRef = useRef<number>(1);
   const sectionScrollPosRef = useRef<Record<number, number>>({ 1: 0, 2: 0, 3: 0 });
+
+  // Custom UI Delete Confirmation Modal (Bukan system dialog)
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'photo' | 'observation';
+    id: string;
+    isCa?: boolean;
+    title: string;
+    message: string;
+  } | null>(null);
 
   const handleSwitchSection = (nextSection: number) => {
     const container = formScrollContainerRef.current;
     const currentScrollY = container
       ? container.scrollTop
       : (window.scrollY || window.pageYOffset || document.documentElement?.scrollTop || 0);
-    sectionScrollPosRef.current[activeSection] = currentScrollY;
+    sectionScrollPosRef.current[activeSectionRef.current] = currentScrollY;
 
+    activeSectionRef.current = nextSection;
     setActiveSection(nextSection);
     setShowTopNavbar(true);
-    setIsScrolled(false);
-    lastScrollYRef.current = 0;
 
-    // Scroll container ke posisi paling atas section baru secara instan & mulus
+    // Kembalikan posisi gulir tepat seperti saat terakhir kali user berada di section tersebut
+    const targetScrollY = sectionScrollPosRef.current[nextSection] || 0;
+    lastScrollYRef.current = targetScrollY;
+
     requestAnimationFrame(() => {
       if (container) {
-        container.scrollTop = 0;
+        container.scrollTop = targetScrollY;
       }
-      window.scrollTo({ top: 0, behavior: 'instant' });
+      window.scrollTo({ top: targetScrollY, behavior: 'instant' });
+      setTimeout(() => {
+        if (container) {
+          container.scrollTop = targetScrollY;
+        }
+        window.scrollTo({ top: targetScrollY, behavior: 'instant' });
+      }, 40);
     });
   };
 
@@ -918,6 +937,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       if (!ticking) {
         window.requestAnimationFrame(() => {
           const top = getScrollTop();
+          sectionScrollPosRef.current[activeSectionRef.current] = top;
           const delta = top - lastScrollYRef.current;
           lastScrollYRef.current = top;
 
@@ -1450,10 +1470,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   // Crew Management
   const handleAddCrew = () => {
-    const nextNum = Math.max(1, formData.crews.length - 1);
     const newCrew: StoreCrew = {
       id: `c-${Date.now()}`,
-      role: `Crew Store ${nextNum}`,
+      role: 'Crew Store',
       name: '',
       jobLevel: '',
     };
@@ -1549,31 +1568,40 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }));
   };
 
-  const handleRemoveObs = (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus kartu temuan ini?')) {
-      markObsDeletedLocally(agenda.id, id);
-      const now = Date.now();
-      lastSyncTimestampRef.current = now;
-      setFormData((prev) => {
-        const updated = prev.observations.filter((o) => o.id !== id);
-        const nextReport: VisitReportData = {
-          ...prev,
-          observations: updated,
-          deletedObsIds: Array.from(getDeletedObsIds(agenda.id)),
-          updatedAtMs: now,
-        };
-        try {
-          localStorage.setItem(draftKey, JSON.stringify(nextReport));
-        } catch (e) {
-          console.warn('Draft save error:', e);
-        }
-        queueMicrotask(() => {
-          pushVisitReportToCloud(nextReport);
-        });
-        return nextReport;
+  const executeRemoveObs = (id: string) => {
+    markObsDeletedLocally(agenda.id, id);
+    const now = Date.now();
+    lastSyncTimestampRef.current = now;
+    setFormData((prev) => {
+      const updated = prev.observations.filter((o) => o.id !== id);
+      const nextReport: VisitReportData = {
+        ...prev,
+        observations: updated,
+        deletedObsIds: Array.from(getDeletedObsIds(agenda.id)),
+        updatedAtMs: now,
+      };
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(nextReport));
+      } catch (e) {
+        console.warn('Draft save error:', e);
+      }
+      queueMicrotask(() => {
+        pushVisitReportToCloud(nextReport);
       });
-      setActiveObsIdx((prevIdx) => Math.max(0, prevIdx - 1));
-    }
+      return nextReport;
+    });
+    setActiveObsIdx((prevIdx) => Math.max(0, prevIdx - 1));
+  };
+
+  const handleRemoveObs = (id: string) => {
+    const obs = formData.observations.find((o) => o.id === id);
+    setDeleteConfirmModal({
+      isOpen: true,
+      type: 'observation',
+      id,
+      title: 'Hapus Kartu Temuan?',
+      message: `Apakah Anda yakin ingin menghapus "${obs?.title || 'kartu temuan ini'}"? Tindakan ini tidak dapat dibatalkan.`,
+    });
   };
 
   // Apply Preset Template to an Observation Card
@@ -1653,11 +1681,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }
   };
 
-  // Global T.A.R.O AI Auto-Compile: HANYA MENGGUNAKAN HASIL ANALISA API KEY DARI DESKRIPSI FOTO SECTION BUKTI
+  // Global T.A.R.O AI Auto-Compile: Menganalisa Kumpulan Semua Deskripsi Foto Bukti Secara Holistik & Mengklasifikasikannya Menjadi Temuan / Summary
   const handleTaroAiAutoCompile = async () => {
-    const validEvidences = formData.evidencePhotos.filter(
-      (p) => p.caption && p.caption.trim().length > 0
-    );
+    const validEvidences = formData.evidencePhotos
+      .map((p, idx) => ({ index: idx + 1, caption: (p.caption || '').trim() }))
+      .filter((p) => p.caption.length > 0);
 
     if (validEvidences.length === 0) {
       alert(
@@ -1669,43 +1697,43 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     setIsAiCompiling(true);
 
     try {
-      const newObservations: ObservationFinding[] = [];
+      // Panggil analisa batch holistik terhadap seluruh kumpulan deskripsi foto
+      const batchResult = await generateTaroBatchAnalysis(validEvidences);
 
-      for (let i = 0; i < validEvidences.length; i++) {
-        const ev = validEvidences[i];
-        const aiResult = await generateTaroObservationAnalysis(ev.caption.trim(), 'QSC');
+      if (batchResult && Array.isArray(batchResult.findings) && batchResult.findings.length > 0) {
+        const newObservations: ObservationFinding[] = batchResult.findings.map((f, i) => ({
+          id: `obs-${Date.now()}-${i}`,
+          type: f.type || 'QSC',
+          category: f.category || 'Food Safety',
+          title: f.title || `Temuan Terklasifikasi #${i + 1}`,
+          auditFinding: f.auditFinding || '',
+          idealCondition: f.idealCondition || '',
+          operationalImpact: f.operationalImpact || '',
+          rootCause: f.rootCause || '',
+          actionPlan: f.actionPlan || '',
+          expectedResult: f.expectedResult || 'Akan dimonitoring pada visit berikutnya',
+          deadline: agenda.date || new Date().toISOString().split('T')[0],
+          status: 'OPEN',
+        }));
 
-        if (aiResult) {
-          newObservations.push({
-            id: `obs-${Date.now()}-${i}`,
-            type: 'QSC',
-            category: aiResult.category || 'Food Safety',
-            title: ev.caption.trim().slice(0, 45) || `Temuan Bukti #${i + 1}`,
-            auditFinding: ev.caption.trim(),
-            idealCondition: aiResult.idealCondition,
-            operationalImpact: aiResult.operationalImpact,
-            rootCause: aiResult.rootCause,
-            actionPlan: aiResult.actionPlan,
-            expectedResult: aiResult.expectedResult,
-            deadline: agenda.date || new Date().toISOString().split('T')[0],
-            status: 'OPEN',
-          });
-        }
-      }
-
-      if (newObservations.length > 0) {
         setFormData((prev) => ({
           ...prev,
           enableQsc: true,
           observations: [...newObservations, ...prev.observations],
+          assignmentNotes: prev.assignmentNotes
+            ? `${prev.assignmentNotes}\n\n[Summary TARO AI]:\n${batchResult.summary}`
+            : batchResult.summary
+            ? `[Summary TARO AI]:\n${batchResult.summary}`
+            : prev.assignmentNotes,
         }));
-        confetti({ particleCount: 45, spread: 60, origin: { y: 0.6 } });
+
+        confetti({ particleCount: 50, spread: 65, origin: { y: 0.6 } });
       } else {
-        alert('Analisa AI gagal mendapatkan respon dari API Key. Silakan periksa koneksi internet atau coba kembali.');
+        alert('Analisa AI gagal mendapatkan respon. Silakan periksa koneksi internet atau coba kembali.');
       }
     } catch (err) {
       console.error('TARO AI Analysis Error:', err);
-      alert('Terjadi kendala saat menganalisa foto bukti dengan TARO AI.');
+      alert('Terjadi kendala saat menganalisa kumpulan foto bukti dengan TARO AI.');
     } finally {
       setIsAiCompiling(false);
     }
@@ -1818,7 +1846,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }
   };
 
-  const handleRemoveEvidencePhoto = (id: string, isCa = false) => {
+  const executeRemoveEvidencePhoto = (id: string, isCa = false) => {
     markPhotoDeletedLocally(agenda.id, id);
     const now = Date.now();
     lastSyncTimestampRef.current = now;
@@ -1848,6 +1876,17 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         pushVisitReportToCloud(nextReport);
       });
       return nextReport;
+    });
+  };
+
+  const handleRemoveEvidencePhoto = (id: string, isCa = false, indexDisplay = 1) => {
+    setDeleteConfirmModal({
+      isOpen: true,
+      type: 'photo',
+      id,
+      isCa,
+      title: isCa ? 'Hapus Foto Hasil Perbaikan (CA)?' : 'Hapus Foto Bukti Temuan?',
+      message: `Apakah Anda yakin ingin menghapus foto #${indexDisplay}? Foto yang telah dihapus tidak dapat dipulihkan.`,
     });
   };
 
@@ -2494,16 +2533,16 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       <div className="space-y-5">
         {/* ============================================================
-            TOP GEOFENCE & ACTUAL IN/OUT COMPACT EXECUTIVE BANNER
-            HANYA MUNCUL DI SECTION 1 (INFO) — Ramping, Minimalis & Hemat Ruang
+            SECTION 1: GENERAL INFO & QSC (PERSISTENT CONTAINER)
             ============================================================ */}
-        {activeSection === 1 && (
+        <div className={activeSection === 1 ? 'space-y-5 animate-in fade-in' : 'hidden'}>
+          {/* Top Geofence Banner */}
           <div
             style={{
               background: 'linear-gradient(135deg, #022c22 0%, #042f2e 50%, #0f172a 100%)',
               border: '1px solid rgba(52, 211, 153, 0.25)',
             }}
-            className="rounded-2xl p-3 sm:p-4 text-white shadow-md space-y-2.5 animate-in fade-in"
+            className="rounded-2xl p-3 sm:p-4 text-white shadow-md space-y-2.5"
           >
             {/* Row 1: Toko, Kode, Tipe & Progress Pill */}
             <div className="flex items-center justify-between gap-2">
@@ -2586,13 +2625,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </button>
             </div>
           </div>
-        )}
 
-        {/* ============================================================
-            SECTION 1: GENERAL INFO & QSC (COMPACT & ULTRA-MINIMALIST)
-            ============================================================ */}
-        {activeSection === 1 && (
-          <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-soft-card border border-slate-200/80 space-y-4 animate-in fade-in">
+          {/* General Info Card */}
+          <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-soft-card border border-slate-200/80 space-y-4">
             {/* Header Card Section 1 */}
             <div className="border-b border-slate-100 pb-2.5 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -2700,9 +2735,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                   <span className="font-bold text-slate-800 truncate">{formData.visitorName}</span>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-slate-400 bg-white border border-slate-200/80 px-2 py-0.5 rounded-full shrink-0">
-                <Lock className="w-2.5 h-2.5 text-slate-400" /> Terkunci
-              </span>
             </div>
 
             {/* 2. Compact Form Inputs Grid: 2 Kolom Ramping */}
@@ -2835,19 +2867,15 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                           <span className="w-5 h-5 rounded-md bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
-                          {isCoreLeader ? (
-                            <span className="text-[11px] font-black text-teal-900 bg-teal-100/80 border border-teal-200 px-2.5 py-0.5 rounded-lg truncate">
-                              {c.role}
-                            </span>
-                          ) : (
-                            <input
-                              type="text"
-                              value={c.role}
-                              onChange={(e) => handleUpdateCrew(idx, 'role', e.target.value)}
-                              className="bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-800 w-28 sm:w-32 focus:border-teal-500 outline-none"
-                              placeholder="Jabatan"
-                            />
-                          )}
+                          <span
+                            className={`text-[11px] font-black px-2.5 py-0.5 rounded-lg truncate border ${
+                              isCoreLeader
+                                ? 'text-teal-900 bg-teal-100/80 border-teal-200'
+                                : 'text-slate-800 bg-teal-50/80 border-teal-200/70'
+                            }`}
+                          >
+                            {idx === 0 ? 'Store Head' : idx === 1 ? 'Shift Leader' : 'Crew Store'}
+                          </span>
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -3027,14 +3055,14 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </button>
             </div>
           </div>
-        )}
+        </div>
 
         {/* ============================================================
             SECTION 2: EVIDENCE (BUKTI TEMUAN & HASIL PERBAIKAN CA)
             TANPA BANNER ACTUAL IN/OUT
             ============================================================ */}
-        {activeSection === 2 && (
-          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-5 animate-in fade-in min-h-[60vh]">
+        <div className={activeSection === 2 ? 'space-y-5 animate-in fade-in' : 'hidden'}>
+          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-5 min-h-[60vh]">
             {/* Header Section 2 */}
             <div className="border-b border-slate-100 pb-3">
               <h3 className="font-black text-base sm:text-lg text-slate-900">
@@ -3097,152 +3125,135 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               className="hidden"
             />
 
-            {/* Evidence Photo Grid Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Evidence Photo Grid Cards: 2 Card Kesamping & Seterusnya Kebawah */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
               {(evidenceSubTab === 'finding' ? formData.evidencePhotos : formData.caPhotos || []).map(
                 (ev, idx) => (
                   <div
                     key={ev.id || idx}
-                    className="border border-slate-200 rounded-2xl p-3 bg-white space-y-2.5 relative shadow-xs"
+                    className="border border-slate-200/90 rounded-2xl p-2 sm:p-3 bg-white space-y-2 relative shadow-xs flex flex-col justify-between"
                   >
-                    {/* Viewfinder Thumbnail with Blurry Ambient Fill & Natural Aspect Ratio */}
-                    <div className="h-44 bg-slate-950 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200/90 group shadow-inner">
-                      {/* Tombol Icon Pencil di Kiri Atas Foto untuk Edit Foto & Keterangan (1x Klik Responsif) */}
-                      <button
-                        type="button"
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          handleOpenEditPhotoModal(ev, idx, evidenceSubTab === 'ca');
-                        }}
-                        className="absolute top-2 left-2 z-30 w-9 h-9 rounded-full bg-slate-900/85 hover:bg-black text-white flex items-center justify-center shadow-lg backdrop-blur-md transition active:scale-90 cursor-pointer border border-white/40 touch-manipulation"
-                        title="Edit Foto (Potong, Beri Tanda, Putar 90°, Keterangan)"
-                      >
-                        <Pencil className="w-4 h-4 text-teal-300 pointer-events-none" />
-                      </button>
+                    <div>
+                      {/* Viewfinder Thumbnail with Blurry Ambient Fill & Natural Aspect Ratio */}
+                      <div className="h-32 sm:h-40 md:h-48 bg-slate-950 rounded-xl overflow-hidden relative flex items-center justify-center border border-slate-200/90 group shadow-inner">
+                        {/* Tombol Icon Pencil di Kiri Atas Foto untuk Edit Foto & Keterangan */}
+                        <button
+                          type="button"
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleOpenEditPhotoModal(ev, idx, evidenceSubTab === 'ca');
+                          }}
+                          className="absolute top-1.5 left-1.5 z-30 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-900/85 hover:bg-black text-white flex items-center justify-center shadow-lg backdrop-blur-md transition active:scale-90 cursor-pointer border border-white/40 touch-manipulation"
+                          title="Edit Foto (Potong, Beri Tanda, Putar 90°, Keterangan)"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-teal-300 pointer-events-none" />
+                        </button>
 
-                      {/* Badge Index Foto di Kanan Atas */}
-                      <span className="absolute top-2 right-2 z-20 text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-xs text-white border border-white/20 pointer-events-none select-none">
-                        #{idx + 1}
-                      </span>
-
-                      {/* Blurry Ambient Background Layer (Fills canvas sides seamlessly without stretching distortions) */}
-                      <img
-                        src={ev.photoUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-55 pointer-events-none select-none"
-                      />
-
-                      {/* Sharp Natural Aspect Ratio Photo Centered */}
-                      <img
-                        src={ev.photoUrl}
-                        alt={`Evidence ${idx + 1}`}
-                        className="relative z-10 max-w-full max-h-full object-contain cursor-zoom-in select-none drop-shadow-md"
-                        onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
-                      />
-                      {/* Desktop Hover Overlay (pointer-events-none so it NEVER blocks mobile taps) */}
-                      <div
-                        className="absolute inset-0 z-20 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none"
-                      >
-                        <span className="bg-slate-900/85 text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
-                          <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
-                          <span>Perbesar (Tap / Swipe)</span>
+                        {/* Badge Index Foto di Kanan Atas */}
+                        <span className="absolute top-1.5 right-1.5 z-20 text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-full bg-slate-900/70 backdrop-blur-xs text-white border border-white/20 pointer-events-none select-none">
+                          #{idx + 1}
                         </span>
-                      </div>
-                    </div>
 
-                    {/* Keterangan & Actions */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                        <span>KETERANGAN FOTO #{idx + 1}</span>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleToggleVoiceDictation(
-                                `ev-${ev.id}`,
-                                ev.caption,
-                                (val) => handleUpdateEvidenceCaption(ev.id, val, evidenceSubTab === 'ca')
-                              )
-                            }
-                            className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1 cursor-pointer ${
-                              activeVoiceKey === `ev-${ev.id}`
-                                ? 'bg-rose-600 text-white animate-pulse'
-                                : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
-                            }`}
-                          >
-                            <Mic className="w-3 h-3 text-rose-500" />
-                            <span>{activeVoiceKey === `ev-${ev.id}` ? 'Stop' : 'Dikte'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEvidencePhoto(ev.id, evidenceSubTab === 'ca')}
-                            className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
-                          >
-                            Hapus
-                          </button>
+                        {/* Blurry Ambient Background Layer */}
+                        <img
+                          src={ev.photoUrl}
+                          alt=""
+                          aria-hidden="true"
+                          className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-55 pointer-events-none select-none"
+                        />
+
+                        {/* Sharp Natural Aspect Ratio Photo Centered */}
+                        <img
+                          src={ev.photoUrl}
+                          alt={`Evidence ${idx + 1}`}
+                          className="relative z-10 max-w-full max-h-full object-contain cursor-zoom-in select-none drop-shadow-md"
+                          onClick={() => handleOpenZoomPhoto(idx, evidenceSubTab === 'ca')}
+                        />
+
+                        {/* Desktop Hover Overlay */}
+                        <div className="absolute inset-0 z-20 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none select-none">
+                          <span className="bg-slate-900/85 text-white text-[9px] font-bold px-2 py-1 rounded-full flex items-center gap-1 shadow-md">
+                            <Maximize2 className="w-3 h-3 text-teal-300" />
+                            <span>Perbesar</span>
+                          </span>
                         </div>
                       </div>
 
-                      <AutoResizeTextarea
-                        minRows={2}
-                        value={ev.caption}
-                        onChange={(e) =>
-                          handleUpdateEvidenceCaption(ev.id, e.target.value, evidenceSubTab === 'ca')
-                        }
-                        placeholder="Tuliskan deskripsi temuan foto ini..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[11.6px] text-slate-800 focus:bg-white focus:border-teal-500 outline-none leading-[1.45]"
-                      />
+                      {/* Keterangan & Actions */}
+                      <div className="space-y-1.5 mt-2">
+                        <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-bold text-slate-500">
+                          <span className="truncate">FOTO #{idx + 1}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleVoiceDictation(
+                                  `ev-${ev.id}`,
+                                  ev.caption,
+                                  (val) => handleUpdateEvidenceCaption(ev.id, val, evidenceSubTab === 'ca')
+                                )
+                              }
+                              className={`px-1.5 py-0.5 rounded-md font-bold transition flex items-center gap-1 cursor-pointer text-[9px] sm:text-[10px] ${
+                                activeVoiceKey === `ev-${ev.id}`
+                                  ? 'bg-rose-600 text-white animate-pulse'
+                                  : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
+                              }`}
+                            >
+                              <Mic className="w-2.5 h-2.5 text-rose-500" />
+                              <span>{activeVoiceKey === `ev-${ev.id}` ? 'Stop' : 'Dikte'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEvidencePhoto(ev.id, evidenceSubTab === 'ca', idx + 1)}
+                              className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer text-[9px] sm:text-[10px]"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        </div>
 
-                      <div className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center justify-between gap-1">
-                        <span className="flex items-center gap-1 truncate">
-                          <Cloud className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <span>Tersimpan di GDrive (GAS)</span>
-                        </span>
-                        <span className="text-[9px] text-emerald-600 shrink-0">{ev.timestamp}</span>
+                        <AutoResizeTextarea
+                          minRows={2}
+                          value={ev.caption}
+                          onChange={(e) =>
+                            handleUpdateEvidenceCaption(ev.id, e.target.value, evidenceSubTab === 'ca')
+                          }
+                          placeholder="Deskripsi temuan foto..."
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-[11px] sm:text-xs text-slate-800 focus:bg-white focus:border-teal-500 outline-none leading-[1.4]"
+                        />
                       </div>
+                    </div>
+
+                    <div className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 flex items-center justify-between gap-1 mt-1">
+                      <span className="flex items-center gap-1 truncate">
+                        <Cloud className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                        <span className="truncate">GDrive (GAS)</span>
+                      </span>
+                      <span className="text-[8.5px] text-emerald-600 shrink-0">{ev.timestamp}</span>
                     </div>
                   </div>
                 )
               )}
+            </div>
 
-              {/* Add Photo Card Placeholder */}
-              <div className="border-2 border-dashed border-slate-300 bg-slate-50/70 rounded-2xl p-5 flex flex-col items-center justify-center text-center min-h-[220px] space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 text-teal-600 flex items-center justify-center shadow-xs">
+            {/* Empty State jika belum ada foto bukti */}
+            {(evidenceSubTab === 'finding' ? formData.evidencePhotos : formData.caPhotos || []).length === 0 && (
+              <div className="py-12 px-4 text-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/60 space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 text-teal-600 flex items-center justify-center mx-auto shadow-xs">
                   <Camera className="w-6 h-6" />
                 </div>
-                <div>
-                  <span className="text-xs font-black text-slate-800 block">
-                    Tambah Foto {evidenceSubTab === 'finding' ? 'Bukti Temuan' : 'Hasil Perbaikan (CA)'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
-                    Auto-Watermark & Auto-Upload Google Drive (GAS)
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => evidenceCameraInputRef.current?.click()}
-                    className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>Kamera</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => evidenceGalleryInputRef.current?.click()}
-                    className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    <span>Galeri</span>
-                  </button>
-                </div>
+                <h4 className="text-xs sm:text-sm font-black text-slate-700">
+                  Belum Ada Foto {evidenceSubTab === 'finding' ? 'Bukti Temuan' : 'Hasil Perbaikan (CA)'}
+                </h4>
+                <p className="text-[10.5px] text-slate-400 font-medium">
+                  Gunakan tombol aksi Kamera atau Galeri di pojok kanan bawah untuk menambahkan foto.
+                </p>
               </div>
-            </div>
+            )}
 
             {/* Footer Navigation Section 2 (Bukti) */}
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
@@ -3264,13 +3275,13 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </button>
             </div>
           </div>
-        )}
+        </div>
 
         {/* ============================================================
             SECTION 3: OBSERVATION (OPI PROJECT & QSC OBSERVATION)
             ============================================================ */}
-        {activeSection === 3 && (
-          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-4 animate-in fade-in">
+        <div className={activeSection === 3 ? 'space-y-5 animate-in fade-in' : 'hidden'}>
+          <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-soft-card border border-slate-200/80 space-y-4">
             {/* Header Section 3 */}
             <div className="border-b border-slate-100 pb-3">
               <h3 className="font-black text-base sm:text-lg text-slate-900">
@@ -3331,12 +3342,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     <span className="font-extrabold text-xs text-white tracking-tight truncate group-hover:text-teal-200 transition-colors">
                       T.A.R.O AI Assistant
                     </span>
-                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-teal-500/20 text-teal-300 border border-teal-400/30 tracking-wider">
-                      FamilyMart R23
-                    </span>
                   </div>
                   <p className="text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors truncate">
-                    Analisa otomatis 6-Box dari bukti foto
+                    Bantu kamu buat observasi dari deskripsi foto yang kamu tulis.
                   </p>
                 </div>
               </div>
@@ -3506,15 +3514,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                       </button>
                     );
                   })}
-                  <button
-                    type="button"
-                    onClick={() => handleAddObservation(obsSubTab.toUpperCase() as 'QSC' | 'OPI')}
-                    className="px-2.5 py-1 h-7 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white text-xs font-black flex items-center gap-1 transition cursor-pointer shrink-0"
-                    title="Tambah Kartu Temuan Baru"
-                  >
-                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>Baru</span>
-                  </button>
                 </div>
               </div>
             )}
@@ -3836,16 +3835,6 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                     );
                   })
                 )}
-
-                {/* Add Observation Button */}
-                <button
-                  type="button"
-                  onClick={() => handleAddObservation(obsSubTab.toUpperCase() as any)}
-                  className="w-full py-3 rounded-2xl border-2 border-dashed border-teal-200 hover:border-teal-400 bg-teal-50/40 hover:bg-teal-50 text-teal-700 font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Tambah Temuan {obsSubTab.toUpperCase()} Baru</span>
-                </button>
               </div>
             )}
 
@@ -3873,7 +3862,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               </button>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Minimalist Page Footer */}
         <DeveloperFooter className="mt-auto pt-16 pb-8 text-center" />
@@ -4045,7 +4034,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               />
 
               {formData.evidencePhotos.length + (formData.caPhotos?.length || 0) > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-[#FF3B30] text-white px-1.5 py-0.2 rounded-full shadow-sm ring-2 ring-white leading-none">
+                <span className="absolute -top-1 -right-2 z-20 w-4 h-4 rounded-full aspect-square flex items-center justify-center text-[9px] font-black bg-[#FF3B30] text-white shadow-sm ring-2 ring-white leading-none select-none">
                   {formData.evidencePhotos.length + (formData.caPhotos?.length || 0)}
                 </span>
               )}
@@ -4081,7 +4070,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               />
 
               {formData.observations.length > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 z-20 text-[9px] font-black bg-[#FF3B30] text-white px-1.5 py-0.2 rounded-full shadow-sm ring-2 ring-white leading-none">
+                <span className="absolute -top-1 -right-2 z-20 w-4 h-4 rounded-full aspect-square flex items-center justify-center text-[9px] font-black bg-[#FF3B30] text-white shadow-sm ring-2 ring-white leading-none select-none">
                   {formData.observations.length}
                 </span>
               )}
@@ -4098,6 +4087,58 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Custom UI Modal Konfirmasi Hapus (Bukan dialog sistem browser) */}
+      {deleteConfirmModal && deleteConfirmModal.isOpen && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-slate-100 space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-black text-slate-900">
+                  {deleteConfirmModal.title}
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium line-clamp-2 mt-0.5">
+                  {deleteConfirmModal.message}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-[11px] text-slate-600 font-medium">
+              Data yang dihapus tidak dapat dipulihkan kembali. Lanjutkan proses penghapusan?
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmModal(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-black text-xs transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteConfirmModal.type === 'photo') {
+                    executeRemoveEvidencePhoto(deleteConfirmModal.id, deleteConfirmModal.isCa);
+                  } else if (deleteConfirmModal.type === 'observation') {
+                    executeRemoveObs(deleteConfirmModal.id);
+                  }
+                  setDeleteConfirmModal(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs shadow-md shadow-rose-600/20 transition cursor-pointer"
+              >
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Standar Holding Time R23 */}
       <HoldingTimeR23Modal
