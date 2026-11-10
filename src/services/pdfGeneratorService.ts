@@ -317,7 +317,11 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
   const visitDateText = formatIndonesianDate(report.visitDate, false);
   const dayDateText = formatIndonesianDate(report.visitDate, true);
 
-  const resolvedCaLink = report.spreadsheetUrl || 'https://tinyurl.com/store-caassignment';
+  const rawCaLink = String(report.spreadsheetUrl || '').trim();
+  const resolvedCaLink =
+    rawCaLink && !rawCaLink.includes('tinyurl.com')
+      ? rawCaLink
+      : FMCU_REPORT_GDRIVE_FOLDER_URL;
   const storeInfoTag = report.storeName && report.storeCode
     ? `KHUSUS ${report.storeName.toUpperCase()} (${report.storeCode}):`
     : 'HASIL VISIT AUDIT:';
@@ -1054,7 +1058,11 @@ export function buildHtmlSlides(report: VisitReportData): HtmlSlide[] {
   const visitDateText = formatIndonesianDate(report.visitDate, false);
   const dayDateText = formatIndonesianDate(report.visitDate, true);
 
-  const resolvedCaLink = report.spreadsheetUrl || 'https://tinyurl.com/store-caassignment';
+  const rawCaLink = String(report.spreadsheetUrl || '').trim();
+  const resolvedCaLink =
+    rawCaLink && !rawCaLink.includes('tinyurl.com')
+      ? rawCaLink
+      : FMCU_REPORT_GDRIVE_FOLDER_URL;
   const storeInfoTag = report.storeName && report.storeCode
     ? `KHUSUS ${report.storeName.toUpperCase()} (${report.storeCode}):`
     : 'HASIL VISIT AUDIT:';

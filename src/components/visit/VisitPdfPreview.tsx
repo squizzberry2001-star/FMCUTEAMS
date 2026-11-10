@@ -739,16 +739,17 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                     </span>
                   </button>
 
-                  {/* CA Assignment Spreadsheet Link (Jika tersedia) */}
-                  {(data.spreadsheetUrl || syncResult?.caSpreadsheetUrl) && (
+                  {/* CA Assignment Spreadsheet Link (Jika tersedia dan bukan default tinyurl) */}
+                  {(syncResult?.caSpreadsheetUrl || (data.spreadsheetUrl && !data.spreadsheetUrl.includes('tinyurl.com'))) && (
                     <button
                       type="button"
                       onClick={() => {
                         const url =
-                          data.spreadsheetUrl ||
                           syncResult?.caSpreadsheetUrl ||
-                          'https://tinyurl.com/store-caassignment';
-                        window.open(url, '_blank');
+                          (data.spreadsheetUrl && !data.spreadsheetUrl.includes('tinyurl.com') ? data.spreadsheetUrl : '');
+                        if (url) {
+                          window.open(url, '_blank');
+                        }
                       }}
                       className="h-9 sm:h-10 px-2.5 sm:px-3 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-900 font-extrabold text-xs transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
                       title="Buka Link Spreadsheet Form CA Toko"

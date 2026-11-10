@@ -203,7 +203,7 @@ export function resolveVisitedStoreReportData(params: {
     enableCa: true,
     evidencePhotos: [],
     caPhotos: [],
-    spreadsheetUrl: 'https://tinyurl.com/store-caassignment',
+    spreadsheetUrl: '',
     assignmentNotes:
       'Laporan hasil kunjungan toko tersimpan di Google Drive FMCU dan dipantau secara berkala.',
     status: 'SUBMITTED',

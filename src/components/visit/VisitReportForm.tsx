@@ -476,7 +476,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       enableCa: true,
       evidencePhotos: [],
       caPhotos: [],
-      spreadsheetUrl: 'https://tinyurl.com/store-caassignment',
+      spreadsheetUrl: '',
       assignmentNotes: 'Harap segera lakukan tindakan perbaikan (Corrective Action) sebelum batas waktu deadline yang ditentukan.',
       status: 'DRAFT',
     };
@@ -1045,7 +1045,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     if (formData.qscSheetPhoto || formData.qscSheetTop || formData.qscSheetBottom) score++;
     if (formData.observations.length > 0 && formData.observations[0].auditFinding) score++;
     if (formData.evidencePhotos.length > 0) score++;
-    if (formData.spreadsheetUrl) score++;
+    if (formData.spreadsheetUrl || formData.assignmentNotes) score++;
     return Math.round((score / total) * 100);
   };
 
@@ -2791,9 +2791,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 </label>
                 <input
                   type="url"
-                  value={formData.spreadsheetUrl}
+                  value={formData.spreadsheetUrl || ''}
                   onChange={(e) => setFormData({ ...formData, spreadsheetUrl: e.target.value })}
-                  placeholder="https://tinyurl.com/store-caassignment"
+                  placeholder="https://docs.google.com/spreadsheets/d/... (Opsional)"
                   className="w-full h-9 sm:h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-mono text-slate-700 focus:bg-white focus:border-teal-500 outline-none transition"
                 />
               </div>
