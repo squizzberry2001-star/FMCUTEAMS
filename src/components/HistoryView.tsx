@@ -967,13 +967,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <Store
               className={`w-3.5 h-3.5 transition-all duration-300 ${
                 activeCoverageTab === 'coverage'
-                  ? 'text-white stroke-[2.4] scale-105'
+                  ? 'text-slate-900 stroke-[2.4] scale-105'
                   : 'text-slate-600 stroke-[2]'
               }`}
             />
             <span
               className={`text-[11px] font-black transition-all ${
-                activeCoverageTab === 'coverage' ? 'text-white font-black' : 'text-slate-600 font-bold'
+                activeCoverageTab === 'coverage' ? 'text-slate-900 font-black' : 'text-slate-600 font-bold'
               }`}
             >
               Coverage
@@ -989,13 +989,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <Trophy
               className={`w-3.5 h-3.5 transition-all duration-300 ${
                 activeCoverageTab === 'leaderboard'
-                  ? 'text-white stroke-[2.4] scale-105'
+                  ? 'text-slate-900 stroke-[2.4] scale-105'
                   : 'text-slate-600 stroke-[2]'
               }`}
             />
             <span
               className={`text-[11px] font-black transition-all ${
-                activeCoverageTab === 'leaderboard' ? 'text-white font-black' : 'text-slate-600 font-bold'
+                activeCoverageTab === 'leaderboard' ? 'text-slate-900 font-black' : 'text-slate-600 font-bold'
               }`}
             >
               Top Visit

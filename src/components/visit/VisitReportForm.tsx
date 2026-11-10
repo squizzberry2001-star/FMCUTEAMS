@@ -2136,7 +2136,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   // If in PDF Preview mode, render VisitPdfPreview
   if (showPreview) {
     return (
-      <div className="flex-1 w-full h-full overflow-hidden flex flex-col bg-slate-950">
+      <div className="fixed inset-0 z-50 w-full h-full overflow-hidden flex flex-col bg-slate-950">
         <PageTransitionLoader visible={isSectionTransitioning} />
         <VisitPdfPreview data={formData} onBack={() => setShowPreview(false)} />
       </div>
@@ -2803,61 +2803,75 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
                 </button>
               </div>
 
-              {/* Single-Row Compact Crew List */}
-              <div className="space-y-1.5">
+              {/* Spacious & Well-Organized Crew List */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {formData.crews.map((c, idx) => {
                   const isCoreLeader = idx < 2;
                   return (
                     <div
                       key={c.id || idx}
-                      className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-1.5 sm:p-2 flex items-center gap-1.5 sm:gap-2 transition hover:border-teal-300"
+                      className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-2.5 space-y-2 transition-all hover:border-teal-300 hover:bg-white hover:shadow-xs"
                     >
-                      <span className="w-5 h-5 rounded-md bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">
-                        {idx + 1}
-                      </span>
-                      {isCoreLeader ? (
-                        <span className="text-[10.5px] font-black text-teal-900 bg-teal-100/80 border border-teal-200 px-2 py-0.5 rounded-lg shrink-0 max-w-[95px] truncate">
-                          {c.role}
-                        </span>
-                      ) : (
-                        <input
-                          type="text"
-                          value={c.role}
-                          onChange={(e) => handleUpdateCrew(idx, 'role', e.target.value)}
-                          className="bg-white border border-slate-200 rounded-lg px-1.5 py-0.5 text-[11px] font-bold text-slate-700 w-20 sm:w-24 shrink-0 focus:border-teal-500 outline-none"
-                          placeholder="Jabatan"
-                        />
-                      )}
+                      {/* Row 1: Number Badge + Role + Job Level Dropdown + Delete Button */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="w-5 h-5 rounded-md bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+                          {isCoreLeader ? (
+                            <span className="text-[11px] font-black text-teal-900 bg-teal-100/80 border border-teal-200 px-2.5 py-0.5 rounded-lg truncate">
+                              {c.role}
+                            </span>
+                          ) : (
+                            <input
+                              type="text"
+                              value={c.role}
+                              onChange={(e) => handleUpdateCrew(idx, 'role', e.target.value)}
+                              className="bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-800 w-28 sm:w-32 focus:border-teal-500 outline-none"
+                              placeholder="Jabatan"
+                            />
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1 bg-white border border-teal-200 rounded-lg px-2 py-0.5 shadow-2xs">
+                            <span className="text-[10px] font-bold text-slate-400">Lvl</span>
+                            <select
+                              value={c.jobLevel}
+                              onChange={(e) => handleUpdateCrew(idx, 'jobLevel', e.target.value)}
+                              className="text-xs font-black text-teal-900 bg-transparent outline-none cursor-pointer"
+                              title="Pilih Job Level"
+                            >
+                              <option value="">-</option>
+                              {['1A', 'NS3', 'NS2', 'NS1', 'MG3', 'MG2', 'MG1', 'OJT'].map((lvl) => (
+                                <option key={lvl} value={lvl}>
+                                  {lvl}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {idx >= 2 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCrew(idx)}
+                              className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition shrink-0 cursor-pointer"
+                              title="Hapus Crew"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Row 2: Full-Width Name Input (Spacious & Clean) */}
                       <input
                         type="text"
                         value={c.name}
                         onChange={(e) => handleUpdateCrew(idx, 'name', e.target.value)}
-                        placeholder="Nama Lengkap..."
-                        className="flex-1 min-w-0 h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-xs font-bold text-slate-900 focus:border-teal-500 outline-none"
+                        placeholder="Nama Lengkap Crew..."
+                        className="w-full h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-900 focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20 outline-none transition"
                       />
-                      <select
-                        value={c.jobLevel}
-                        onChange={(e) => handleUpdateCrew(idx, 'jobLevel', e.target.value)}
-                        className="w-18 sm:w-20 h-8 bg-teal-50 border border-teal-200 rounded-lg px-1 text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 outline-none shrink-0 cursor-pointer"
-                        title="Pilih Job Level"
-                      >
-                        <option value="">Lvl</option>
-                        {['1A', 'NS3', 'NS2', 'NS1', 'MG3', 'MG2', 'MG1', 'OJT'].map((lvl) => (
-                          <option key={lvl} value={lvl}>
-                            {lvl}
-                          </option>
-                        ))}
-                      </select>
-                      {idx >= 2 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveCrew(idx)}
-                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition shrink-0 cursor-pointer"
-                          title="Hapus Crew"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
                     </div>
                   );
                 })}
@@ -3978,7 +3992,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               <Store
                 className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 1
-                    ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                    ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
                     : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                 }`}
               />
@@ -3986,7 +4000,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             <span
               className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
                 activeSection === 1
-                  ? 'text-white font-black scale-[1.02]'
+                  ? 'text-slate-900 font-black scale-[1.02]'
                   : 'text-slate-600 font-bold group-hover:text-black'
               }`}
             >
@@ -4008,7 +4022,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               <Camera
                 className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 2
-                    ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                    ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
                     : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                 }`}
               />
@@ -4022,7 +4036,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             <span
               className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
                 activeSection === 2
-                  ? 'text-white font-black scale-[1.02]'
+                  ? 'text-slate-900 font-black scale-[1.02]'
                   : 'text-slate-600 font-bold group-hover:text-black'
               }`}
             >
@@ -4044,7 +4058,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
               <ClipboardCheck
                 className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                   activeSection === 3
-                    ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                    ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
                     : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                 }`}
               />
@@ -4058,7 +4072,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
             <span
               className={`tracking-tight leading-none text-[10px] transition-all duration-300 ${
                 activeSection === 3
-                  ? 'text-white font-black scale-[1.02]'
+                  ? 'text-slate-900 font-black scale-[1.02]'
                   : 'text-slate-600 font-bold group-hover:text-black'
               }`}
             >

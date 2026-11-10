@@ -90,7 +90,7 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
                 <Icon
                   className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
                     isActive
-                      ? 'scale-110 text-white stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
+                      ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
                       : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
                   }`}
                 />
@@ -100,7 +100,7 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
               <span
                 className={`text-[10px] tracking-tight leading-none transition-all duration-300 ${
                   isActive
-                    ? 'text-white font-black scale-[1.02]'
+                    ? 'text-slate-900 font-black scale-[1.02]'
                     : 'text-slate-600 font-bold group-hover:text-black'
                 }`}
               >

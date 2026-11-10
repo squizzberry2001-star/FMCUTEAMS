@@ -193,7 +193,10 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncStatusStep, setSyncStatusStep] = useState<1 | 2 | 3 | 4>(1);
   const [showSyncModal, setShowSyncModal] = useState(false);
-  const [, setSyncResult] = useState<GDriveSyncResult | null>(null);
+  const [syncResult, setSyncResult] = useState<GDriveSyncResult | null>(null);
+  const [isReportSaved, setIsReportSaved] = useState<boolean>(() => {
+    return Boolean(data.status === 'SUBMITTED' || data.gasSyncStatus === 'synced');
+  });
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   // Real PDF Rendering State (Instant Direct Canvas)
@@ -505,6 +508,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       setSyncStatusStep(4);
       setSyncResult(result);
       setIsSyncingGdrive(false);
+      setIsReportSaved(true);
       showToast('Laporan sukses tersimpan dan disinkronkan ke Google Drive Toko!', 'success');
       triggerCelebrationConfetti();
       if (onSyncGdrive) {
@@ -520,6 +524,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       setSyncProgress(100);
       setSyncStatusStep(4);
       setIsSyncingGdrive(false);
+      setIsReportSaved(true);
       showToast('Laporan berhasil disinkronkan (Offline Mode / Antre GDrive)', 'success');
       triggerCelebrationConfetti();
     }
@@ -539,7 +544,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
 
   return (
     <div
-      className="flex-1 w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-950 text-slate-800 print:bg-white print:text-black py-3 sm:py-6 px-2.5 sm:px-6 relative select-none"
+      className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden bg-slate-950 text-slate-800 print:bg-white print:text-black py-3 sm:py-6 px-2.5 sm:px-6 relative select-none scroll-smooth"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       {/* Toast Notification */}
@@ -653,34 +658,75 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
               </button>
             </div>
 
-            {/* Right Core Actions: Download PDF & Simpan Laporan */}
-            <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
-              {/* Unduh PDF Button */}
-              <button
-                type="button"
-                onClick={handleDownloadPdf}
-                disabled={isGeneratingPdf}
-                className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 shrink-0"
-                title="Unduh Berkas PDF Lengkap (16:9 Landscape)"
-              >
-                {isGeneratingPdf ? (
-                  <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                ) : (
-                  <Download className="w-3.5 h-3.5 text-slate-200" />
-                )}
-                <span>{isGeneratingPdf ? 'Membuat...' : 'Unduh PDF'}</span>
-              </button>
+            {/* Right Core Actions: Arahkan user untuk Simpan Laporan Dahulu, setelah itu berikan Unduh PDF & CA Assignment Store */}
+            <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end flex-wrap sm:flex-nowrap">
+              {!isReportSaved ? (
+                <>
+                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span>Simpan laporan terlebih dahulu</span>
+                  </span>
 
-              {/* SIMPAN LAPORAN Button */}
-              <button
-                type="button"
-                onClick={handleOpenGdriveSync}
-                className="h-9 sm:h-10 px-3.5 sm:px-5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-[#009944] hover:brightness-105 text-white font-black text-xs tracking-wide transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md hover:shadow-lg active:scale-95 shrink-0"
-                title="Simpan Laporan & Sinkronisasikan ke Google Drive Toko"
-              >
-                <CloudUpload className="w-4 h-4 text-emerald-100" />
-                <span className="whitespace-nowrap">SIMPAN LAPORAN</span>
-              </button>
+                  {/* SIMPAN LAPORAN Button (Primary Prominent Action) */}
+                  <button
+                    type="button"
+                    onClick={handleOpenGdriveSync}
+                    className="h-9 sm:h-10 px-4 sm:px-6 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-[#009944] hover:brightness-105 text-white font-black text-xs tracking-wide transition flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg active:scale-95 shrink-0 ring-2 ring-emerald-400/40"
+                    title="Simpan Laporan & Sinkronisasikan ke Google Drive Toko"
+                  >
+                    <CloudUpload className="w-4 h-4 text-emerald-100" />
+                    <span className="whitespace-nowrap">SIMPAN LAPORAN</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-black shrink-0">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="hidden sm:inline">Tersimpan</span>
+                  </span>
+
+                  {/* Unduh PDF Button */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadPdf}
+                    disabled={isGeneratingPdf}
+                    className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 shrink-0"
+                    title="Unduh Berkas PDF Lengkap (16:9 Landscape)"
+                  >
+                    {isGeneratingPdf ? (
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span>{isGeneratingPdf ? 'Membuat...' : 'Unduh PDF'}</span>
+                  </button>
+
+                  {/* CA Assignment Store Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = data.spreadsheetUrl || syncResult?.caSpreadsheetUrl || 'https://tinyurl.com/store-caassignment';
+                      window.open(url, '_blank');
+                    }}
+                    className="h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-900 font-extrabold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                    title="Buka Link Spreadsheet Form CA Toko"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-teal-700" />
+                    <span className="whitespace-nowrap">CA Assignment Store</span>
+                  </button>
+
+                  {/* Re-sync Button (Kecil untuk sinkronisasi ulang) */}
+                  <button
+                    type="button"
+                    onClick={handleOpenGdriveSync}
+                    className="h-9 sm:h-10 px-2 sm:px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                    title="Sinkronisasi Ulang ke Google Drive Toko"
+                  >
+                    <CloudUpload className="w-3.5 h-3.5 text-teal-600" />
+                    <span className="hidden md:inline text-[11px]">Sinkron Ulang</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -709,7 +755,7 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onWheel={handleWheel}
-            className="w-full flex-1 overflow-x-auto overflow-y-visible touch-pan-x touch-pan-y transition-all"
+            className="w-full flex-1 touch-pan-y transition-all"
           >
             <div
               style={{
@@ -1003,25 +1049,75 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
             </div>
 
             {/* Footer Buttons */}
-            <div className="pt-2 flex items-center justify-between gap-2">
-              <a
-                href={FMCU_REPORT_GDRIVE_FOLDER_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
-              >
-                <span>Buka Folder Drive</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+            {syncProgress === 100 ? (
+              <div className="pt-2 space-y-2.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSyncModal(false);
+                      handleDownloadPdf();
+                    }}
+                    className="h-10 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-emerald-400" />
+                    <span>Unduh PDF</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setShowSyncModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition cursor-pointer"
-              >
-                Tutup
-              </button>
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = data.spreadsheetUrl || syncResult?.caSpreadsheetUrl || 'https://tinyurl.com/store-caassignment';
+                      window.open(url, '_blank');
+                    }}
+                    className="h-10 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-900 text-xs font-black flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-teal-700" />
+                    <span className="truncate">CA Assignment Store</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                  <a
+                    href={FMCU_REPORT_GDRIVE_FOLDER_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
+                  >
+                    <span>Buka Folder Drive</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncModal(false)}
+                    className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="pt-2 flex items-center justify-between gap-2">
+                <a
+                  href={FMCU_REPORT_GDRIVE_FOLDER_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
+                >
+                  <span>Buka Folder Drive</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSyncModal(false)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
