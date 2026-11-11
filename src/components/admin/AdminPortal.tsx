@@ -36,6 +36,8 @@ import {
   SlidersHorizontal,
   Compass,
   MapPin,
+  Radio,
+  ArrowUpRight,
   X,
   Filter,
   ArrowUpDown,
@@ -55,6 +57,14 @@ import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from '../visit/HoldingTimeR23Modal';
 import { ExecutiveReportPreviewModal } from '../executive/ExecutiveReportPreviewModal';
 import { fetchAllVisitReportsFromCloud } from '../../services/crossDeviceVisitSyncService';
+import {
+  UserLivePresence,
+  fetchLiveUserPresencesFromCloud,
+  subscribeToLivePresences,
+  getUserPresenceDetailedStatus,
+  formatTimeWibStr,
+  formatRelativeTimeStr,
+} from '../../services/userLivePresenceService';
 import {
   MasterStore,
   getMasterStores,
@@ -638,6 +648,204 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     loadReports();
   }, []);
 
+  // Live Presences (Heartbeat from mobile staff)
+  const [livePresences, setLivePresences] = useState<UserLivePresence[]>([]);
+  const [radarPersonnelFilter, setRadarPersonnelFilter] = useState<'ACTIVE' | 'ALL'>('ACTIVE');
+
+  useEffect(() => {
+    fetchLiveUserPresencesFromCloud().then((res) => {
+      if (Array.isArray(res)) setLivePresences(res);
+    });
+
+    const unsubscribe = subscribeToLivePresences((updated) => {
+      setLivePresences(updated);
+    });
+
+    const pollInterval = setInterval(() => {
+      if (!document.hidden) {
+        fetchLiveUserPresencesFromCloud().then((res) => {
+          if (Array.isArray(res)) setLivePresences(res);
+        });
+      }
+    }, 20000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, []);
+
+  const now = Date.now();
+  const nonAdminUsers = useMemo(() => users.filter((u) => !u.isAdmin), [users]);
+
+  const activeRadarUsers = useMemo(() => {
+    return livePresences.filter(
+      (p) => p.isWebActive && p.isGpsActive && now - p.lastSeenMs < 3 * 60 * 1000
+    );
+  }, [livePresences, now]);
+
+  const presenceMap = useMemo(() => {
+    const map = new Map<string, UserLivePresence>();
+    livePresences.forEach((p) => {
+      map.set(p.userName.toLowerCase().trim(), p);
+    });
+    return map;
+  }, [livePresences]);
+
+  /**
+   * Render Card Radar Peta Real-time (Sama persis dengan Executive Dashboard & diperkaya status buka/keluar)
+   */
+  const renderLiveGpsRadarCard = () => {
+    return (
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-5 text-white flex flex-col justify-between relative overflow-hidden shadow-md h-full">
+        {/* Ambient Background Circles */}
+        <div className="absolute -right-8 -bottom-8 w-44 h-44 rounded-full border border-teal-500/20 pointer-events-none" />
+        <div className="absolute -right-16 -bottom-16 w-60 h-60 rounded-full border border-teal-500/10 pointer-events-none" />
+
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-300 text-[10px] font-black uppercase tracking-wider">
+              <Radio className="w-3 h-3 text-teal-400 animate-pulse" />
+              Live GPS Radar
+            </span>
+            <span className="text-[10px] text-slate-400 font-bold">WIB (UTC+7)</span>
+          </div>
+
+          <h4 className="text-sm sm:text-base font-black text-white">
+            {activeRadarUsers.length > 0
+              ? `${activeRadarUsers.length} Personel Sedang di Lapangan`
+              : 'Seluruh Personel Standby / Menunggu Sesi'}
+          </h4>
+          <p className="text-[11px] text-slate-300 font-medium mt-1 leading-relaxed">
+            Pemantauan radar mendeteksi staf yang aktif membuka aplikasi web dengan modul GPS
+            terverifikasi.
+          </p>
+
+          {/* Toggle Tab: Aktif di Lapangan vs Semua Personel */}
+          <div className="flex items-center gap-1 mt-3 bg-white/10 p-1 rounded-xl border border-white/10 text-[10px] font-black">
+            <button
+              type="button"
+              onClick={() => setRadarPersonnelFilter('ACTIVE')}
+              className={`flex-1 py-1 rounded-lg transition cursor-pointer ${
+                radarPersonnelFilter === 'ACTIVE'
+                  ? 'bg-teal-500 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              Aktif Lapangan ({activeRadarUsers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setRadarPersonnelFilter('ALL')}
+              className={`flex-1 py-1 rounded-lg transition cursor-pointer ${
+                radarPersonnelFilter === 'ALL'
+                  ? 'bg-teal-500 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              Semua Tim ({nonAdminUsers.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Radar Personnel List with Last Opened / Last Left info */}
+        <div className="my-3 space-y-1.5 max-h-44 overflow-y-auto no-scrollbar pr-1">
+          {radarPersonnelFilter === 'ACTIVE' ? (
+            activeRadarUsers.length > 0 ? (
+              activeRadarUsers.map((p, idx) => {
+                const st = getUserPresenceDetailedStatus(p, now);
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between bg-white/10 hover:bg-white/15 px-3 py-2 rounded-xl border border-white/10 text-xs transition"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                      <div className="min-w-0">
+                        <span className="font-bold text-white truncate text-[11px] block">{p.userName}</span>
+                        <span className="text-[9px] text-teal-200/90 font-semibold truncate block">
+                          {st.timeDetail}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end shrink-0 ml-2">
+                      <span className="text-[9.5px] font-extrabold text-teal-300 tabular-nums">
+                        {p.lat.toFixed(3)}°, {p.lng.toFixed(3)}°
+                      </span>
+                      <span className="text-[8.5px] font-black text-emerald-300">
+                        Online
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="p-3 bg-white/5 rounded-xl border border-white/10 text-center text-xs text-slate-400">
+                Belum ada staf online saat ini
+              </div>
+            )
+          ) : (
+            nonAdminUsers.map((u, idx) => {
+              const p = presenceMap.get(u.name.toLowerCase().trim());
+              const st = getUserPresenceDetailedStatus(p, now);
+              return (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between bg-white/10 hover:bg-white/15 px-3 py-2 rounded-xl border border-white/10 text-xs transition"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`w-2 h-2 rounded-full ${st.dotColor} ${
+                        st.isOnline ? 'animate-ping' : ''
+                      } shrink-0`}
+                    />
+                    <div className="min-w-0">
+                      <span className="font-bold text-white truncate text-[11px] block">{u.name}</span>
+                      <span
+                        className={`text-[9px] font-semibold truncate block ${
+                          st.isOnline
+                            ? 'text-emerald-300'
+                            : st.statusBadge === 'LEFT'
+                            ? 'text-amber-200/90'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {st.timeDetail}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 ml-2 border ${
+                      st.isOnline
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                        : st.statusBadge === 'LEFT'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-400/30'
+                        : 'bg-white/5 text-slate-400 border-white/10'
+                    }`}
+                  >
+                    {st.badgeLabel}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {onOpenLiveMaps && (
+          <button
+            type="button"
+            onClick={onOpenLiveMaps}
+            className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-[#10B981] to-[#0D9488] hover:brightness-110 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition active:scale-95 cursor-pointer mt-1"
+          >
+            <Compass className="w-4 h-4" />
+            <span>Buka Radar &amp; Jalur Toko Lengkap</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    );
+  };
+
   // Map of Reports by AgendaId and StoreCode_Date
   const reportMap = useMemo(() => {
     const map = new Map<string, VisitReportData>();
@@ -1007,11 +1215,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <button
                 type="button"
                 onClick={onOpenLiveMaps}
-                title="Buka Peta Live Pinpoint Toko"
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 text-xs font-bold transition active:scale-95 cursor-pointer"
+                title="Buka Peta Live Pinpoint Toko & Radar Personel"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 text-xs font-bold transition active:scale-95 cursor-pointer"
               >
-                <MapPin className="w-3.5 h-3.5" />
-                <span>Live Maps</span>
+                <Radio className="w-3.5 h-3.5 text-teal-600 animate-pulse" />
+                <span className="hidden xs:inline sm:inline">Radar Peta</span>
+                {activeRadarUsers.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-teal-600 text-white text-[9.5px] font-black">
+                    {activeRadarUsers.length}
+                  </span>
+                )}
               </button>
             )}
 
@@ -1191,7 +1404,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               }`}
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Audit Kunjungan & Laporan</span>
+              <span>Audit Kunjungan &amp; Radar</span>
+              {activeRadarUsers.length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              )}
               <span
                 className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
                   activeTab === 'monitoring' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
@@ -2218,6 +2434,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
             </div>
 
+            {/* Radar Peta GPS Real-time & Status Akses Personel */}
+            <div className="grid grid-cols-1 gap-4">
+              {renderLiveGpsRadarCard()}
+            </div>
+
             {/* Bottom Row: Team Productivity Leaderboard */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
               <div className="px-4 sm:px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
@@ -2256,7 +2477,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             <div className="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
                               {person.name.charAt(0).toUpperCase()}
                             </div>
-                            <span className="font-black text-slate-900">{person.name}</span>
+                            <div className="min-w-0">
+                              <span className="font-black text-slate-900 block leading-tight">{person.name}</span>
+                              {(() => {
+                                const p = presenceMap.get(person.name.toLowerCase().trim());
+                                const st = getUserPresenceDetailedStatus(p, now);
+                                return (
+                                  <span
+                                    className={`inline-flex items-center gap-1 text-[9px] font-bold mt-0.5 ${
+                                      st.isOnline ? 'text-emerald-700' : 'text-slate-400'
+                                    }`}
+                                    title={st.timeDetail}
+                                  >
+                                    <span
+                                      className={`w-1.5 h-1.5 rounded-full ${st.dotColor} ${
+                                        st.isOnline ? 'animate-pulse' : ''
+                                      }`}
+                                    />
+                                    {st.summaryText}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 text-center font-black text-slate-800">
@@ -2305,30 +2547,74 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             ============================================================ */}
         {activeTab === 'monitoring' && (
           <div className="space-y-4">
-            {/* Header info */}
-            <div className="bg-emerald-900 text-white rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                  <h2 className="text-base font-black">
-                    Monitoring Kunjungan Toko Resmi FMCU
-                  </h2>
+            {/* Top Grid: Monitoring Briefing & Live GPS Radar */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+              {/* Sisi Kiri: Briefing & Summary Audit */}
+              <div className="lg:col-span-7 bg-emerald-900 text-white rounded-3xl p-5 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-300 border border-emerald-400/30">
+                        <ShieldCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-black">
+                          Monitoring Kunjungan Toko Resmi FMCU
+                        </h2>
+                        <span className="text-[10px] text-emerald-300 font-semibold">
+                          Geofence Satelit 1–50m • Actual IN/OUT Otomatis
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={loadReports}
+                      disabled={isLoadingReports}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition active:scale-95 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingReports ? 'animate-spin' : ''}`} />
+                      <span className="hidden sm:inline">Segarkan Laporan</span>
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-emerald-100/90 leading-relaxed mt-2">
+                    Menampilkan hanya agenda yang berstatus <strong>Visit Toko Resmi</strong>. Presensi actual IN/OUT terekam otomatis via radius 1–50m.
+                  </p>
                 </div>
-                <p className="text-xs text-emerald-200 mt-1">
-                  Menampilkan hanya agenda yang berstatus <strong>Visit Toko Resmi</strong>. Presensi actual IN/OUT terekam otomatis via radius 1–50m.
-                </p>
+
+                {/* Quick Metric Pills */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 mt-3 border-t border-emerald-800/80 text-xs">
+                  <div className="p-2.5 rounded-2xl bg-white/10 border border-white/10">
+                    <span className="text-[10px] font-bold text-emerald-200 block">Total Visit</span>
+                    <span className="text-base font-black text-white mt-0.5 block">
+                      {allClassifiedAgendas.filter((i) => i.isExplicitVisit).length}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-2xl bg-white/10 border border-white/10">
+                    <span className="text-[10px] font-bold text-emerald-200 block">Visit Selesai</span>
+                    <span className="text-base font-black text-emerald-300 mt-0.5 block">
+                      {metrics.visitDone}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-2xl bg-white/10 border border-white/10">
+                    <span className="text-[10px] font-bold text-emerald-200 block">Sedang di Toko</span>
+                    <span className="text-base font-black text-teal-200 mt-0.5 block">
+                      {metrics.visitInProgress}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-2xl bg-white/10 border border-white/10">
+                    <span className="text-[10px] font-bold text-emerald-200 block">Belum Sesi</span>
+                    <span className="text-base font-black text-amber-200 mt-0.5 block">
+                      {metrics.visitPending}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={loadReports}
-                  disabled={isLoadingReports}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition active:scale-95 cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingReports ? 'animate-spin' : ''}`} />
-                  <span>Segarkan Laporan</span>
-                </button>
+              {/* Sisi Kanan: Live GPS Radar Peta */}
+              <div className="lg:col-span-5">
+                {renderLiveGpsRadarCard()}
               </div>
             </div>
 
@@ -2364,8 +2650,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             <td className="py-2.5 px-3 whitespace-nowrap text-slate-900 font-black">
                               {ag.date}
                             </td>
-                            <td className="py-2.5 px-3 whitespace-nowrap text-slate-800">
-                              {ag.pic}
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <div className="min-w-0">
+                                <span className="font-black text-slate-900 block leading-tight">{ag.pic}</span>
+                                {(() => {
+                                  const p = presenceMap.get(ag.pic.toLowerCase().trim());
+                                  const st = getUserPresenceDetailedStatus(p, now);
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center gap-1 text-[9px] font-bold mt-0.5 ${
+                                        st.isOnline ? 'text-emerald-700' : 'text-slate-400'
+                                      }`}
+                                      title={st.timeDetail}
+                                    >
+                                      <span
+                                        className={`w-1.5 h-1.5 rounded-full ${st.dotColor} ${
+                                          st.isOnline ? 'animate-pulse' : ''
+                                        }`}
+                                      />
+                                      {st.summaryText}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </td>
                             <td className="py-2.5 px-3">
                               <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 mr-1.5">

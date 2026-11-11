@@ -16,13 +16,15 @@ export interface UserLivePresence {
   lat: number;
   lng: number;
   accuracyMeters?: number;
-  lastSeenMs: number; // Timestamp Date.now()
+  lastSeenMs: number; // Timestamp Date.now() heartbeat
+  lastOpenedMs?: number; // Timestamp saat pertama kali membuka web / login sesi ini
+  lastLeftMs?: number; // Timestamp saat keluar aplikasi / menutup web / logout
   isWebActive: boolean; // True jika halaman web sedang terbuka
   isGpsActive: boolean; // True jika GPS terdeteksi menyala
 }
 
 const LOCAL_PRESENCE_KEY = 'fmcu_active_user_presences_v3';
-const PRESENCE_TTL_MS = 3 * 60 * 1000; // 3 menit toleransi heartbeat
+export const PRESENCE_TTL_MS = 3 * 60 * 1000; // 3 menit toleransi heartbeat
 
 // Multi-tab BroadcastChannel for 0ms same-device sync
 let presenceBroadcastChannel: BroadcastChannel | null = null;
@@ -57,36 +59,42 @@ function notifySubscribers(presences: UserLivePresence[]): void {
 if (presenceBroadcastChannel) {
   presenceBroadcastChannel.onmessage = (evt) => {
     if (evt.data && evt.data.type === 'PRESENCE_SYNC') {
-      const active = getLocalActivePresences();
-      notifySubscribers(active);
+      const all = getAllLocalPresences();
+      notifySubscribers(all);
     }
   };
+}
+
+/**
+ * Baca seluruh riwayat presensi user (aktif maupun yang sudah keluar) dari localStorage
+ */
+export function getAllLocalPresences(): UserLivePresence[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_PRESENCE_KEY);
+    if (!raw) return [];
+    const list: UserLivePresence[] = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
  * Baca daftar presensi aktif dari localStorage yang masih valid (< 3 menit & GPS aktif)
  */
 export function getLocalActivePresences(): UserLivePresence[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(LOCAL_PRESENCE_KEY);
-    if (!raw) return [];
-    const list: UserLivePresence[] = JSON.parse(raw);
-    if (!Array.isArray(list)) return [];
-
-    const now = Date.now();
-    return list.filter(
-      (p) =>
-        p &&
-        p.isWebActive === true &&
-        p.isGpsActive === true &&
-        now - p.lastSeenMs < PRESENCE_TTL_MS &&
-        p.lat !== 0 &&
-        p.lng !== 0
-    );
-  } catch {
-    return [];
-  }
+  const list = getAllLocalPresences();
+  const now = Date.now();
+  return list.filter(
+    (p) =>
+      p &&
+      p.isWebActive === true &&
+      p.isGpsActive === true &&
+      now - p.lastSeenMs < PRESENCE_TTL_MS &&
+      p.lat !== 0 &&
+      p.lng !== 0
+  );
 }
 
 /**
@@ -95,13 +103,18 @@ export function getLocalActivePresences(): UserLivePresence[] {
 export function saveLocalActivePresence(presence: UserLivePresence): void {
   if (typeof window === 'undefined') return;
   try {
-    const existing = getLocalActivePresences();
-    const filtered = existing.filter((p) => !isSamePersonName(p.userName, presence.userName));
+    const existing = getAllLocalPresences();
+    const prev = existing.find((p) => isSamePersonName(p.userName, presence.userName));
 
-    // Jika user masih aktif & GPS menyala, simpan ke daftar
-    if (presence.isWebActive && presence.isGpsActive && Date.now() - presence.lastSeenMs < PRESENCE_TTL_MS) {
-      filtered.push(presence);
-    }
+    const merged: UserLivePresence = {
+      ...prev,
+      ...presence,
+      lastOpenedMs: presence.lastOpenedMs || prev?.lastOpenedMs,
+      lastLeftMs: presence.lastLeftMs !== undefined ? presence.lastLeftMs : prev?.lastLeftMs,
+    };
+
+    const filtered = existing.filter((p) => !isSamePersonName(p.userName, presence.userName));
+    filtered.push(merged);
 
     localStorage.setItem(LOCAL_PRESENCE_KEY, JSON.stringify(filtered));
 
@@ -162,12 +175,30 @@ export async function pushUserPresenceToCloud(presence: UserLivePresence): Promi
 
 /**
  * Hapus kehadiran user saat menutup web / tab / logout
+ * Menyimpan waktu keluar (lastLeftMs) dan menandai status tidak aktif
  */
 export async function clearUserPresence(userName: string): Promise<void> {
   if (typeof window === 'undefined' || !userName) return;
   try {
-    const existing = getLocalActivePresences();
+    const now = Date.now();
+    const existing = getAllLocalPresences();
+    const prev = existing.find((p) => isSamePersonName(p.userName, userName));
+
+    const inactivePresence: UserLivePresence = {
+      userName,
+      userEmail: prev?.userEmail,
+      lat: prev?.lat || 0,
+      lng: prev?.lng || 0,
+      accuracyMeters: prev?.accuracyMeters,
+      lastSeenMs: prev?.lastSeenMs || now,
+      lastOpenedMs: prev?.lastOpenedMs,
+      lastLeftMs: now,
+      isWebActive: false,
+      isGpsActive: false,
+    };
+
     const updated = existing.filter((p) => !isSamePersonName(p.userName, userName));
+    updated.push(inactivePresence);
     localStorage.setItem(LOCAL_PRESENCE_KEY, JSON.stringify(updated));
 
     if (presenceBroadcastChannel) {
@@ -176,10 +207,7 @@ export async function clearUserPresence(userName: string): Promise<void> {
     notifySubscribers(updated);
 
     const inactivePayload = {
-      userName,
-      isWebActive: false,
-      isGpsActive: false,
-      lastSeenMs: 0,
+      ...inactivePresence,
       id: `presence-${userName.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
       updatedAt: new Date().toISOString(),
     };
@@ -210,10 +238,10 @@ export async function clearUserPresence(userName: string): Promise<void> {
 }
 
 /**
- * Ambil seluruh presensi user aktif dari cloud yang masih valid (< 3 menit & GPS menyala)
+ * Ambil seluruh presensi user dari cloud (aktif maupun offline) dengan metadata waktu buka & keluar
  */
 export async function fetchLiveUserPresencesFromCloud(): Promise<UserLivePresence[]> {
-  const localList = getLocalActivePresences();
+  const localList = getAllLocalPresences();
 
   try {
     const resp = await postCloudPresence({
@@ -223,38 +251,50 @@ export async function fetchLiveUserPresencesFromCloud(): Promise<UserLivePresenc
 
     if (resp && resp.status === 'SUCCESS' && Array.isArray(resp.data)) {
       const now = Date.now();
-      const validCloudList: UserLivePresence[] = [];
+      const cloudList: UserLivePresence[] = [];
 
       resp.data.forEach((item: any) => {
         if (!item || !item.userName) return;
         const lastSeen = Number(item.lastSeenMs || 0);
+        const lastOpened = item.lastOpenedMs ? Number(item.lastOpenedMs) : undefined;
+        const lastLeft = item.lastLeftMs ? Number(item.lastLeftMs) : undefined;
         const isWeb = Boolean(item.isWebActive);
         const isGps = Boolean(item.isGpsActive);
         const lat = Number(item.lat || 0);
         const lng = Number(item.lng || 0);
 
-        // Hanya valid jika sedang akses web, GPS menyala, dan heartbeat < 3 menit
-        if (isWeb && isGps && now - lastSeen < PRESENCE_TTL_MS && (lat !== 0 || lng !== 0)) {
-          validCloudList.push({
-            userName: String(item.userName),
-            userEmail: item.userEmail ? String(item.userEmail) : undefined,
-            lat,
-            lng,
-            accuracyMeters: item.accuracyMeters ? Number(item.accuracyMeters) : 15,
-            lastSeenMs: lastSeen,
-            isWebActive: true,
-            isGpsActive: true,
-          });
-        }
+        // Jika heartbeat sudah lebih dari TTL (3 menit), tandai web nonaktif otomatis
+        const isStale = now - lastSeen > PRESENCE_TTL_MS;
+        const effectiveWeb = isWeb && !isStale;
+        const effectiveGps = isGps && !isStale;
+        const effectiveLeft = lastLeft || (isStale ? lastSeen : undefined);
+
+        cloudList.push({
+          userName: String(item.userName),
+          userEmail: item.userEmail ? String(item.userEmail) : undefined,
+          lat,
+          lng,
+          accuracyMeters: item.accuracyMeters ? Number(item.accuracyMeters) : 15,
+          lastSeenMs: lastSeen,
+          lastOpenedMs: lastOpened,
+          lastLeftMs: effectiveLeft,
+          isWebActive: effectiveWeb,
+          isGpsActive: effectiveGps,
+        });
       });
 
       // Gabungkan data cloud dengan data lokal
       const mergedMap = new Map<string, UserLivePresence>();
-      validCloudList.forEach((p) => mergedMap.set(p.userName.toLowerCase(), p));
+      cloudList.forEach((p) => mergedMap.set(p.userName.toLowerCase(), p));
       localList.forEach((p) => {
         const existing = mergedMap.get(p.userName.toLowerCase());
         if (!existing || p.lastSeenMs > existing.lastSeenMs) {
-          mergedMap.set(p.userName.toLowerCase(), p);
+          mergedMap.set(p.userName.toLowerCase(), {
+            ...existing,
+            ...p,
+            lastOpenedMs: p.lastOpenedMs || existing?.lastOpenedMs,
+            lastLeftMs: p.lastLeftMs || existing?.lastLeftMs,
+          });
         }
       });
 
@@ -275,12 +315,26 @@ let heartbeatTimer: any = null;
 let currentTrackingUser: User | null = null;
 
 /**
- * Memulai pengiriman heartbeat berkala ketika user membuka web dan GPS aktif.
- * Otomatis mati saat user menutup web atau GPS dimatikan.
+ * Memulai pengiriman heartbeat berkala ketika user membuka web.
+ * Mencatat waktu pertama buka web (lastOpenedMs) dan status live GPS.
  */
 export function startLivePresenceHeartbeat(user: User | null | undefined): void {
   if (typeof window === 'undefined' || !user || !user.name) return;
   currentTrackingUser = user;
+
+  // Catat waktu pertama kali membuka web sesi ini
+  let sessionOpened = 0;
+  try {
+    const stored = sessionStorage.getItem('fmcu_session_opened_at');
+    if (stored) {
+      sessionOpened = Number(stored);
+    } else {
+      sessionOpened = Date.now();
+      sessionStorage.setItem('fmcu_session_opened_at', String(sessionOpened));
+    }
+  } catch {
+    sessionOpened = Date.now();
+  }
 
   const performCheck = () => {
     // Battery Saver: Jangan polling GPS jika ponsel terkunci atau tab di latar belakang
@@ -289,7 +343,20 @@ export function startLivePresenceHeartbeat(user: User | null | undefined): void 
     }
 
     if (!navigator.geolocation) {
-      clearUserPresence(user.name);
+      // Browser tidak support geolocation tapi web sedang dibuka
+      const fallbackPresence: UserLivePresence = {
+        userName: user.name,
+        userEmail: user.email,
+        lat: 0,
+        lng: 0,
+        accuracyMeters: 0,
+        lastSeenMs: Date.now(),
+        lastOpenedMs: sessionOpened,
+        isWebActive: true,
+        isGpsActive: false,
+      };
+      saveLocalActivePresence(fallbackPresence);
+      pushUserPresenceToCloud(fallbackPresence);
       return;
     }
 
@@ -303,6 +370,8 @@ export function startLivePresenceHeartbeat(user: User | null | undefined): void 
           lng: pos.coords.longitude,
           accuracyMeters: Math.round(pos.coords.accuracy || 15),
           lastSeenMs: Date.now(),
+          lastOpenedMs: sessionOpened,
+          lastLeftMs: undefined,
           isWebActive: true,
           isGpsActive: true,
         };
@@ -321,8 +390,24 @@ export function startLivePresenceHeartbeat(user: User | null | undefined): void 
         pushUserPresenceToCloud(presence);
       },
       () => {
-        // GPS MATI ATAU DITOLAK -> Hapus kehadiran karena GPS tidak menyala
-        clearUserPresence(user.name);
+        // GPS MATI ATAU DITOLAK -> Web tetap aktif namun GPS mati
+        const existing = getAllLocalPresences();
+        const prev = existing.find((p) => isSamePersonName(p.userName, user.name));
+
+        const presenceWithoutGps: UserLivePresence = {
+          userName: user.name,
+          userEmail: user.email,
+          lat: prev?.lat || 0,
+          lng: prev?.lng || 0,
+          accuracyMeters: prev?.accuracyMeters,
+          lastSeenMs: Date.now(),
+          lastOpenedMs: sessionOpened,
+          lastLeftMs: undefined,
+          isWebActive: true,
+          isGpsActive: false,
+        };
+        saveLocalActivePresence(presenceWithoutGps);
+        pushUserPresenceToCloud(presenceWithoutGps);
       },
       // Battery Optimization: enableHighAccuracy false & maximumAge 45s memanfaatkan A-GPS/Wi-Fi & cache
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 45000 }
@@ -358,4 +443,147 @@ export function stopLivePresenceHeartbeat(): void {
     clearUserPresence(currentTrackingUser.name);
     currentTrackingUser = null;
   }
+}
+
+// ============================================================================
+// HELPER STATUS ONLINE / WAKTU TERAKHIR BUKA WEB & KELUAR APLIKASI
+// ============================================================================
+
+/**
+ * Format timestamp ke jam WIB (UTC+7) misal "08:30 WIB"
+ */
+export function formatTimeWibStr(ms?: number | null): string {
+  if (!ms || ms <= 0) return '-';
+  const d = new Date(ms);
+  // Normalisasi timezone WIB (UTC+7)
+  const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+  const wibDate = new Date(utc + 7 * 3600000);
+  const hh = String(wibDate.getHours()).padStart(2, '0');
+  const mm = String(wibDate.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm} WIB`;
+}
+
+/**
+ * Format selisih waktu relatif dalam bahasa Indonesia
+ */
+export function formatRelativeTimeStr(ms?: number | null, now = Date.now()): string {
+  if (!ms || ms <= 0) return '';
+  const diffMs = Math.max(0, now - ms);
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return 'baru saja';
+  if (diffMinutes < 60) return `${diffMinutes} mnt lalu`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} jam lalu`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} hari lalu`;
+}
+
+export interface UserPresenceDetailedStatus {
+  isOnline: boolean;
+  statusBadge: 'ONLINE' | 'LEFT' | 'STANDBY';
+  badgeLabel: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  dotColor: string;
+  openedTimeStr?: string;
+  leftTimeStr?: string;
+  summaryText: string;
+  timeDetail: string;
+}
+
+/**
+ * Evaluasi status presensi user lengkap dengan keterangan kapan terakhir buka web dan kapan keluar aplikasi
+ */
+export function getUserPresenceDetailedStatus(
+  presence?: UserLivePresence | null,
+  now = Date.now()
+): UserPresenceDetailedStatus {
+  if (!presence || !presence.lastSeenMs) {
+    return {
+      isOnline: false,
+      statusBadge: 'STANDBY',
+      badgeLabel: 'Standby',
+      badgeBg: 'bg-slate-100',
+      badgeText: 'text-slate-600',
+      badgeBorder: 'border-slate-200',
+      dotColor: 'bg-slate-400',
+      summaryText: 'Belum ada aktivitas',
+      timeDetail: 'Belum membuka web hari ini',
+    };
+  }
+
+  const isRecent = now - presence.lastSeenMs < PRESENCE_TTL_MS;
+  const isOnline = Boolean(presence.isWebActive && presence.isGpsActive && isRecent);
+
+  // KONDISI 1: USER SEDANG ONLINE AKTIF DENGAN GPS
+  if (isOnline) {
+    const openedMs = presence.lastOpenedMs || presence.lastSeenMs;
+    const openedStr = formatTimeWibStr(openedMs);
+    const relStr = formatRelativeTimeStr(openedMs, now);
+
+    return {
+      isOnline: true,
+      statusBadge: 'ONLINE',
+      badgeLabel: 'Online',
+      badgeBg: 'bg-emerald-50',
+      badgeText: 'text-emerald-800',
+      badgeBorder: 'border-emerald-200',
+      dotColor: 'bg-emerald-500',
+      openedTimeStr: openedStr,
+      summaryText: `Online • Buka ${openedStr}`,
+      timeDetail: `Buka web pk ${openedStr} (${relStr})`,
+    };
+  }
+
+  // KONDISI 2: USER KELUAR APLIKASI / MENUTUP WEB
+  const leftMs = presence.lastLeftMs || presence.lastSeenMs;
+  const leftStr = formatTimeWibStr(leftMs);
+  const leftRelStr = formatRelativeTimeStr(leftMs, now);
+  const openedStr = presence.lastOpenedMs ? formatTimeWibStr(presence.lastOpenedMs) : undefined;
+
+  if (presence.lastLeftMs || !presence.isWebActive) {
+    return {
+      isOnline: false,
+      statusBadge: 'LEFT',
+      badgeLabel: 'Keluar',
+      badgeBg: 'bg-amber-50',
+      badgeText: 'text-amber-800',
+      badgeBorder: 'border-amber-200',
+      dotColor: 'bg-amber-500',
+      openedTimeStr: openedStr,
+      leftTimeStr: leftStr,
+      summaryText: `Keluar ${leftStr}`,
+      timeDetail: openedStr
+        ? `Keluar pk ${leftStr} (${leftRelStr}) • Buka pk ${openedStr}`
+        : `Keluar pk ${leftStr} (${leftRelStr})`,
+    };
+  }
+
+  // KONDISI 3: WEB TERBUKA TAPI GPS OFF ATAU HEARTBEAT TIMEOUT
+  return {
+    isOnline: false,
+    statusBadge: 'STANDBY',
+    badgeLabel: presence.isWebActive ? 'GPS Off' : 'Standby',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-600',
+    badgeBorder: 'border-slate-200',
+    dotColor: 'bg-slate-400',
+    openedTimeStr: openedStr,
+    leftTimeStr: leftStr,
+    summaryText: `Terakhir aktif ${leftStr}`,
+    timeDetail: `Terakhir aktif pk ${leftStr} (${leftRelStr})`,
+  };
+}
+
+/**
+ * Filter personel yang sedang aktif di lapangan (GPS & Web aktif < 3 mnt)
+ */
+export function filterActiveRadarUsers(
+  presences: UserLivePresence[],
+  now = Date.now()
+): UserLivePresence[] {
+  return presences.filter(
+    (p) => p && p.isWebActive && p.isGpsActive && now - p.lastSeenMs < PRESENCE_TTL_MS
+  );
 }

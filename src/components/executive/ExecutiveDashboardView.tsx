@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory, User, VisitReportData } from '../../types';
 import { StoreWithOwnership, isSamePersonName } from '../../data/masterStoresData';
-import { UserLivePresence } from '../../services/userLivePresenceService';
+import { UserLivePresence, formatTimeWibStr } from '../../services/userLivePresenceService';
 import { resolveVisitedStoreReportData } from '../HistoryView';
 import { getLocalDateYmd } from '../../utils/mapGeoUtils';
 import { getMondayOfWeek, getFullWeekDays } from '../../services/scheduleExcelService';
@@ -515,9 +515,14 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                       <span className="font-bold text-white truncate text-[11px]">{p.userName}</span>
                     </div>
-                    <span className="text-[9.5px] font-extrabold text-teal-300 tabular-nums">
-                      {p.lat.toFixed(3)}°, {p.lng.toFixed(3)}°
-                    </span>
+                    <div className="flex flex-col items-end shrink-0 leading-tight">
+                      <span className="text-[9.5px] font-extrabold text-teal-300 tabular-nums">
+                        {p.lat.toFixed(3)}°, {p.lng.toFixed(3)}°
+                      </span>
+                      <span className="text-[8.5px] text-teal-200/80 font-bold">
+                        Buka {formatTimeWibStr(p.lastOpenedMs || p.lastSeenMs)}
+                      </span>
+                    </div>
                   </div>
                 ))
               ) : (

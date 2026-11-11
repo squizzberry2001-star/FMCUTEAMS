@@ -18,7 +18,10 @@ import {
 } from 'lucide-react';
 import { ScheduleAgenda, ScheduleCategory, User, VisitReportData } from '../../types';
 import { StoreWithOwnership, isSamePersonName } from '../../data/masterStoresData';
-import { UserLivePresence } from '../../services/userLivePresenceService';
+import {
+  UserLivePresence,
+  getUserPresenceDetailedStatus,
+} from '../../services/userLivePresenceService';
 import { getLocalDateYmd } from '../../utils/mapGeoUtils';
 import { getMondayOfWeek, getFullWeekDays } from '../../services/scheduleExcelService';
 import { resolveVisitedStoreReportData } from '../HistoryView';
@@ -67,17 +70,15 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
   const fieldUsers = useMemo(() => users.filter((u) => !u.isAdmin), [users]);
   const allVerifiedReports = useMemo(() => getVerifiedGDriveReports(), []);
 
-  // Map of online presences
+  // Map of all user presences (live & history)
   const now = Date.now();
-  const onlinePresenceMap = useMemo(() => {
+  const presenceMap = useMemo(() => {
     const map = new Map<string, UserLivePresence>();
     livePresences.forEach((p) => {
-      if (p.isWebActive && p.isGpsActive && now - p.lastSeenMs < 3 * 60 * 1000) {
-        map.set(p.userName.toLowerCase().trim(), p);
-      }
+      map.set(p.userName.toLowerCase().trim(), p);
     });
     return map;
-  }, [livePresences, now]);
+  }, [livePresences]);
 
   // Precomputed stats per user
   const userStatsMap = useMemo(() => {
@@ -88,6 +89,7 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
         totalVisitsThisMonth: number;
         ownedStoresCount: number;
         gdriveReportsCount: number;
+        presence?: UserLivePresence;
         isOnline: boolean;
         currentCoords?: { lat: number; lng: number };
       }
@@ -95,7 +97,8 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
 
     fieldUsers.forEach((u) => {
       const uNameNorm = u.name.toLowerCase().trim();
-      const online = onlinePresenceMap.get(uNameNorm);
+      const p = presenceMap.get(uNameNorm);
+      const isOnline = Boolean(p && p.isWebActive && p.isGpsActive && now - p.lastSeenMs < 3 * 60 * 1000);
 
       const monthVisits = agendas.filter(
         (a) =>
@@ -116,13 +119,14 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
         totalVisitsThisMonth: monthVisits,
         ownedStoresCount: owned,
         gdriveReportsCount: gdriveCount,
-        isOnline: Boolean(online),
-        currentCoords: online ? { lat: online.lat, lng: online.lng } : undefined,
+        presence: p,
+        isOnline,
+        currentCoords: isOnline && p ? { lat: p.lat, lng: p.lng } : undefined,
       });
     });
 
     return map;
-  }, [fieldUsers, onlinePresenceMap, agendas, stores, todayYmd, allVerifiedReports]);
+  }, [fieldUsers, presenceMap, agendas, stores, todayYmd, allVerifiedReports, now]);
 
   // Filtered users by search
   const filteredUsers = useMemo(() => {
@@ -294,16 +298,31 @@ export const ExecutiveTeamView: React.FC<ExecutiveTeamViewProps> = ({
                       </div>
                     </div>
 
-                    {stats.isOnline ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[9.5px] font-black shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Online
-                      </span>
-                    ) : (
-                      <span className="text-[9.5px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full shrink-0">
-                        Standby
-                      </span>
-                    )}
+                    {(() => {
+                      const st = getUserPresenceDetailedStatus(stats.presence, now);
+                      return (
+                        <div className="flex flex-col items-end shrink-0 gap-0.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9.5px] font-black ${st.badgeBg} ${st.badgeText} ${st.badgeBorder}`}
+                            title={st.timeDetail}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${st.dotColor} ${
+                                st.isOnline ? 'animate-pulse' : ''
+                              }`}
+                            />
+                            {st.badgeLabel}
+                          </span>
+                          <span className="text-[8.5px] font-bold text-slate-400">
+                            {st.isOnline && st.openedTimeStr
+                              ? `Buka ${st.openedTimeStr}`
+                              : st.leftTimeStr
+                              ? `Keluar ${st.leftTimeStr}`
+                              : 'Standby'}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Stat chips */}
