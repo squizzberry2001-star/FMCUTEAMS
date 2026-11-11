@@ -23,7 +23,9 @@ import {
   Minimize2,
   Lock,
   Navigation,
+  AlertTriangle,
 } from 'lucide-react';
+import { KendalaAgendaModal } from './common/KendalaAgendaModal';
 import { ScheduleAgenda, ScheduleCategory, User } from '../types';
 import {
   loadLeaflet,
@@ -68,6 +70,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   const [liveDistanceMeters, setLiveDistanceMeters] = useState<number | undefined>(
     agenda.silentAudit?.inDistanceToStoreMeters
   );
+  const [showKendalaModal, setShowKendalaModal] = useState(false);
 
   // Urutan kunjungan toko hari ini (mendukung 1 hari visit 2 toko atau lebih)
   const { storeOrderIndex, totalStoresToday } = useMemo(
@@ -508,6 +511,35 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             )}
           </div>
         )}
+
+        {/* Kendala Lapangan Callout Banner (Jika Ada) */}
+        {agenda.kendala && (
+          <div className="bg-amber-50/95 border border-amber-300 rounded-2xl p-2.5 flex items-start gap-2 shadow-2xs">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[9.5px] font-black uppercase text-amber-800 tracking-wider">
+                  ⚠️ Kendala Dilaporkan {agenda.kendalaCategory ? `• ${agenda.kendalaCategory}` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowKendalaModal(true)}
+                  className="text-[9.5px] font-extrabold text-amber-700 underline hover:text-amber-900 cursor-pointer"
+                >
+                  Ubah
+                </button>
+              </div>
+              <p className="text-[11px] font-semibold text-amber-950 mt-0.5 whitespace-pre-wrap leading-tight">
+                {agenda.kendala}
+              </p>
+              {agenda.kendalaReportedBy && (
+                <span className="text-[9px] text-amber-600 font-bold block mt-0.5">
+                  Oleh: {agenda.kendalaReportedBy}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 3. Middle Section:
@@ -612,7 +644,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
       {/* 4. Bottom Primary Action Bar:
           - Panel Presensi Actual IN & Actual OUT (Tanpa teks GPS di sisi user — berjalan senyap di balik sistem)
           - Tombol Buka Form Visit Report HANYA untuk Jadwal VISIT */}
-      {isVisitAgenda && (
+      {isVisitAgenda ? (
         <div className="shrink-0 space-y-2">
           {/* Compact Automatic System Actual IN / OUT Bar (Read-Only, Auto-Recorded within 1-50m) */}
           <div className="bg-white rounded-2xl p-2.5 shadow-soft-card border border-slate-100">
@@ -715,14 +747,29 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             )}
           </div>
 
-          {/* Action Row: Tombol Rute (Kiri, Ukuran Tinggi Sama, Panjang Lebih Kecil) & Tombol Buka Form Visit (Kanan) */}
-          <div className="flex items-center gap-2.5 w-full">
+          {/* Action Row: Tombol Kendala, Tombol Rute & Tombol Buka Form Visit */}
+          <div className="flex items-center gap-2 w-full">
+            {/* Tombol Kendala */}
+            <button
+              type="button"
+              onClick={() => setShowKendalaModal(true)}
+              className={`py-3 px-3 sm:px-3.5 rounded-2xl border transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 font-black text-xs shadow-xs cursor-pointer shrink-0 ${
+                agenda.kendala
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
+                  : 'bg-white hover:bg-amber-50/80 border-slate-200/90 text-amber-800 hover:border-amber-300'
+              }`}
+              title="Lapor Kendala Lapangan"
+            >
+              <AlertTriangle className={`w-4 h-4 ${agenda.kendala ? 'text-white' : 'text-amber-600'} stroke-[2.2]`} />
+              <span>{agenda.kendala ? 'KENDALA' : 'KENDALA'}</span>
+            </button>
+
             {/* Tombol Rute Google Maps */}
             <button
               type="button"
               onClick={handleOpenGoogleMapsRoute}
               title={`Buka Navigasi Rute Google Maps ke ${primaryGeoPoint?.name || agenda.storeName || agenda.location}`}
-              className="py-3 px-3.5 sm:px-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-800 hover:text-teal-700 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 font-black text-xs shadow-xs cursor-pointer shrink-0"
+              className="py-3 px-3 sm:px-3.5 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-800 hover:text-teal-700 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 font-black text-xs shadow-xs cursor-pointer shrink-0"
             >
               <Navigation className="w-4 h-4 text-teal-600 fill-teal-600/20 stroke-[2.4]" />
               <span>RUTE</span>
@@ -774,7 +821,35 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
             </p>
           ) : null}
         </div>
+      ) : (
+        <div className="shrink-0 pt-1">
+          <button
+            type="button"
+            onClick={() => setShowKendalaModal(true)}
+            className={`w-full py-3 px-4 rounded-2xl border transition-all active:scale-[0.98] flex items-center justify-center gap-2 font-black text-xs shadow-xs cursor-pointer ${
+              agenda.kendala
+                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
+                : 'bg-white hover:bg-amber-50/80 border-slate-200/90 text-amber-800 hover:border-amber-300'
+            }`}
+          >
+            <AlertTriangle className={`w-4 h-4 ${agenda.kendala ? 'text-white' : 'text-amber-600'}`} />
+            <span>{agenda.kendala ? 'LIHAT / UBAH KENDALA AGENDA' : 'LAPOR KENDALA AGENDA'}</span>
+          </button>
+        </div>
       )}
+
+      {/* Modal Lapor Kendala Agenda */}
+      <KendalaAgendaModal
+        isOpen={showKendalaModal}
+        agenda={agenda}
+        currentUser={currentUser}
+        onClose={() => setShowKendalaModal(false)}
+        onSaveKendala={(updated) => {
+          if (onUpdateAgenda) {
+            onUpdateAgenda(updated);
+          }
+        }}
+      />
     </div>
   );
 };

@@ -81,6 +81,10 @@ export interface ScheduleAgenda {
   actualInIso?: string;
   actualOutIso?: string;
   silentAudit?: ActualAttendanceSilentAudit;
+  kendala?: string; // Catatan kendala lapangan
+  kendalaCategory?: string; // Kategori kendala: TOKO_TUTUP, AKSES_LOKASI, STORE_HEAD_ABSEN, SISTEM_JARINGAN, LAINNYA
+  kendalaReportedAt?: string; // ISO string waktu kendala dilaporkan
+  kendalaReportedBy?: string; // Nama user pelapor kendala
 }
 
 export interface User {

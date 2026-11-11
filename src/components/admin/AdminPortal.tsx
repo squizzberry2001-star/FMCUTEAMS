@@ -1171,6 +1171,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         'Status Pelaksanaan': item.status.label,
         'Actual IN': ag.actualIn || item.report?.actualIn || '-',
         'Actual OUT': ag.actualOut || item.report?.actualOut || '-',
+        'Kendala Lapangan': ag.kendala || '-',
         'Laporan QSC Submit': item.report?.status === 'SUBMITTED' ? 'SUDAH SUBMIT' : item.isExplicitVisit ? 'BELUM' : 'TIDAK PERLU',
         'Deskripsi / Catatan': ag.description || '-',
       };
@@ -1743,6 +1744,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                                     {ag.description}
                                   </p>
                                 )}
+                                {ag.kendala && (
+                                  <div className="inline-flex items-center gap-1 text-[9.5px] font-black text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300 mt-1" title={ag.kendala}>
+                                    <span>⚠️ Kendala: {ag.kendala}</span>
+                                  </div>
+                                )}
                               </td>
 
                               {/* Lokasi / Toko */}
@@ -1930,6 +1936,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               <p className="text-[11px] text-slate-500 line-clamp-2">
                                 {ag.description}
                               </p>
+                            )}
+
+                            {ag.kendala && (
+                              <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-[10px] text-amber-900 font-bold flex items-start gap-1.5">
+                                <span className="shrink-0">⚠️</span>
+                                <span className="line-clamp-2">{ag.kendala}</span>
+                              </div>
                             )}
                           </div>
 

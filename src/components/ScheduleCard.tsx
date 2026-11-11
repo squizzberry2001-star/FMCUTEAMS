@@ -145,6 +145,14 @@ export const ScheduleCard: React.FC<ScheduleCardProps> = ({
               {agenda.category}
             </span>
 
+            {/* Kendala Lapangan Badge */}
+            {agenda.kendala && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-300 flex-shrink-0">
+                <span>⚠️</span>
+                <span>Kendala</span>
+              </span>
+            )}
+
             {/* Prioritas Tinggi Badge (Menyamping) */}
             {agenda.priority === 'HIGH' && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200/70 flex-shrink-0">

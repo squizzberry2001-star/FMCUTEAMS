@@ -26,7 +26,9 @@ import {
   Users,
   Trash2,
   Lock,
+  AlertTriangle,
 } from 'lucide-react';
+import { KendalaAgendaModal } from './common/KendalaAgendaModal';
 import { ScheduleAgenda, User, SCHEDULE_CATEGORY_OPTIONS } from '../types';
 import { CalendarStrip, CalendarFocusTrigger } from './CalendarStrip';
 import { DeveloperFooter } from './DeveloperFooter';
@@ -91,6 +93,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'schedule' | 'coverage' | 'profile'>('dashboard');
+  const [showKendalaModal, setShowKendalaModal] = useState(false);
 
   const fullName = user.name || 'Bestie FMCU';
 
@@ -901,6 +904,35 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                 </div>
               </div>
 
+              {/* Kendala Lapangan Callout */}
+              {selectedAgenda.kendala && (
+                <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 mt-3 flex items-start gap-2.5 shadow-2xs">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[10px] font-black uppercase text-amber-800 tracking-wider">
+                        ⚠️ Kendala Dilaporkan {selectedAgenda.kendalaCategory ? `• ${selectedAgenda.kendalaCategory}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowKendalaModal(true)}
+                        className="text-[10px] font-bold text-amber-700 underline hover:text-amber-900 cursor-pointer"
+                      >
+                        Ubah
+                      </button>
+                    </div>
+                    <p className="text-xs font-semibold text-amber-950 mt-1 whitespace-pre-wrap leading-tight">
+                      {selectedAgenda.kendala}
+                    </p>
+                    {selectedAgenda.kendalaReportedBy && (
+                      <span className="text-[10px] text-amber-600 font-bold block mt-1">
+                        Dilaporkan oleh: {selectedAgenda.kendalaReportedBy}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Action 0: Toggle Selesai / Belum Selesai */}
               {onToggleComplete && (
                 <button
@@ -939,6 +971,21 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
               >
                 <Share2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>Broadcast ke WhatsApp</span>
+              </button>
+
+              {/* Action 2.5: Tombol Lapor Kendala */}
+              <button
+                type="button"
+                onClick={() => setShowKendalaModal(true)}
+                className={`w-full py-2.5 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 border transition-all active:scale-95 cursor-pointer mt-2 shadow-2xs ${
+                  selectedAgenda.kendala
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                }`}
+                title="Lapor Kendala Lapangan"
+              >
+                <AlertTriangle className={`w-3.5 h-3.5 ${selectedAgenda.kendala ? 'text-white' : 'text-amber-600'} shrink-0`} />
+                <span>{selectedAgenda.kendala ? 'Lihat / Ubah Kendala Lapangan' : 'Lapor Kendala'}</span>
               </button>
 
               {/* Action 3: Tombol Buka Form Visit Report (Khusus Jadwal VISIT) */}
@@ -1058,6 +1105,21 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
             <DeveloperFooter className="text-center" />
           </div>
         </aside>
+      )}
+
+      {/* Modal Lapor Kendala Agenda Desktop */}
+      {selectedAgenda && (
+        <KendalaAgendaModal
+          isOpen={showKendalaModal}
+          agenda={selectedAgenda}
+          currentUser={user}
+          onClose={() => setShowKendalaModal(false)}
+          onSaveKendala={(updated) => {
+            if (onUpdateAgenda) {
+              onUpdateAgenda(updated);
+            }
+          }}
+        />
       )}
     </div>
   );
