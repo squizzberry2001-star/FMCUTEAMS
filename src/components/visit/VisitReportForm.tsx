@@ -46,7 +46,15 @@ import {
   Star,
   Pencil,
   Cpu,
-  Zap
+  Zap,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  CheckSquare,
+  Quote,
+  Type,
+  Eraser
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduleAgenda, User } from '../../types';
@@ -107,9 +115,12 @@ interface VisitReportFormProps {
 // Menyesuaikan tinggi secara presisi saat nilai dimuat (draft/refresh)
 // dan saat tab/section berubah dari hidden menjadi visible.
 // ============================================================================
-interface AutoResizeTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+interface AutoResizeTextareaProps
+  extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> {
   value?: string;
+  onChange?: (e: { target: { value: string } } | React.ChangeEvent<HTMLTextAreaElement>) => void;
   minRows?: number;
+  enableRichText?: boolean;
 }
 
 const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
@@ -118,10 +129,18 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   minRows = 2,
   className = '',
   style,
+  enableRichText = true,
+  onFocus,
+  onBlur,
+  placeholder,
   ...props
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isUserTypingRef = useRef(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const blurTimeoutRef = useRef<any>(null);
+
+  const isAmberTheme = className.includes('amber');
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -184,25 +203,387 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [adjustHeight]);
 
+  const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    setIsFocused(true);
+    if (onFocus) onFocus(e);
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    blurTimeoutRef.current = setTimeout(() => {
+      setIsFocused(false);
+    }, 180);
+    if (onBlur) onBlur(e);
+  };
+
+  const applyFormat = (
+    type: 'bold' | 'italic' | 'bullet' | 'number' | 'check' | 'quote' | 'case' | 'clear'
+  ) => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const currentVal = String(value || '');
+    const selectedText = currentVal.substring(start, end);
+
+    let newText = currentVal;
+    let newStart = start;
+    let newEnd = end;
+
+    switch (type) {
+      case 'bold': {
+        if (selectedText.startsWith('**') && selectedText.endsWith('**') && selectedText.length >= 4) {
+          const inner = selectedText.slice(2, -2);
+          newText = currentVal.substring(0, start) + inner + currentVal.substring(end);
+          newEnd = start + inner.length;
+        } else if (selectedText.length > 0) {
+          const wrapped = `**${selectedText}**`;
+          newText = currentVal.substring(0, start) + wrapped + currentVal.substring(end);
+          newEnd = start + wrapped.length;
+        } else {
+          newText = currentVal.substring(0, start) + '****' + currentVal.substring(end);
+          newStart = start + 2;
+          newEnd = start + 2;
+        }
+        break;
+      }
+      case 'italic': {
+        if (
+          selectedText.startsWith('*') &&
+          selectedText.endsWith('*') &&
+          selectedText.length >= 2 &&
+          !selectedText.startsWith('**')
+        ) {
+          const inner = selectedText.slice(1, -1);
+          newText = currentVal.substring(0, start) + inner + currentVal.substring(end);
+          newEnd = start + inner.length;
+        } else if (selectedText.length > 0) {
+          const wrapped = `*${selectedText}*`;
+          newText = currentVal.substring(0, start) + wrapped + currentVal.substring(end);
+          newEnd = start + wrapped.length;
+        } else {
+          newText = currentVal.substring(0, start) + '**' + currentVal.substring(end);
+          newStart = start + 1;
+          newEnd = start + 1;
+        }
+        break;
+      }
+      case 'bullet': {
+        if (selectedText.length > 0) {
+          const lines = selectedText.split('\n');
+          const allBulleted = lines.every((l) => l.startsWith('• ') || l.startsWith('- '));
+          const modified = lines
+            .map((l) =>
+              allBulleted ? l.replace(/^([•\-]\s*)/, '') : `• ${l.replace(/^([•\-]\s*)/, '')}`
+            )
+            .join('\n');
+          newText = currentVal.substring(0, start) + modified + currentVal.substring(end);
+          newEnd = start + modified.length;
+        } else {
+          const before = currentVal.substring(0, start);
+          const lastNl = before.lastIndexOf('\n');
+          const lineStart = lastNl === -1 ? 0 : lastNl + 1;
+          const lineText = currentVal.substring(lineStart, start);
+          if (lineText.startsWith('• ')) {
+            newText =
+              currentVal.substring(0, lineStart) +
+              lineText.slice(2) +
+              currentVal.substring(start);
+            newStart = Math.max(lineStart, start - 2);
+            newEnd = newStart;
+          } else {
+            newText =
+              currentVal.substring(0, lineStart) + '• ' + currentVal.substring(lineStart);
+            newStart = start + 2;
+            newEnd = newStart;
+          }
+        }
+        break;
+      }
+      case 'number': {
+        if (selectedText.length > 0) {
+          const lines = selectedText.split('\n');
+          const allNumbered = lines.every((l) => /^\d+\.\s*/.test(l));
+          const modified = lines
+            .map((l, i) =>
+              allNumbered ? l.replace(/^\d+\.\s*/, '') : `${i + 1}. ${l.replace(/^\d+\.\s*/, '')}`
+            )
+            .join('\n');
+          newText = currentVal.substring(0, start) + modified + currentVal.substring(end);
+          newEnd = start + modified.length;
+        } else {
+          const before = currentVal.substring(0, start);
+          const lastNl = before.lastIndexOf('\n');
+          const lineStart = lastNl === -1 ? 0 : lastNl + 1;
+          newText =
+            currentVal.substring(0, lineStart) + '1. ' + currentVal.substring(lineStart);
+          newStart = start + 3;
+          newEnd = newStart;
+        }
+        break;
+      }
+      case 'check': {
+        if (selectedText.length > 0) {
+          const lines = selectedText.split('\n');
+          const allChecked = lines.every((l) => l.startsWith('✓ ') || l.startsWith('[✓] '));
+          const modified = lines
+            .map((l) =>
+              allChecked ? l.replace(/^(\[✓\]\s*|✓\s*)/, '') : `✓ ${l.replace(/^(\[✓\]\s*|✓\s*)/, '')}`
+            )
+            .join('\n');
+          newText = currentVal.substring(0, start) + modified + currentVal.substring(end);
+          newEnd = start + modified.length;
+        } else {
+          const before = currentVal.substring(0, start);
+          const lastNl = before.lastIndexOf('\n');
+          const lineStart = lastNl === -1 ? 0 : lastNl + 1;
+          newText =
+            currentVal.substring(0, lineStart) + '✓ ' + currentVal.substring(lineStart);
+          newStart = start + 2;
+          newEnd = newStart;
+        }
+        break;
+      }
+      case 'quote': {
+        if (selectedText.length > 0) {
+          const lines = selectedText.split('\n');
+          const allQuoted = lines.every((l) => l.startsWith('> '));
+          const modified = lines
+            .map((l) => (allQuoted ? l.replace(/^>\s*/, '') : `> ${l.replace(/^>\s*/, '')}`))
+            .join('\n');
+          newText = currentVal.substring(0, start) + modified + currentVal.substring(end);
+          newEnd = start + modified.length;
+        } else {
+          const before = currentVal.substring(0, start);
+          const lastNl = before.lastIndexOf('\n');
+          const lineStart = lastNl === -1 ? 0 : lastNl + 1;
+          newText =
+            currentVal.substring(0, lineStart) + '> ' + currentVal.substring(lineStart);
+          newStart = start + 2;
+          newEnd = newStart;
+        }
+        break;
+      }
+      case 'case': {
+        if (selectedText.length > 0) {
+          let transformed = selectedText;
+          if (selectedText === selectedText.toUpperCase()) {
+            transformed = selectedText.toLowerCase();
+          } else if (selectedText === selectedText.toLowerCase()) {
+            transformed = selectedText.replace(/\b\w/g, (c) => c.toUpperCase());
+          } else {
+            transformed = selectedText.toUpperCase();
+          }
+          newText = currentVal.substring(0, start) + transformed + currentVal.substring(end);
+          newEnd = start + transformed.length;
+        }
+        break;
+      }
+      case 'clear': {
+        if (selectedText.length > 0) {
+          const cleaned = selectedText
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/\*(.*?)\*/g, '$1')
+            .replace(/^[\s*•\-–—✓>]+\s*/gm, '')
+            .replace(/^\d+\.\s*/gm, '');
+          newText = currentVal.substring(0, start) + cleaned + currentVal.substring(end);
+          newEnd = start + cleaned.length;
+        } else {
+          const cleaned = currentVal
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/\*(.*?)\*/g, '$1')
+            .replace(/^[\s*•\-–—✓>]+\s*/gm, '')
+            .replace(/^\d+\.\s*/gm, '');
+          newText = cleaned;
+          newStart = 0;
+          newEnd = cleaned.length;
+        }
+        break;
+      }
+    }
+
+    isUserTypingRef.current = true;
+    if (onChange) {
+      onChange({ target: { value: newText } } as any);
+    }
+
+    requestAnimationFrame(() => {
+      el.focus();
+      try {
+        el.setSelectionRange(newStart, newEnd);
+      } catch (_) {}
+      adjustHeight();
+    });
+  };
+
+  if (!enableRichText) {
+    return (
+      <textarea
+        ref={textareaRef}
+        rows={minRows}
+        value={value}
+        onChange={(e) => {
+          isUserTypingRef.current = true;
+          if (onChange) onChange(e);
+          adjustHeight();
+        }}
+        style={{
+          ...style,
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          resize: 'none',
+        }}
+        className={className}
+        placeholder={placeholder}
+        {...props}
+      />
+    );
+  }
+
   return (
-    <textarea
-      ref={textareaRef}
-      rows={minRows}
-      value={value}
-      onChange={(e) => {
-        isUserTypingRef.current = true;
-        if (onChange) onChange(e);
-        adjustHeight();
-      }}
-      style={{
-        ...style,
-        boxSizing: 'border-box',
-        overflow: 'hidden',
-        resize: 'none',
-      }}
-      className={className}
-      {...props}
-    />
+    <div
+      className={`relative w-full rounded-xl transition-all duration-200 ${
+        isFocused
+          ? isAmberTheme
+            ? 'border border-amber-400 ring-2 ring-amber-400/25 bg-white shadow-xs'
+            : 'border border-teal-500 ring-2 ring-teal-500/20 bg-white shadow-xs'
+          : isAmberTheme
+          ? 'border border-amber-300/80 bg-amber-50/40 hover:border-amber-400'
+          : 'border border-slate-200 bg-slate-50/70 hover:border-slate-300'
+      }`}
+    >
+      {/* Smooth Collapsible Rich Text Toolbar (Only Icons, Spaciously Padded, No Titles) */}
+      <div
+        className={`w-full transition-all duration-250 ease-out overflow-hidden ${
+          isFocused
+            ? isAmberTheme
+              ? 'max-h-12 opacity-100 border-b border-amber-200/70 bg-amber-50/60 px-2 sm:px-2.5 py-1 pointer-events-auto'
+              : 'max-h-12 opacity-100 border-b border-slate-100 bg-slate-50/90 px-2 sm:px-2.5 py-1 pointer-events-auto'
+            : 'max-h-0 opacity-0 py-0 px-2 sm:px-2.5 border-b-0 pointer-events-none'
+        }`}
+        onMouseDown={(e) => e.preventDefault()}
+        onTouchStart={() => {
+          if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+        }}
+      >
+        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          {/* Bold */}
+          <button
+            type="button"
+            onClick={() => applyFormat('bold')}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title="Tebal (Bold)"
+          >
+            <Bold className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Italic */}
+          <button
+            type="button"
+            onClick={() => applyFormat('italic')}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title="Miring (Italic)"
+          >
+            <Italic className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Divider */}
+          <div className="w-px h-3.5 bg-slate-200/90 shrink-0 mx-0.5 sm:mx-1" />
+
+          {/* Bullet List */}
+          <button
+            type="button"
+            onClick={() => applyFormat('bullet')}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title="Daftar Poin (Bullet List)"
+          >
+            <List className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Numbered List */}
+          <button
+            type="button"
+            onClick={() => applyFormat('number')}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title="Daftar Angka (Numbered List)"
+          >
+            <ListOrdered className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Checklist */}
+          <button
+            type="button"
+            onClick={() => applyFormat('check')}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title="Daftar Centang (Checklist)"
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Divider */}
+          <div className="w-px h-3.5 bg-slate-200/90 shrink-0 mx-0.5 sm:mx-1" />
+
+          {/* Quote */}
+          <button
+            type="button"
+            onClick={() => applyFormat('quote')}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title="Kutipan / Catatan (Quote)"
+          >
+            <Quote className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Case Transform */}
+          <button
+            type="button"
+            onClick={() => applyFormat('case')}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title="Ubah Kapitalisasi (Case Transform)"
+          >
+            <Type className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Divider */}
+          <div className="w-px h-3.5 bg-slate-200/90 shrink-0 mx-0.5 sm:mx-1" />
+
+          {/* Clear Format */}
+          <button
+            type="button"
+            onClick={() => applyFormat('clear')}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title="Hapus Format (Clear Formatting)"
+          >
+            <Eraser className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Textarea */}
+      <textarea
+        ref={textareaRef}
+        rows={minRows}
+        value={value}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onChange={(e) => {
+          isUserTypingRef.current = true;
+          if (onChange) onChange(e);
+          adjustHeight();
+        }}
+        placeholder={placeholder}
+        style={{
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          resize: 'none',
+          ...style,
+        }}
+        className={`w-full bg-transparent p-2 sm:p-2.5 text-[11.6px] outline-none transition leading-[1.45] placeholder:text-slate-400 ${
+          isAmberTheme ? 'font-bold text-slate-900' : 'text-slate-800'
+        }`}
+        {...props}
+      />
+    </div>
   );
 };
 
