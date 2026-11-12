@@ -167,18 +167,24 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   // Convert incoming value (markdown or plain text) to standard HTML
   const toHtml = useCallback((raw: string): string => {
     if (!raw) return '';
+
+    // Convert markdown & newlines to HTML, converting asterisks to bold and italic
+    let html = raw
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/(?<!\*)\*([^*<>\n]+?)\*(?!\*)/g, '<i>$1</i>');
+
     // If string already contains HTML tags (e.g. <b>, <i>, <ul>, <ol>, <li>, <div>, <p>, <br>)
-    if (/<(b|i|u|strong|em|ul|ol|li|p|div|br)[\s\S]*>/i.test(raw)) {
-      return raw;
+    if (/<(b|i|u|strong|em|ul|ol|li|p|div|br)[\s\S]*>/i.test(html)) {
+      return html;
     }
 
-    // Convert markdown & newlines to HTML
-    let html = raw
+    // Escape special HTML characters
+    html = html
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-      .replace(/\*(.+?)\*/g, '<i>$1</i>');
+      .replace(/(?<!\*)\*([^*<>\n]+?)\*(?!\*)/g, '<i>$1</i>');
 
     const lines = html.split('\n');
     const result: string[] = [];
@@ -229,11 +235,34 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   const updateActiveFormats = useCallback(() => {
     if (typeof document === 'undefined') return;
     try {
+      const isBold = document.queryCommandState('bold');
+      const isItalic = document.queryCommandState('italic');
+      let isBullet = document.queryCommandState('insertUnorderedList');
+      let isNumber = document.queryCommandState('insertOrderedList');
+
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && editorRef.current) {
+        const anchor = sel.anchorNode;
+        const parentLi = (anchor?.nodeType === Node.ELEMENT_NODE ? (anchor as HTMLElement) : anchor?.parentElement)?.closest('li');
+        if (parentLi) {
+          if (parentLi.closest('ol')) isNumber = true;
+          if (parentLi.closest('ul')) isBullet = true;
+        } else {
+          const range = sel.getRangeAt(0);
+          const rangeToStart = range.cloneRange();
+          rangeToStart.setStart(editorRef.current, 0);
+          const textBefore = rangeToStart.toString();
+          const currentLine = textBefore.split('\n').pop() || '';
+          if (/^(\s*)[•\-*]/.test(currentLine)) isBullet = true;
+          if (/^(\s*)\d+\./.test(currentLine)) isNumber = true;
+        }
+      }
+
       setActiveFormats({
-        bold: document.queryCommandState('bold'),
-        italic: document.queryCommandState('italic'),
-        bullet: document.queryCommandState('insertUnorderedList'),
-        number: document.queryCommandState('insertOrderedList'),
+        bold: isBold,
+        italic: isItalic,
+        bullet: isBullet,
+        number: isNumber,
       });
     } catch (_) {}
   }, []);
@@ -259,9 +288,19 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
     if (!el) return;
     isUserTypingRef.current = true;
 
+    // Auto-convert any typed markdown asterisks (e.g. **word** -> <b>word</b>)
+    let inner = el.innerHTML;
+    if (/\*\*(.+?)\*\*/.test(inner) || /(?<!\*)\*([^*<>\n]+?)\*(?!\*)/.test(inner)) {
+      inner = inner
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/(?<!\*)\*([^*<>\n]+?)\*(?!\*)/g, '<i>$1</i>');
+      el.innerHTML = inner;
+    }
+
     let html = el.innerHTML;
     const textContent = el.textContent || '';
-    if (!textContent.trim() && !el.querySelector('img')) {
+    const hasList = el.querySelector('li') !== null;
+    if (!textContent.trim() && !hasList && !el.querySelector('img')) {
       html = '';
     }
 
@@ -287,12 +326,12 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     // 1. Enter key handling for automatic bullet & numbered list continuation
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       const sel = window.getSelection();
-      if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
+      if (!sel || !sel.rangeCount || !editorRef.current) return;
 
       const anchor = sel.anchorNode;
-      const parentLi = (anchor.nodeType === Node.ELEMENT_NODE ? (anchor as HTMLElement) : anchor.parentElement)?.closest('li');
+      const parentLi = (anchor?.nodeType === Node.ELEMENT_NODE ? (anchor as HTMLElement) : anchor?.parentElement)?.closest('li');
 
       // Case A: Inside native <ul> / <ol> <li>
       if (parentLi) {
@@ -314,107 +353,80 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
       }
 
       // Case B: Plain text lines with bullet (•, -, *) or number (1., 2.)
-      const textNode = anchor.nodeType === Node.TEXT_NODE ? anchor : null;
-      if (textNode) {
-        const textVal = textNode.textContent || '';
-        const offset = sel.anchorOffset;
-        const textBefore = textVal.slice(0, offset);
-        const lines = textBefore.split('\n');
-        const currentLine = lines[lines.length - 1] || '';
+      const range = sel.getRangeAt(0);
+      const rangeToStart = range.cloneRange();
+      rangeToStart.setStart(editorRef.current, 0);
+      const textBefore = rangeToStart.toString();
+      const currentLine = textBefore.split('\n').pop() || '';
 
-        // Check for bullet: •, -, *
-        const bulletMatch = currentLine.match(/^(\s*)([•\-*])\s(.*)$/);
-        if (bulletMatch) {
-          e.preventDefault();
-          const [_, indent, symbol, content] = bulletMatch;
-          if (!content.trim()) {
-            // Empty bullet line -> clear bullet and exit
-            const startOfLineOffset = offset - currentLine.length;
-            const range = document.createRange();
-            range.setStart(textNode, startOfLineOffset);
-            range.setEnd(textNode, offset);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            document.execCommand('delete', false);
-            document.execCommand('insertParagraph', false);
-          } else {
-            // Continue bullet
-            document.execCommand('insertParagraph', false);
-            document.execCommand('insertText', false, `${indent}${symbol} `);
-          }
-          handleInput();
-          return;
+      // Check for bullet: •, -, *
+      const bulletMatch = currentLine.match(/^(\s*)([•\-*])\s*(.*)$/);
+      if (bulletMatch) {
+        e.preventDefault();
+        const [_, indent, symbol, content] = bulletMatch;
+        if (!content.trim()) {
+          // Empty bullet line -> clear line and exit
+          document.execCommand('delete', false);
+          document.execCommand('insertParagraph', false);
+        } else {
+          // Continue bullet on next line
+          document.execCommand('insertParagraph', false);
+          document.execCommand('insertText', false, `${indent}• `);
         }
+        handleInput();
+        return;
+      }
 
-        // Check for numbered list: 1., 2. etc.
-        const numMatch = currentLine.match(/^(\s*)(\d+)\.\s(.*)$/);
-        if (numMatch) {
-          e.preventDefault();
-          const [_, indent, numStr, content] = numMatch;
-          if (!content.trim()) {
-            // Empty number line -> clear number and exit
-            const startOfLineOffset = offset - currentLine.length;
-            const range = document.createRange();
-            range.setStart(textNode, startOfLineOffset);
-            range.setEnd(textNode, offset);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            document.execCommand('delete', false);
-            document.execCommand('insertParagraph', false);
-          } else {
-            // Continue next number
-            const nextNum = parseInt(numStr, 10) + 1;
-            document.execCommand('insertParagraph', false);
-            document.execCommand('insertText', false, `${indent}${nextNum}. `);
-          }
-          handleInput();
-          return;
+      // Check for numbered list: 1., 2. etc.
+      const numMatch = currentLine.match(/^(\s*)(\d+)\.\s*(.*)$/);
+      if (numMatch) {
+        e.preventDefault();
+        const [_, indent, numStr, content] = numMatch;
+        if (!content.trim()) {
+          // Empty number line -> clear line and exit
+          document.execCommand('delete', false);
+          document.execCommand('insertParagraph', false);
+        } else {
+          // Continue next number
+          const nextNum = parseInt(numStr, 10) + 1;
+          document.execCommand('insertParagraph', false);
+          document.execCommand('insertText', false, `${indent}${nextNum}. `);
         }
+        handleInput();
+        return;
+      }
 
-        // Check for checklist: ✓
-        const checkMatch = currentLine.match(/^(\s*)(✓)\s(.*)$/);
-        if (checkMatch) {
-          e.preventDefault();
-          const [_, indent, symbol, content] = checkMatch;
-          if (!content.trim()) {
-            const startOfLineOffset = offset - currentLine.length;
-            const range = document.createRange();
-            range.setStart(textNode, startOfLineOffset);
-            range.setEnd(textNode, offset);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            document.execCommand('delete', false);
-            document.execCommand('insertParagraph', false);
-          } else {
-            document.execCommand('insertParagraph', false);
-            document.execCommand('insertText', false, `${indent}${symbol} `);
-          }
-          handleInput();
-          return;
+      // Check for checklist: ✓
+      const checkMatch = currentLine.match(/^(\s*)(✓)\s*(.*)$/);
+      if (checkMatch) {
+        e.preventDefault();
+        const [_, indent, symbol, content] = checkMatch;
+        if (!content.trim()) {
+          document.execCommand('delete', false);
+          document.execCommand('insertParagraph', false);
+        } else {
+          document.execCommand('insertParagraph', false);
+          document.execCommand('insertText', false, `${indent}${symbol} `);
         }
+        handleInput();
+        return;
       }
     }
 
     // 2. Backspace key handling on empty prefix
     if (e.key === 'Backspace') {
       const sel = window.getSelection();
-      if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
-      const anchor = sel.anchorNode;
-      if (anchor.nodeType === Node.TEXT_NODE) {
-        const textVal = anchor.textContent || '';
-        const offset = sel.anchorOffset;
-        const textBefore = textVal.slice(0, offset);
-        if (/^(\s*)([•\-*]|✓|\d+\.)\s$/.test(textBefore)) {
-          e.preventDefault();
-          const range = document.createRange();
-          range.setStart(anchor, 0);
-          range.setEnd(anchor, offset);
-          sel.removeAllRanges();
-          sel.addRange(range);
-          document.execCommand('delete', false);
-          handleInput();
-          return;
-        }
+      if (!sel || !sel.rangeCount || !editorRef.current) return;
+      const range = sel.getRangeAt(0);
+      const rangeToStart = range.cloneRange();
+      rangeToStart.setStart(editorRef.current, 0);
+      const textBefore = rangeToStart.toString();
+      const currentLine = textBefore.split('\n').pop() || '';
+      if (/^(\s*)([•\-*]|✓|\d+\.)\s*$/.test(currentLine)) {
+        e.preventDefault();
+        document.execCommand('delete', false);
+        handleInput();
+        return;
       }
     }
   };
@@ -428,18 +440,48 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
     el.focus();
 
     switch (type) {
-      case 'bold':
+      case 'bold': {
         document.execCommand('bold', false);
         break;
-      case 'italic':
+      }
+      case 'italic': {
         document.execCommand('italic', false);
         break;
-      case 'bullet':
-        document.execCommand('insertUnorderedList', false);
+      }
+      case 'bullet': {
+        if (!el.textContent?.trim() && !el.querySelector('li')) {
+          el.innerHTML = '<ul><li><br></li></ul>';
+          const li = el.querySelector('li');
+          if (li) {
+            const newRange = document.createRange();
+            newRange.setStart(li, 0);
+            newRange.collapse(true);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(newRange);
+          }
+        } else {
+          document.execCommand('insertUnorderedList', false);
+        }
         break;
-      case 'number':
-        document.execCommand('insertOrderedList', false);
+      }
+      case 'number': {
+        if (!el.textContent?.trim() && !el.querySelector('li')) {
+          el.innerHTML = '<ol><li><br></li></ol>';
+          const li = el.querySelector('li');
+          if (li) {
+            const newRange = document.createRange();
+            newRange.setStart(li, 0);
+            newRange.collapse(true);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(newRange);
+          }
+        } else {
+          document.execCommand('insertOrderedList', false);
+        }
         break;
+      }
       case 'check': {
         const sel = window.getSelection();
         if (sel && sel.rangeCount > 0) {
@@ -477,10 +519,19 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
         }
         break;
       }
-      case 'clear':
+      case 'clear': {
         document.execCommand('removeFormat', false);
         document.execCommand('formatBlock', false, 'div');
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const text = sel.toString();
+          if (/[*•✓]/.test(text) || /^\d+\.\s*/m.test(text)) {
+            const cleaned = text.replace(/[*•✓]/g, '').replace(/^\d+\.\s*/gm, '');
+            document.execCommand('insertText', false, cleaned);
+          }
+        }
         break;
+      }
     }
 
     handleInput();
@@ -544,6 +595,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           {/* Bold */}
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => applyFormat('bold')}
             className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs ${
               activeFormats.bold
@@ -558,6 +613,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           {/* Italic */}
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => applyFormat('italic')}
             className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs ${
               activeFormats.italic
@@ -575,6 +634,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           {/* Bullet List */}
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => applyFormat('bullet')}
             className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs ${
               activeFormats.bullet
@@ -589,6 +652,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           {/* Numbered List */}
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => applyFormat('number')}
             className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs ${
               activeFormats.number
@@ -603,6 +670,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           {/* Checklist */}
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => applyFormat('check')}
             className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
             title="Daftar Centang (Checklist)"
@@ -616,6 +687,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           {/* Quote */}
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => applyFormat('quote')}
             className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
             title="Kutipan / Catatan (Quote)"
@@ -626,6 +701,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           {/* Case Transform */}
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => applyFormat('case')}
             className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
             title="Ubah Kapitalisasi (Case Transform)"
@@ -639,6 +718,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           {/* Clear Format */}
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => applyFormat('clear')}
             className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
             title="Hapus Format (Clear Formatting)"
