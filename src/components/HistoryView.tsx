@@ -130,7 +130,10 @@ export function resolveVisitedStoreReportData(params: {
             const nameMatch =
               String(parsed?.storeName || '').toUpperCase() ===
               String(resolvedName).toUpperCase();
-            if (codeMatch || nameMatch) {
+            // CRUCIAL STORE & DATE ISOLATION:
+            // Only match if the visitDate matches resolvedDate (or agenda.id matches)!
+            const dateMatch = !agenda?.date || parsed?.visitDate === resolvedDate;
+            if ((codeMatch || nameMatch) && dateMatch) {
               return {
                 reportData: parsed,
                 gdrivePdfUrl:
@@ -239,6 +242,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           for (const r of reps) {
             const key = `fmcu_visit_report_${r.agendaId || r.id}`;
             try {
+              const existingRaw = localStorage.getItem(key);
+              if (existingRaw) {
+                const existingParsed = JSON.parse(existingRaw);
+                const localMs = Number(existingParsed.updatedAtMs || 0);
+                const remoteMs = Number(r.updatedAtMs || 0);
+                if (localMs > remoteMs) continue; // Keep fresher local draft!
+              }
               localStorage.setItem(key, JSON.stringify(r));
             } catch {
               // ignore storage quota

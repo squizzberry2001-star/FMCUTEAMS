@@ -80,6 +80,7 @@ import {
 import {
   fetchVisitReportFromCloud,
   pushVisitReportToCloud,
+  flushVisitReportImmediate,
   subscribeToCrossDeviceVisit,
   saveVisitPhotosToIdb,
   loadVisitPhotosFromIdb,
@@ -375,6 +376,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         const parsed = JSON.parse(saved);
         return filterReportWithTombstones({
           ...parsed,
+          id: parsed.id || `report-${agenda.id}`,
+          agendaId: agenda.id,
+          updatedAtMs: parsed.updatedAtMs || 0,
           actualIn: agenda.actualIn || parsed.actualIn || initialInTime,
           actualOut: agenda.actualOut || parsed.actualOut || initialOutTime,
           actualInSubmitted: Boolean(agenda.actualIn || parsed.actualIn),
@@ -393,7 +397,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
     }
 
     return {
-      id: `report-${Date.now()}`,
+      id: `report-${agenda.id}`,
       agendaId: agenda.id,
       actualIn: initialInTime,
       actualOut: initialOutTime,
@@ -414,11 +418,12 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       qscSheetTop: '',
       qscSheetBottom: '',
       gasSyncStatus: 'idle',
+      updatedAtMs: 0,
       crews: [
-        { id: 'c-1', role: 'Store Head', name: resolvedStoreHead, jobLevel: '' },
-        { id: 'c-2', role: 'Shift Leader', name: '', jobLevel: '' },
-        { id: 'c-3', role: 'Crew Store 1', name: '', jobLevel: '' },
-        { id: 'c-4', role: 'Crew Store 2', name: '', jobLevel: '' },
+        { id: `c-${agenda.id}-1`, role: 'Store Head', name: resolvedStoreHead, jobLevel: '' },
+        { id: `c-${agenda.id}-2`, role: 'Shift Leader', name: '', jobLevel: '' },
+        { id: `c-${agenda.id}-3`, role: 'Crew Store 1', name: '', jobLevel: '' },
+        { id: `c-${agenda.id}-4`, role: 'Crew Store 2', name: '', jobLevel: '' },
       ],
       enableQsc: true,
       enableOpi: true,
@@ -631,23 +636,57 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   useEffect(() => {
     let mounted = true;
 
+    // Helper to safely merge remote photos without losing local base64/IDB URLs
+    const mergePhotosSafely = (
+      remoteList?: EvidencePhoto[],
+      localList: EvidencePhoto[] = []
+    ): EvidencePhoto[] => {
+      if (!Array.isArray(remoteList) || remoteList.length === 0) return localList;
+      return remoteList.map((rp) => {
+        if (!rp.photoUrl || rp.photoUrl === '__IDB__') {
+          const localMatch = localList.find((lp) => lp.id === rp.id);
+          if (localMatch?.photoUrl && localMatch.photoUrl !== '__IDB__') {
+            return { ...rp, photoUrl: localMatch.photoUrl };
+          }
+        }
+        return rp;
+      });
+    };
+
     // 1. Instant local restore from IndexedDB
     loadPhotosFromIdb(draftKey).then((cached) => {
       if (mounted && cached) {
         const deletedPhotos = getDeletedPhotoIds(agenda.id);
-        setFormData((prev) => ({
-          ...prev,
-          storeFrontPhoto: cached.storeFrontPhoto !== undefined ? cached.storeFrontPhoto : prev.storeFrontPhoto,
-          qscSheetPhoto: cached.qscSheetPhoto !== undefined ? cached.qscSheetPhoto : prev.qscSheetPhoto,
-          qscSheetTop: cached.qscSheetTop !== undefined ? cached.qscSheetTop : prev.qscSheetTop,
-          qscSheetBottom: cached.qscSheetBottom !== undefined ? cached.qscSheetBottom : prev.qscSheetBottom,
-          evidencePhotos: Array.isArray(cached.evidencePhotos)
+        setFormData((prev) => {
+          const restoredEvidence = Array.isArray(cached.evidencePhotos) && cached.evidencePhotos.length > 0
             ? (cached.evidencePhotos as EvidencePhoto[]).filter((p) => !deletedPhotos.has(p.id))
-            : prev.evidencePhotos,
-          caPhotos: Array.isArray(cached.caPhotos)
+            : prev.evidencePhotos;
+          const restoredCa = Array.isArray(cached.caPhotos) && cached.caPhotos.length > 0
             ? (cached.caPhotos as EvidencePhoto[]).filter((p) => !deletedPhotos.has(p.id))
-            : prev.caPhotos,
-        }));
+            : prev.caPhotos;
+
+          return {
+            ...prev,
+            storeFrontPhoto:
+              cached.storeFrontPhoto && cached.storeFrontPhoto !== '__IDB__'
+                ? cached.storeFrontPhoto
+                : prev.storeFrontPhoto,
+            qscSheetPhoto:
+              cached.qscSheetPhoto && cached.qscSheetPhoto !== '__IDB__'
+                ? cached.qscSheetPhoto
+                : prev.qscSheetPhoto,
+            qscSheetTop:
+              cached.qscSheetTop && cached.qscSheetTop !== '__IDB__'
+                ? cached.qscSheetTop
+                : prev.qscSheetTop,
+            qscSheetBottom:
+              cached.qscSheetBottom && cached.qscSheetBottom !== '__IDB__'
+                ? cached.qscSheetBottom
+                : prev.qscSheetBottom,
+            evidencePhotos: restoredEvidence,
+            caPhotos: restoredCa,
+          };
+        });
       }
     });
 
@@ -663,27 +702,48 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       if (remoteMs > localMs || isLocalEmpty) {
         const cleanReport = filterReportWithTombstones(cloudReport);
         lastSyncTimestampRef.current = remoteMs || Date.now();
-        setFormData((prev) => ({
-          ...prev,
-          ...cleanReport,
-          crews: Array.isArray(cleanReport.crews) && cleanReport.crews.length >= 2 ? cleanReport.crews : prev.crews,
-          observations: Array.isArray(cleanReport.observations) ? cleanReport.observations : prev.observations,
-          evidencePhotos: Array.isArray(cleanReport.evidencePhotos) ? cleanReport.evidencePhotos : prev.evidencePhotos,
-          caPhotos: Array.isArray(cleanReport.caPhotos) ? cleanReport.caPhotos : prev.caPhotos,
-          storeFrontPhoto: cleanReport.storeFrontPhoto !== undefined ? cleanReport.storeFrontPhoto : prev.storeFrontPhoto,
-          qscSheetPhoto: cleanReport.qscSheetPhoto !== undefined ? cleanReport.qscSheetPhoto : prev.qscSheetPhoto,
-          qscSheetTop: cleanReport.qscSheetTop !== undefined ? cleanReport.qscSheetTop : prev.qscSheetTop,
-          qscSheetBottom: cleanReport.qscSheetBottom !== undefined ? cleanReport.qscSheetBottom : prev.qscSheetBottom,
-          gasSyncStatus: 'synced',
-        }));
+        setFormData((prev) => {
+          const finalEvidence = mergePhotosSafely(cleanReport.evidencePhotos, prev.evidencePhotos);
+          const finalCa = mergePhotosSafely(cleanReport.caPhotos, prev.caPhotos);
+          const finalStoreFront =
+            cleanReport.storeFrontPhoto && cleanReport.storeFrontPhoto !== '__IDB__'
+              ? cleanReport.storeFrontPhoto
+              : prev.storeFrontPhoto;
+          const finalQsc =
+            cleanReport.qscSheetPhoto && cleanReport.qscSheetPhoto !== '__IDB__'
+              ? cleanReport.qscSheetPhoto
+              : prev.qscSheetPhoto;
+          const finalTop =
+            cleanReport.qscSheetTop && cleanReport.qscSheetTop !== '__IDB__'
+              ? cleanReport.qscSheetTop
+              : prev.qscSheetTop;
+          const finalBottom =
+            cleanReport.qscSheetBottom && cleanReport.qscSheetBottom !== '__IDB__'
+              ? cleanReport.qscSheetBottom
+              : prev.qscSheetBottom;
 
-        savePhotosToIdb(draftKey, {
-          storeFrontPhoto: cleanReport.storeFrontPhoto,
-          qscSheetPhoto: cleanReport.qscSheetPhoto,
-          qscSheetTop: cleanReport.qscSheetTop,
-          qscSheetBottom: cleanReport.qscSheetBottom,
-          evidencePhotos: cleanReport.evidencePhotos,
-          caPhotos: cleanReport.caPhotos,
+          savePhotosToIdb(draftKey, {
+            storeFrontPhoto: finalStoreFront,
+            qscSheetPhoto: finalQsc,
+            qscSheetTop: finalTop,
+            qscSheetBottom: finalBottom,
+            evidencePhotos: finalEvidence,
+            caPhotos: finalCa,
+          });
+
+          return {
+            ...prev,
+            ...cleanReport,
+            crews: Array.isArray(cleanReport.crews) && cleanReport.crews.length >= 2 ? cleanReport.crews : prev.crews,
+            observations: Array.isArray(cleanReport.observations) ? cleanReport.observations : prev.observations,
+            evidencePhotos: finalEvidence,
+            caPhotos: finalCa,
+            storeFrontPhoto: finalStoreFront,
+            qscSheetPhoto: finalQsc,
+            qscSheetTop: finalTop,
+            qscSheetBottom: finalBottom,
+            gasSyncStatus: 'synced',
+          };
         });
       }
     });
@@ -696,27 +756,48 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
         if (!mounted || !remoteReport) return;
         const cleanReport = filterReportWithTombstones(remoteReport);
         lastSyncTimestampRef.current = cleanReport.updatedAtMs || Date.now();
-        setFormData((prev) => ({
-          ...prev,
-          ...cleanReport,
-          crews: Array.isArray(cleanReport.crews) && cleanReport.crews.length >= 2 ? cleanReport.crews : prev.crews,
-          observations: Array.isArray(cleanReport.observations) ? cleanReport.observations : prev.observations,
-          evidencePhotos: Array.isArray(cleanReport.evidencePhotos) ? cleanReport.evidencePhotos : prev.evidencePhotos,
-          caPhotos: Array.isArray(cleanReport.caPhotos) ? cleanReport.caPhotos : prev.caPhotos,
-          storeFrontPhoto: cleanReport.storeFrontPhoto !== undefined ? cleanReport.storeFrontPhoto : prev.storeFrontPhoto,
-          qscSheetPhoto: cleanReport.qscSheetPhoto !== undefined ? cleanReport.qscSheetPhoto : prev.qscSheetPhoto,
-          qscSheetTop: cleanReport.qscSheetTop !== undefined ? cleanReport.qscSheetTop : prev.qscSheetTop,
-          qscSheetBottom: cleanReport.qscSheetBottom !== undefined ? cleanReport.qscSheetBottom : prev.qscSheetBottom,
-          gasSyncStatus: 'synced',
-        }));
+        setFormData((prev) => {
+          const finalEvidence = mergePhotosSafely(cleanReport.evidencePhotos, prev.evidencePhotos);
+          const finalCa = mergePhotosSafely(cleanReport.caPhotos, prev.caPhotos);
+          const finalStoreFront =
+            cleanReport.storeFrontPhoto && cleanReport.storeFrontPhoto !== '__IDB__'
+              ? cleanReport.storeFrontPhoto
+              : prev.storeFrontPhoto;
+          const finalQsc =
+            cleanReport.qscSheetPhoto && cleanReport.qscSheetPhoto !== '__IDB__'
+              ? cleanReport.qscSheetPhoto
+              : prev.qscSheetPhoto;
+          const finalTop =
+            cleanReport.qscSheetTop && cleanReport.qscSheetTop !== '__IDB__'
+              ? cleanReport.qscSheetTop
+              : prev.qscSheetTop;
+          const finalBottom =
+            cleanReport.qscSheetBottom && cleanReport.qscSheetBottom !== '__IDB__'
+              ? cleanReport.qscSheetBottom
+              : prev.qscSheetBottom;
 
-        savePhotosToIdb(draftKey, {
-          storeFrontPhoto: cleanReport.storeFrontPhoto,
-          qscSheetPhoto: cleanReport.qscSheetPhoto,
-          qscSheetTop: cleanReport.qscSheetTop,
-          qscSheetBottom: cleanReport.qscSheetBottom,
-          evidencePhotos: cleanReport.evidencePhotos,
-          caPhotos: cleanReport.caPhotos,
+          savePhotosToIdb(draftKey, {
+            storeFrontPhoto: finalStoreFront,
+            qscSheetPhoto: finalQsc,
+            qscSheetTop: finalTop,
+            qscSheetBottom: finalBottom,
+            evidencePhotos: finalEvidence,
+            caPhotos: finalCa,
+          });
+
+          return {
+            ...prev,
+            ...cleanReport,
+            crews: Array.isArray(cleanReport.crews) && cleanReport.crews.length >= 2 ? cleanReport.crews : prev.crews,
+            observations: Array.isArray(cleanReport.observations) ? cleanReport.observations : prev.observations,
+            evidencePhotos: finalEvidence,
+            caPhotos: finalCa,
+            storeFrontPhoto: finalStoreFront,
+            qscSheetPhoto: finalQsc,
+            qscSheetTop: finalTop,
+            qscSheetBottom: finalBottom,
+            gasSyncStatus: 'synced',
+          };
         });
       },
       6000
@@ -955,8 +1036,58 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   const evidenceCameraInputRef = useRef<HTMLInputElement>(null);
   const evidenceGalleryInputRef = useRef<HTMLInputElement>(null);
 
+  const formDataRef = useRef(formData);
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
+
+  // Immediate flush on tab close / reload / background
+  useEffect(() => {
+    const handleImmediateFlush = () => {
+      const cur = formDataRef.current;
+      if (!cur || !agenda.id) return;
+      const now = Date.now();
+      const reportToSave: VisitReportData & { updatedAtMs: number } = {
+        ...cur,
+        id: cur.id || `report-${agenda.id}`,
+        agendaId: agenda.id,
+        updatedAtMs: now,
+      };
+
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(reportToSave));
+      } catch {}
+
+      flushVisitReportImmediate(reportToSave);
+    };
+
+    window.addEventListener('beforeunload', handleImmediateFlush);
+    window.addEventListener('pagehide', handleImmediateFlush);
+    const onVisChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        handleImmediateFlush();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleImmediateFlush);
+      window.removeEventListener('pagehide', handleImmediateFlush);
+      document.removeEventListener('visibilitychange', onVisChange);
+    };
+  }, [agenda.id, draftKey]);
+
   // Safe Auto-save draft + Real-time Cross-Device Cloud Sync
   useEffect(() => {
+    const now = formData.updatedAtMs || Date.now();
+    lastSyncTimestampRef.current = now;
+    const reportWithTime: VisitReportData & { id: string; agendaId: string; updatedAtMs: number } = {
+      ...formData,
+      id: formData.id || `report-${agenda.id}`,
+      agendaId: agenda.id,
+      updatedAtMs: now,
+    };
+
     // 1. Save full photos to IndexedDB (unlimited capacity)
     savePhotosToIdb(draftKey, {
       storeFrontPhoto: formData.storeFrontPhoto,
@@ -969,17 +1100,23 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
     // 2. Save formData to localStorage with safe fallback if quota is exceeded
     try {
-      localStorage.setItem(draftKey, JSON.stringify(formData));
+      localStorage.setItem(draftKey, JSON.stringify(reportWithTime));
     } catch {
       try {
-        const lightCopy: VisitReportData = {
-          ...formData,
-          storeFrontPhoto: formData.storeFrontPhoto ? '__IDB__' : '',
-          qscSheetPhoto: formData.qscSheetPhoto ? '__IDB__' : '',
-          qscSheetTop: formData.qscSheetTop ? '__IDB__' : '',
-          qscSheetBottom: formData.qscSheetBottom ? '__IDB__' : '',
-          evidencePhotos: formData.evidencePhotos.map((p) => ({ ...p, photoUrl: '' })),
-          caPhotos: (formData.caPhotos || []).map((p) => ({ ...p, photoUrl: '' })),
+        const lightCopy = {
+          ...reportWithTime,
+          storeFrontPhoto: reportWithTime.storeFrontPhoto ? '__IDB__' : '',
+          qscSheetPhoto: reportWithTime.qscSheetPhoto ? '__IDB__' : '',
+          qscSheetTop: reportWithTime.qscSheetTop ? '__IDB__' : '',
+          qscSheetBottom: reportWithTime.qscSheetBottom ? '__IDB__' : '',
+          evidencePhotos: (reportWithTime.evidencePhotos || []).map((p) => ({
+            ...p,
+            photoUrl: p.photoUrl ? '__IDB__' : '',
+          })),
+          caPhotos: (reportWithTime.caPhotos || []).map((p) => ({
+            ...p,
+            photoUrl: p.photoUrl ? '__IDB__' : '',
+          })),
         };
         localStorage.setItem(draftKey, JSON.stringify(lightCopy));
       } catch (innerErr) {
@@ -987,10 +1124,9 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       }
     }
 
-    // 3. Debounced Cloud Push (1.8s) for Cross-Device Continuity (Mobile <-> Desktop)
+    // 3. Fast Debounced Cloud Push (500ms) for Cross-Device Continuity (Mobile <-> Desktop)
     const syncTimer = setTimeout(() => {
-      lastSyncTimestampRef.current = Date.now();
-      pushVisitReportToCloud(formData).then((ok) => {
+      pushVisitReportToCloud(reportWithTime).then((ok) => {
         if (ok) {
           setFormData((prev) => {
             if (prev.gasSyncStatus === 'synced') return prev;
@@ -1002,10 +1138,10 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           });
         }
       });
-    }, 1800);
+    }, 500);
 
     return () => clearTimeout(syncTimer);
-  }, [formData, draftKey]);
+  }, [formData, draftKey, agenda.id]);
 
   // Calculate Form Completion Progress Percentage
   const calculateProgress = (): number => {
@@ -1340,15 +1476,30 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       const { stamped: fullStamped } = await processAndStampImage(file);
       const { top: topSplit, bottom: bottomSplit } = await splitImageIntoTopAndBottom(fullStamped);
 
-      const nextReport: VisitReportData = {
+      const now = Date.now();
+      const nextReport: VisitReportData & { id: string; agendaId: string; updatedAtMs: number } = {
         ...formData,
+        id: formData.id || `report-${agenda.id}`,
+        agendaId: agenda.id,
+        updatedAtMs: now,
         qscSheetPhoto: fullStamped,
         qscSheetTop: topSplit,
         qscSheetBottom: bottomSplit,
         gasSyncStatus: 'syncing',
       };
       setFormData(nextReport);
-      lastSyncTimestampRef.current = Date.now();
+      lastSyncTimestampRef.current = now;
+      savePhotosToIdb(draftKey, {
+        storeFrontPhoto: nextReport.storeFrontPhoto,
+        qscSheetPhoto: fullStamped,
+        qscSheetTop: topSplit,
+        qscSheetBottom: bottomSplit,
+        evidencePhotos: nextReport.evidencePhotos,
+        caPhotos: nextReport.caPhotos,
+      });
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(nextReport));
+      } catch {}
       pushVisitReportToCloud(nextReport);
 
       // Async upload full photo to Google Drive
@@ -1421,19 +1572,33 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   // Crew Management
   const handleAddCrew = () => {
+    const now = Date.now();
+    lastSyncTimestampRef.current = now;
     const newCrew: StoreCrew = {
-      id: `c-${Date.now()}`,
+      id: `c-${agenda.id}-${Date.now()}`,
       role: 'Crew Store',
       name: '',
       jobLevel: '',
     };
-    setFormData((prev) => ({ ...prev, crews: [...prev.crews, newCrew] }));
+    setFormData((prev) => ({
+      ...prev,
+      updatedAtMs: now,
+      crews: [...prev.crews, newCrew],
+    }));
   };
 
   const handleUpdateCrew = (idx: number, field: keyof StoreCrew, val: string) => {
-    const updated = [...formData.crews];
-    updated[idx] = { ...updated[idx], [field]: val };
-    setFormData((prev) => ({ ...prev, crews: updated }));
+    const now = Date.now();
+    lastSyncTimestampRef.current = now;
+    setFormData((prev) => {
+      const updated = [...prev.crews];
+      updated[idx] = { ...updated[idx], [field]: val };
+      return {
+        ...prev,
+        updatedAtMs: now,
+        crews: updated,
+      };
+    });
   };
 
   const handleRemoveCrew = (idx: number) => {
@@ -1466,7 +1631,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
   // Observations Management
   const handleAddObservation = (type: 'QSC' | 'OPI') => {
-    const newId = `obs-${Date.now()}`;
+    const newId = `obs-${agenda.id}-${Date.now()}`;
     const newObs: ObservationFinding = {
       id: newId,
       type,
@@ -1482,10 +1647,20 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       status: 'OPEN',
     };
 
+    const now = Date.now();
+    lastSyncTimestampRef.current = now;
     setFormData((prev) => {
       const updated = [...prev.observations, newObs];
-      const nextReport = { ...prev, observations: updated };
-      lastSyncTimestampRef.current = Date.now();
+      const nextReport = {
+        ...prev,
+        id: prev.id || `report-${agenda.id}`,
+        agendaId: agenda.id,
+        updatedAtMs: now,
+        observations: updated,
+      };
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(nextReport));
+      } catch {}
       pushVisitReportToCloud(nextReport);
       const filtered = updated.filter((o) => o.type.toUpperCase() === type);
       setTimeout(() => {
@@ -1513,8 +1688,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   };
 
   const handleUpdateObs = (id: string, field: keyof ObservationFinding, val: string) => {
+    const now = Date.now();
+    lastSyncTimestampRef.current = now;
     setFormData((prev) => ({
       ...prev,
+      updatedAtMs: now,
       observations: prev.observations.map((o) => (o.id === id ? { ...o, [field]: val } : o)),
     }));
   };
@@ -1703,7 +1881,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const { stamped } = await processAndStampImage(file);
-        const photoId = `ev-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`;
+        const photoId = `ev-${agenda.id}-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`;
 
         createdPhotos.push({
           id: photoId,
@@ -1716,14 +1894,29 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       }
 
       // 1. INSTANT ATTACH KE FORM DATA & IMMEDIATE CROSS-DEVICE SYNC
-      const nextReport: VisitReportData = {
+      const now = Date.now();
+      const nextReport: VisitReportData & { id: string; agendaId: string; updatedAtMs: number } = {
         ...formData,
+        id: formData.id || `report-${agenda.id}`,
+        agendaId: agenda.id,
+        updatedAtMs: now,
         ...(isCa
           ? { caPhotos: [...(formData.caPhotos || []), ...createdPhotos] }
           : { evidencePhotos: [...formData.evidencePhotos, ...createdPhotos] }),
       };
       setFormData(nextReport);
-      lastSyncTimestampRef.current = Date.now();
+      lastSyncTimestampRef.current = now;
+      savePhotosToIdb(draftKey, {
+        storeFrontPhoto: nextReport.storeFrontPhoto,
+        qscSheetPhoto: nextReport.qscSheetPhoto,
+        qscSheetTop: nextReport.qscSheetTop,
+        qscSheetBottom: nextReport.qscSheetBottom,
+        evidencePhotos: nextReport.evidencePhotos,
+        caPhotos: nextReport.caPhotos,
+      });
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(nextReport));
+      } catch {}
       pushVisitReportToCloud(nextReport);
 
       setUploadStatusMsg(`${createdPhotos.length} foto berhasil ter-attach ke form visit & tersinkron!`);
@@ -1784,14 +1977,18 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
   };
 
   const handleUpdateEvidenceCaption = (id: string, caption: string, isCa = false) => {
+    const now = Date.now();
+    lastSyncTimestampRef.current = now;
     if (isCa) {
       setFormData((prev) => ({
         ...prev,
+        updatedAtMs: now,
         caPhotos: prev.caPhotos?.map((p) => (p.id === id ? { ...p, caption } : p)),
       }));
     } else {
       setFormData((prev) => ({
         ...prev,
+        updatedAtMs: now,
         evidencePhotos: prev.evidencePhotos.map((p) => (p.id === id ? { ...p, caption } : p)),
       }));
     }

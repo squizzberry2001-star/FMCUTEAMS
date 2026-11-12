@@ -317,6 +317,14 @@ export const App: React.FC = () => {
         for (const rep of cloudReports) {
           const repKey = `fmcu_visit_report_${rep.agendaId || rep.id}`;
           try {
+            const existingRaw = localStorage.getItem(repKey);
+            if (existingRaw) {
+              const existingParsed = JSON.parse(existingRaw);
+              const localMs = Number(existingParsed.updatedAtMs || 0);
+              const remoteMs = Number(rep.updatedAtMs || 0);
+              // Do NOT overwrite if local copy has fresher unsynced changes!
+              if (localMs > remoteMs) continue;
+            }
             localStorage.setItem(repKey, JSON.stringify(rep));
           } catch {
             // ignore quota

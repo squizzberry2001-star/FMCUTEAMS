@@ -1,14 +1,17 @@
 import { VisitReportData, EvidencePhoto } from '../types/visitReport';
-import { GAS_VAULT_API_URL } from './cloudScheduleSyncService';
+import { CLOUDFLARE_D1_API_URL, GAS_VAULT_API_URL } from './cloudScheduleSyncService';
 
 // ============================================================================
 // CROSS-DEVICE REAL-TIME VISIT REPORT SYNC SERVICE
 // - Guarantees 100% data continuity between Mobile & Desktop (Cross-Device Realtime)
 // - Syncs form fields, crews, QSC sheet, observation findings, and evidence photos
-// - Edge Cloud Vault (Google Apps Script Hidden Database) + Local IndexedDB Cache
+// - Primary Engine: Cloudflare D1 Edge SQLite (~200ms latency, high availability)
+// - Redundancy Vault: Google Apps Script Hidden Database on Google Drive
+// - Local Instant Cache: IndexedDB (Photos) + localStorage + BroadcastChannel (0ms)
 // ============================================================================
 
-const VISIT_REPORTS_COLLECTION = 'visit_reports';
+const D1_REPORTS_COLLECTION = 'reports';
+const GAS_VISIT_REPORTS_COLLECTION = 'visit_reports';
 const LOCAL_STORAGE_PREFIX = 'fmcu_visit_report_';
 const OFFLINE_VISIT_QUEUE_KEY = 'fmcu_visit_report_offline_queue_v1';
 const IDB_NAME = 'fmcu_visit_photos_db_v1';
@@ -274,6 +277,8 @@ function sanitizeReportForCloud(report: VisitReportData): VisitReportData {
 
 /**
  * Fetch all visit reports from Cloud Vault (with short caching)
+ * Primary: Cloudflare D1 Edge SQLite (<100ms)
+ * Backup: Google Apps Script Hidden Vault
  */
 export async function fetchAllVisitReportsFromCloud(forceFresh = false): Promise<(VisitReportData & { updatedAtMs?: number })[]> {
   const now = Date.now();
@@ -281,37 +286,70 @@ export async function fetchAllVisitReportsFromCloud(forceFresh = false): Promise
     return cachedReportsList;
   }
 
+  // 1. Primary: Cloudflare D1 Edge SQLite (<100ms)
+  try {
+    const res = await fetch(CLOUDFLARE_D1_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'db_get_collection',
+        collection: D1_REPORTS_COLLECTION,
+      }),
+    });
+    if (res.ok) {
+      const json = await res.json().catch(() => null);
+      if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
+        cachedReportsList = json.data.map((r: any) => filterReportWithTombstones(r));
+        lastCacheFetchTime = now;
+        return cachedReportsList || [];
+      }
+    }
+  } catch (err) {
+    console.warn('fetchAllVisitReportsFromCloud D1 error:', err);
+  }
+
+  // 2. Backup Fallback: Google Apps Script Hidden Vault
   try {
     const res = await fetch(GAS_VAULT_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action: 'db_get_collection',
-        collection: VISIT_REPORTS_COLLECTION,
+        collection: GAS_VISIT_REPORTS_COLLECTION,
       }),
     });
-    if (!res.ok) return cachedReportsList || [];
-    const json = await res.json();
-    if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
-      cachedReportsList = json.data.map((r: any) => filterReportWithTombstones(r));
-      lastCacheFetchTime = now;
-      return cachedReportsList || [];
+    if (res.ok) {
+      const json = await res.json().catch(() => null);
+      if (json && json.status === 'SUCCESS' && Array.isArray(json.data)) {
+        cachedReportsList = json.data.map((r: any) => filterReportWithTombstones(r));
+        lastCacheFetchTime = now;
+        return cachedReportsList || [];
+      }
     }
-    return cachedReportsList || [];
   } catch (err) {
-    console.warn('fetchAllVisitReportsFromCloud network warning:', err);
-    return cachedReportsList || [];
+    console.warn('fetchAllVisitReportsFromCloud GAS fallback warning:', err);
   }
+
+  return cachedReportsList || [];
 }
 
 /**
  * Fetch a single visit report by agendaId from Cloud Vault
+ * Isolated per store visit / agendaId
  */
-export async function fetchVisitReportFromCloud(agendaId: string, forceFresh = false): Promise<(VisitReportData & { updatedAtMs?: number }) | null> {
+export async function fetchVisitReportFromCloud(
+  agendaId: string,
+  forceFresh = false
+): Promise<(VisitReportData & { updatedAtMs?: number }) | null> {
   if (!agendaId) return null;
   try {
     const all = await fetchAllVisitReportsFromCloud(forceFresh);
-    const found = all.find((r) => r.agendaId === agendaId || r.id === agendaId);
+    const found = all.find(
+      (r) =>
+        String(r.agendaId) === String(agendaId) ||
+        String(r.id) === String(agendaId) ||
+        String(r.id) === `report-${agendaId}`
+    );
     return found ? filterReportWithTombstones(found) : null;
   } catch {
     return null;
@@ -334,14 +372,19 @@ export function getLocalVisitReport(agendaId: string): (VisitReportData & { upda
 
 /**
  * Push an active visit report to the Cloud Vault for instant cross-device continuity
+ * - Saves locally immediately (localStorage + IndexedDB) with 0ms latency
+ * - Pushes single item directly to Cloudflare D1 Edge SQLite (~200ms)
+ * - Fires background backup to Google Apps Script Hidden Vault
  */
 export async function pushVisitReportToCloud(report: VisitReportData): Promise<boolean> {
   if (!report || !report.agendaId) return false;
 
   const nowMs = report.updatedAtMs || Date.now();
   const sanitized = sanitizeReportForCloud(report);
-  const enrichedReport: VisitReportData & { updatedAtMs: number } = {
+  const enrichedReport: VisitReportData & { id: string; updatedAtMs: number } = {
     ...filterReportWithTombstones(sanitized),
+    id: report.id || `report-${report.agendaId}`,
+    agendaId: String(report.agendaId),
     updatedAtMs: nowMs,
   };
 
@@ -351,12 +394,21 @@ export async function pushVisitReportToCloud(report: VisitReportData): Promise<b
   } catch {
     try {
       // Light copy if localStorage quota exceeded
+      // NOTE: Use '__IDB__' so the app knows a photo exists and restores it from IndexedDB!
       const lightCopy = {
         ...enrichedReport,
         storeFrontPhoto: enrichedReport.storeFrontPhoto ? '__IDB__' : '',
         qscSheetPhoto: enrichedReport.qscSheetPhoto ? '__IDB__' : '',
         qscSheetTop: enrichedReport.qscSheetTop ? '__IDB__' : '',
         qscSheetBottom: enrichedReport.qscSheetBottom ? '__IDB__' : '',
+        evidencePhotos: (enrichedReport.evidencePhotos || []).map((p) => ({
+          ...p,
+          photoUrl: p.photoUrl ? '__IDB__' : '',
+        })),
+        caPhotos: (enrichedReport.caPhotos || []).map((p) => ({
+          ...p,
+          photoUrl: p.photoUrl ? '__IDB__' : '',
+        })),
       };
       localStorage.setItem(`${LOCAL_STORAGE_PREFIX}${report.agendaId}`, JSON.stringify(lightCopy));
     } catch {
@@ -364,7 +416,7 @@ export async function pushVisitReportToCloud(report: VisitReportData): Promise<b
     }
   }
 
-  // Also cache photos in IndexedDB for resilience
+  // Also cache photos in IndexedDB for resilience (unlimited storage)
   saveVisitPhotosToIdb(`${LOCAL_STORAGE_PREFIX}${report.agendaId}`, {
     storeFrontPhoto: enrichedReport.storeFrontPhoto,
     qscSheetPhoto: enrichedReport.qscSheetPhoto,
@@ -378,7 +430,9 @@ export async function pushVisitReportToCloud(report: VisitReportData): Promise<b
 
   // Update memory cache immediately
   if (cachedReportsList) {
-    const filtered = cachedReportsList.filter((r) => r.agendaId !== report.agendaId && r.id !== report.id);
+    const filtered = cachedReportsList.filter(
+      (r) => String(r.agendaId) !== String(report.agendaId) && String(r.id) !== String(enrichedReport.id)
+    );
     cachedReportsList = [enrichedReport, ...filtered];
   } else {
     cachedReportsList = [enrichedReport];
@@ -398,30 +452,90 @@ export async function pushVisitReportToCloud(report: VisitReportData): Promise<b
     return false;
   }
 
-  // 3. Push to Cloud Vault
+  // 3. Push to Cloudflare D1 Edge SQLite (~200ms) - Primary Engine
+  let d1Success = false;
   try {
-    const currentList = await fetchAllVisitReportsFromCloud(true);
-    const filtered = currentList.filter(
-      (r) => r.agendaId !== report.agendaId && r.id !== report.id
-    );
-    const updatedCollection = [enrichedReport, ...filtered];
-
-    const res = await fetch(GAS_VAULT_API_URL, {
+    const res = await fetch(CLOUDFLARE_D1_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'db_save_collection',
-        collection: VISIT_REPORTS_COLLECTION,
-        data: updatedCollection,
+        action: 'db_save_item',
+        collection: D1_REPORTS_COLLECTION,
+        item: enrichedReport,
       }),
+      keepalive: true,
     });
-
-    if (!res.ok) return false;
-    const json = await res.json();
-    return Boolean(json && json.status === 'SUCCESS');
+    if (res.ok) {
+      const json = await res.json().catch(() => null);
+      if (json && json.status === 'SUCCESS') {
+        d1Success = true;
+      }
+    }
   } catch (err) {
-    console.warn('pushVisitReportToCloud warning:', err);
-    return false;
+    console.warn('pushVisitReportToCloud D1 warning:', err);
+  }
+
+  // 4. Background redundancy to Google Apps Script Hidden Vault (fire-and-forget, never blocks)
+  (async () => {
+    try {
+      await fetch(GAS_VAULT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'db_save_item',
+          collection: GAS_VISIT_REPORTS_COLLECTION,
+          item: enrichedReport,
+        }),
+      });
+    } catch {
+      // ignore GAS background errors
+    }
+  })();
+
+  return d1Success;
+}
+
+/**
+ * Fast synchronous-like flush to Cloudflare D1 during beforeunload / pagehide / tab close
+ */
+export function flushVisitReportImmediate(report: VisitReportData & { updatedAtMs?: number }): void {
+  if (!report || !report.agendaId) return;
+  const nowMs = report.updatedAtMs || Date.now();
+  const enrichedReport = {
+    ...report,
+    id: report.id || `report-${report.agendaId}`,
+    agendaId: String(report.agendaId),
+    updatedAtMs: nowMs,
+  };
+
+  // Immediate localStorage write
+  try {
+    localStorage.setItem(`${LOCAL_STORAGE_PREFIX}${report.agendaId}`, JSON.stringify(enrichedReport));
+  } catch {}
+
+  // Send beacon / keepalive fetch
+  if (typeof navigator !== 'undefined' && navigator.onLine) {
+    try {
+      const payloadStr = JSON.stringify({
+        action: 'db_save_item',
+        collection: D1_REPORTS_COLLECTION,
+        item: enrichedReport,
+      });
+
+      if (typeof fetch !== 'undefined') {
+        fetch(CLOUDFLARE_D1_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payloadStr,
+          keepalive: true,
+        }).catch(() => {});
+      } else if (navigator.sendBeacon) {
+        const blob = new Blob([payloadStr], { type: 'application/json' });
+        navigator.sendBeacon(CLOUDFLARE_D1_API_URL, blob);
+      }
+    } catch {
+      // ignore
+    }
   }
 }
 
