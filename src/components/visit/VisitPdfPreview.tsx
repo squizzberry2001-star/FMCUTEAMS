@@ -28,6 +28,7 @@ import {
   formatIndonesianDate,
   formatDateDdMmYyyy,
   syncReportToGoogleDrive,
+  resolveDirectCaSpreadsheetUrl,
   GDriveSyncResult,
   FMCU_REPORT_GDRIVE_FOLDER_URL,
   FMCU_REPORT_GDRIVE_FOLDER_ID
@@ -235,8 +236,26 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       data.qscSheetPhoto ? 1 : 0,
       data.qscSheetTop ? 1 : 0,
       data.qscSheetBottom ? 1 : 0,
+      data.spreadsheetUrl || '',
       data.assignmentNotes || '',
     ].join('::');
+  }, [data]);
+
+  // Direct CA Assignment Spreadsheet URL pre-resolver
+  useEffect(() => {
+    const directUrl = resolveDirectCaSpreadsheetUrl(data);
+    const isDirectSpreadsheet =
+      directUrl.includes('docs.google.com/spreadsheets') ||
+      directUrl.includes('drive.google.com/file');
+    if (
+      isDirectSpreadsheet &&
+      (!data.spreadsheetUrl ||
+        data.spreadsheetUrl.includes('15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8') ||
+        data.spreadsheetUrl.includes('tinyurl.com'))
+    ) {
+      data.spreadsheetUrl = directUrl;
+      setRefreshKey((k) => k + 1);
+    }
   }, [data]);
 
   // Zoom & Flexible Pan Geser Kanan-Kiri
@@ -614,6 +633,10 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
       setSyncProgress(100);
       setSyncStatusStep(4);
       setSyncResult(result);
+      if (result.caSpreadsheetUrl) {
+        data.spreadsheetUrl = result.caSpreadsheetUrl;
+      }
+      setRefreshKey((prev) => prev + 1);
       setIsSyncingGdrive(false);
       setIsReportSaved(true);
       showToast('Laporan sukses tersimpan dan disinkronkan ke Google Drive Toko!', 'success');
@@ -1291,15 +1314,30 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                  <a
-                    href={syncResult?.storeFolderUrl || FMCU_REPORT_GDRIVE_FOLDER_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
-                  >
-                    <span>Buka Folder Drive Toko</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                  <div className="flex items-center gap-3">
+                    {syncResult?.caSpreadsheetUrl && (
+                      <a
+                        href={syncResult.caSpreadsheetUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1"
+                        title="Buka File Spreadsheet CA Assignment Langsung di Google Drive"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Buka File CA di Drive</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    <a
+                      href={syncResult?.storeFolderUrl || FMCU_REPORT_GDRIVE_FOLDER_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
+                    >
+                      <span>Folder Toko</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
 
                   <button
                     type="button"
@@ -1312,15 +1350,29 @@ export const VisitPdfPreview: React.FC<VisitPdfPreviewProps> = ({
               </div>
             ) : (
               <div className="pt-2 flex items-center justify-between gap-2">
-                <a
-                  href={FMCU_REPORT_GDRIVE_FOLDER_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
-                >
-                  <span>Buka Folder Drive</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                {resolveDirectCaSpreadsheetUrl(data).includes('docs.google.com/spreadsheets') ? (
+                  <a
+                    href={resolveDirectCaSpreadsheetUrl(data)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1"
+                    title="Buka File Spreadsheet CA Assignment Langsung di Google Drive"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Buka File CA Toko</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <a
+                    href={FMCU_REPORT_GDRIVE_FOLDER_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
+                  >
+                    <span>Buka Folder Drive</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
 
                 <button
                   type="button"

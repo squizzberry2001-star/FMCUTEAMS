@@ -292,6 +292,134 @@ export function splitImageIntoTopAndBottom(
   });
 }
 
+// ============================================================================
+// CA ASSIGNMENT DIRECT EXCEL / GOOGLE SPREADSHEET URL RESOLVER
+// ============================================================================
+const STORE_SPREADSHEET_CACHE_KEY = 'fmcu_store_ca_spreadsheet_urls_v2';
+const storeCaUrlMemoryMap = new Map<string, string>();
+
+const VERIFIED_STORE_SPREADSHEETS: Record<string, string> = {
+  '0493': 'https://docs.google.com/spreadsheets/d/1HvkvVk6iIHRTy3Ebli07tcgahtzqmnzGeGLR_Ga7PxM/edit',
+  '3013': 'https://docs.google.com/spreadsheets/d/16RVoYJVHHC_w2C2PUM9iMskbTLsy_1l6kmUyd2r0WSE/edit',
+  '3099': 'https://docs.google.com/spreadsheets/d/1uAlW3Z3jlGICWK-F5PCgcEqd3koo2m3hSLZunDOG8_E/edit',
+};
+
+export function saveStoreCaSpreadsheetUrl(storeCode?: string, url?: string, agendaId?: string): void {
+  if (!url) return;
+  const cleanUrl = String(url).trim();
+  if (
+    !cleanUrl ||
+    cleanUrl.includes('tinyurl.com') ||
+    cleanUrl === FMCU_REPORT_GDRIVE_FOLDER_URL ||
+    cleanUrl.includes('15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8') ||
+    cleanUrl.includes('1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a')
+  ) {
+    return;
+  }
+
+  const code = String(storeCode || '').toUpperCase().trim();
+  if (code) storeCaUrlMemoryMap.set(code, cleanUrl);
+  if (agendaId) storeCaUrlMemoryMap.set(`AGENDA:${agendaId}`, cleanUrl);
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORE_SPREADSHEET_CACHE_KEY);
+      const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+      if (code) map[code] = cleanUrl;
+      if (agendaId) map[`AGENDA:${agendaId}`] = cleanUrl;
+      localStorage.setItem(STORE_SPREADSHEET_CACHE_KEY, JSON.stringify(map));
+    } catch {}
+  }
+}
+
+export function getCachedStoreCaSpreadsheetUrl(storeCode?: string, agendaId?: string): string | null {
+  const code = String(storeCode || '').toUpperCase().trim();
+  if (agendaId && storeCaUrlMemoryMap.has(`AGENDA:${agendaId}`)) {
+    return storeCaUrlMemoryMap.get(`AGENDA:${agendaId}`)!;
+  }
+  if (code && storeCaUrlMemoryMap.has(code)) {
+    return storeCaUrlMemoryMap.get(code)!;
+  }
+  if (code && VERIFIED_STORE_SPREADSHEETS[code]) {
+    return VERIFIED_STORE_SPREADSHEETS[code];
+  }
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORE_SPREADSHEET_CACHE_KEY);
+      if (raw) {
+        const map: Record<string, string> = JSON.parse(raw);
+        if (agendaId && map[`AGENDA:${agendaId}`]) return map[`AGENDA:${agendaId}`];
+        if (code && map[code]) return map[code];
+      }
+    } catch {}
+  }
+  return null;
+}
+
+/**
+ * Resolves the direct Google Drive Excel / Spreadsheet URL for a store's CA Assignment.
+ * Strictly guarantees that it NEVER returns the root GDrive folder.
+ */
+export function resolveDirectCaSpreadsheetUrl(report: Partial<VisitReportData>): string {
+  // 1. Direct spreadsheetUrl on report
+  const raw = String(report.spreadsheetUrl || (report as any).caSpreadsheetUrl || (report as any).caExcelUrl || '').trim();
+  const isInvalidOrRoot =
+    !raw ||
+    raw.includes('tinyurl.com') ||
+    raw === FMCU_REPORT_GDRIVE_FOLDER_URL ||
+    raw.includes('15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8') ||
+    raw.includes('1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a');
+
+  if (!isInvalidOrRoot) {
+    saveStoreCaSpreadsheetUrl(report.storeCode, raw, report.agendaId);
+    return raw;
+  }
+
+  // 2. Check GDrive Report Registry Entry
+  const regEntry = getGDriveReportRegistryEntry({
+    storeCode: report.storeCode,
+    storeName: report.storeName,
+    agendaId: report.agendaId,
+  });
+  if (
+    regEntry?.caSpreadsheetUrl &&
+    !regEntry.caSpreadsheetUrl.includes('15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8') &&
+    !regEntry.caSpreadsheetUrl.includes('1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a')
+  ) {
+    saveStoreCaSpreadsheetUrl(report.storeCode, regEntry.caSpreadsheetUrl, report.agendaId);
+    return regEntry.caSpreadsheetUrl;
+  }
+  if (
+    regEntry?.caExcelUrl &&
+    !regEntry.caExcelUrl.includes('15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8') &&
+    !regEntry.caExcelUrl.includes('1IjruNS9pl5llP4k1VAlRNUhAvIEGql1a')
+  ) {
+    saveStoreCaSpreadsheetUrl(report.storeCode, regEntry.caExcelUrl, report.agendaId);
+    return regEntry.caExcelUrl;
+  }
+
+  // 3. Check persistent store cache or verified dictionary
+  const cached = getCachedStoreCaSpreadsheetUrl(report.storeCode, report.agendaId);
+  if (cached) {
+    return cached;
+  }
+
+  // 4. If storeFolderUrl exists in registry, use the store's dedicated folder rather than root folder
+  if (
+    regEntry?.storeFolderUrl &&
+    regEntry.storeFolderUrl !== FMCU_REPORT_GDRIVE_FOLDER_URL &&
+    !regEntry.storeFolderUrl.includes('15Nb6vesuhbx5yZCqHekV8Fo5e9kyB0i8')
+  ) {
+    return regEntry.storeFolderUrl;
+  }
+
+  // 5. Fallback: Direct Google Drive Search link for the exact CA Store Assignment file in Drive
+  const cleanStore = String(report.storeName || report.storeCode || 'Store').trim();
+  const searchDirectQuery = encodeURIComponent(`"CA_Store_Assignment" "${cleanStore}"`);
+  return `https://drive.google.com/drive/search?q=${searchDirectQuery}`;
+}
+
 /**
  * Generate standard corporate 16:9 Widescreen Landscape jsPDF doc
  */
@@ -317,11 +445,7 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
   const visitDateText = formatIndonesianDate(report.visitDate, false);
   const dayDateText = formatIndonesianDate(report.visitDate, true);
 
-  const rawCaLink = String(report.spreadsheetUrl || '').trim();
-  const resolvedCaLink =
-    rawCaLink && !rawCaLink.includes('tinyurl.com')
-      ? rawCaLink
-      : FMCU_REPORT_GDRIVE_FOLDER_URL;
+  const resolvedCaLink = resolveDirectCaSpreadsheetUrl(report);
   const storeInfoTag = report.storeName && report.storeCode
     ? `KHUSUS ${report.storeName.toUpperCase()} (${report.storeCode}):`
     : 'HASIL VISIT AUDIT:';
@@ -961,7 +1085,7 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(15, 118, 110);
-  doc.text(`LINK FILE FORM SPREADSHEET CA ${storeInfoTag}`, 18, 48.5);
+  doc.text(`LINK FILE FORM CA ASSIGNMENT (EXCEL GOOGLE DRIVE) ${storeInfoTag}`, 18, 48.5);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
@@ -1058,11 +1182,7 @@ export function buildHtmlSlides(report: VisitReportData): HtmlSlide[] {
   const visitDateText = formatIndonesianDate(report.visitDate, false);
   const dayDateText = formatIndonesianDate(report.visitDate, true);
 
-  const rawCaLink = String(report.spreadsheetUrl || '').trim();
-  const resolvedCaLink =
-    rawCaLink && !rawCaLink.includes('tinyurl.com')
-      ? rawCaLink
-      : FMCU_REPORT_GDRIVE_FOLDER_URL;
+  const resolvedCaLink = resolveDirectCaSpreadsheetUrl(report);
   const storeInfoTag = report.storeName && report.storeCode
     ? `KHUSUS ${report.storeName.toUpperCase()} (${report.storeCode}):`
     : 'HASIL VISIT AUDIT:';
@@ -1428,7 +1548,7 @@ export function buildHtmlSlides(report: VisitReportData): HtmlSlide[] {
           <!-- Modern CA Link Card -->
           <div class="bg-teal-50/70 border border-teal-200/80 rounded-xl p-[2%] mb-3.5 flex flex-col justify-center">
             <span class="text-[clamp(6px,0.7cqw,10px)] font-bold text-teal-800 uppercase tracking-wider mb-0.5">
-              LINK FILE FORM SPREADSHEET CA ${storeInfoTag}
+              LINK FILE FORM CA ASSIGNMENT (EXCEL GOOGLE DRIVE) ${storeInfoTag}
             </span>
             <a href="${resolvedCaLink}" target="_blank" rel="noopener noreferrer" class="text-[#0099A6] font-extrabold text-[clamp(8px,1.25cqw,17px)] hover:underline break-all truncate">
               ${resolvedCaLink}
@@ -1731,6 +1851,45 @@ export async function syncReportToGoogleDrive(
   report: VisitReportData,
   onProgress?: (pct: number, stage: string) => void
 ): Promise<GDriveSyncResult> {
+  // 1. Resolve or pre-fetch exact CA Spreadsheet direct link before generating PDF document
+  let resolvedCaUrl = resolveDirectCaSpreadsheetUrl(report);
+  const isDirectFileUrl =
+    resolvedCaUrl.includes('docs.google.com/spreadsheets') ||
+    resolvedCaUrl.includes('drive.google.com/file');
+
+  if (!isDirectFileUrl && report.storeCode) {
+    try {
+      onProgress?.(15, 'Mempersiapkan link langsung Google Spreadsheet CA Toko...');
+      const caRes = await fetch(FMCU_REPORT_GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'createCaSpreadsheet',
+          report: {
+            storeCode: report.storeCode,
+            storeName: report.storeName,
+            visitorName: report.visitorName,
+            observations: (report.observations || []).map((o) => ({
+              temuan: o.auditFinding || '',
+              tindakanPerbaikan: o.actionPlan || '',
+              deadline: o.deadline || '',
+              deadlineFormatted: o.deadlineFormatted || formatIndonesianDate(o.deadline, false)
+            }))
+          }
+        })
+      });
+      if (caRes.ok) {
+        const caData = await caRes.json();
+        if (caData.caSpreadsheetUrl) {
+          report.spreadsheetUrl = caData.caSpreadsheetUrl;
+          saveStoreCaSpreadsheetUrl(report.storeCode, caData.caSpreadsheetUrl, report.agendaId);
+        }
+      }
+    } catch (err) {
+      console.warn('Pre-fetch CA spreadsheet error:', err);
+    }
+  }
+
   onProgress?.(25, 'Merender dokumen PDF HD 16:9, Lembar QSC & CA Assignment Excel...');
   const [doc, qscDoc, caExcelBase64] = await Promise.all([
     generatePdfDoc(report),
@@ -1798,6 +1957,11 @@ export async function syncReportToGoogleDrive(
   const result = await response.json();
   onProgress?.(100, 'Berhasil disinkronkan ke Google Drive Toko!');
 
+  if (result.caSpreadsheetUrl) {
+    report.spreadsheetUrl = result.caSpreadsheetUrl;
+    saveStoreCaSpreadsheetUrl(report.storeCode, result.caSpreadsheetUrl, report.agendaId);
+  }
+
   const syncRes: GDriveSyncResult = {
     success: result.status === 'SUCCESS',
     pdfUrl: result.pdfUrl,
@@ -1823,6 +1987,8 @@ export interface GDriveRegistryRecord {
   visitDate: string;
   visitorName: string;
   pdfUrl?: string;
+  caSpreadsheetUrl?: string;
+  caExcelUrl?: string;
   gdriveEmbedUrl?: string;
   storeFolderUrl?: string;
   updatedAt: string;
@@ -1854,6 +2020,8 @@ export function saveGDriveReportRegistryEntry(
       visitDate: report.visitDate || new Date().toISOString().split('T')[0],
       visitorName: report.visitorName || '',
       pdfUrl: syncRes?.pdfUrl || FMCU_REPORT_GDRIVE_FOLDER_URL,
+      caSpreadsheetUrl: syncRes?.caSpreadsheetUrl || (report as any).caSpreadsheetUrl || report.spreadsheetUrl,
+      caExcelUrl: syncRes?.caExcelUrl || syncRes?.caSpreadsheetUrl || (report as any).caExcelUrl,
       gdriveEmbedUrl: toGDriveEmbedPreviewUrl(syncRes?.pdfUrl),
       storeFolderUrl: syncRes?.storeFolderUrl || FMCU_REPORT_GDRIVE_FOLDER_URL,
       updatedAt: new Date().toISOString(),
