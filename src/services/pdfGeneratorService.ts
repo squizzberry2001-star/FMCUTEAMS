@@ -734,8 +734,28 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
     const boxW = 146;
     const contentW = boxW - 6;
 
+    const stripHtmlClean = (val: any) => {
+      if (!val) return '-';
+      let text = String(val);
+      if (/<[^>]+>/.test(text)) {
+        text = text
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<\/p>|<\/div>/gi, '\n')
+          .replace(/<li[^>]*>/gi, '• ')
+          .replace(/<\/li>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+      }
+      return text.trim() || '-';
+    };
+
     const measureBox = (text: string, isBold: boolean = false) => {
-      const str = String(text || '-').trim() || '-';
+      const str = stripHtmlClean(text);
       let fontSize = isBold ? 8.0 : 7.6;
       doc.setFont('helvetica', isBold ? 'bold' : 'normal');
       doc.setFontSize(fontSize);
@@ -1029,7 +1049,18 @@ export async function generatePdfDoc(report: VisitReportData): Promise<jsPDF> {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8.8);
         doc.setTextColor(24, 24, 27);
-        const descLines = doc.splitTextToSize(String(ev.caption || '-'), 45);
+        const cleanCaption = String(ev.caption || '-')
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<\/p>|<\/div>/gi, '\n')
+          .replace(/<li[^>]*>/gi, '• ')
+          .replace(/<\/li>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .trim() || '-';
+        const descLines = doc.splitTextToSize(cleanCaption, 45);
         doc.text(descLines.slice(0, 10), cx + 50, cy + 10);
       }
 

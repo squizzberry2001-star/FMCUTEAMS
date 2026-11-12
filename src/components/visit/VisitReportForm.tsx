@@ -115,12 +115,26 @@ interface VisitReportFormProps {
 // Menyesuaikan tinggi secara presisi saat nilai dimuat (draft/refresh)
 // dan saat tab/section berubah dari hidden menjadi visible.
 // ============================================================================
-interface AutoResizeTextareaProps
-  extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> {
+// ============================================================================
+// PROPER WYSIWYG RICH TEXT INPUT COMPONENT (SECTION BUKTI & OBSERVASI)
+// - True inline Bold & Italic (tebal dan miring langsung terlihat)
+// - Auto-continue Bullet list (•) & Numbered list (1., 2.) on Enter
+// - Auto-exit on Enter on empty bullet/number line
+// - Seamless bidirectional sync with HTML and plain text
+// - Smooth collapsible toolbar (only icons, spacious padding)
+// ============================================================================
+interface AutoResizeTextareaProps {
   value?: string;
   onChange?: (e: { target: { value: string } } | React.ChangeEvent<HTMLTextAreaElement>) => void;
   minRows?: number;
   enableRichText?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  onFocus?: (e: any) => void;
+  onBlur?: (e: any) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  readOnly?: boolean;
 }
 
 const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
@@ -133,288 +147,344 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   onFocus,
   onBlur,
   placeholder,
-  ...props
+  disabled,
+  readOnly,
 }) => {
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isUserTypingRef = useRef(false);
   const [isFocused, setIsFocused] = useState(false);
   const blurTimeoutRef = useRef<any>(null);
+  const [activeFormats, setActiveFormats] = useState({
+    bold: false,
+    italic: false,
+    bullet: false,
+    number: false,
+  });
 
   const isAmberTheme = className.includes('amber');
 
-  const adjustHeight = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-
-    // Jika elemen masih tersembunyi (di dalam section hidden / offsetWidth === 0), tunda kalkulasi
-    if (el.offsetWidth === 0 && el.offsetHeight === 0) return;
-
-    const computed = window.getComputedStyle(el);
-    const paddingTop = parseFloat(computed.paddingTop) || 8;
-    const paddingBottom = parseFloat(computed.paddingBottom) || 8;
-    const lineHeight = parseFloat(computed.lineHeight) || 17;
-    const minHeight = minRows * lineHeight + paddingTop + paddingBottom;
-
-    if (!isUserTypingRef.current) {
-      el.style.transition = 'none';
-    } else {
-      el.style.transition = 'height 160ms cubic-bezier(0.16, 1, 0.3, 1)';
+  // Convert incoming value (markdown or plain text) to standard HTML
+  const toHtml = useCallback((raw: string): string => {
+    if (!raw) return '';
+    // If string already contains HTML tags (e.g. <b>, <i>, <ul>, <ol>, <li>, <div>, <p>, <br>)
+    if (/<(b|i|u|strong|em|ul|ol|li|p|div|br)[\s\S]*>/i.test(raw)) {
+      return raw;
     }
 
-    // Reset ke auto untuk mengukur scrollHeight yang aktual
-    el.style.height = 'auto';
-    const targetHeight = Math.max(minHeight, Math.ceil(el.scrollHeight));
-    el.style.height = `${targetHeight}px`;
-  }, [minRows]);
+    // Convert markdown & newlines to HTML
+    let html = raw
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/\*(.+?)\*/g, '<i>$1</i>');
 
-  // Sesuaikan tinggi saat value berubah (misal saat draft data dimuat, dikte suara, atau AI compile)
-  useLayoutEffect(() => {
-    adjustHeight();
-    const rafId = requestAnimationFrame(() => {
-      adjustHeight();
-    });
-    return () => cancelAnimationFrame(rafId);
-  }, [value, adjustHeight]);
+    const lines = html.split('\n');
+    const result: string[] = [];
+    let inUl = false;
+    let inOl = false;
 
-  // Observer ketika elemen berpindah dari hidden ke visible (misal user switch section/tab)
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-
-    adjustHeight();
-
-    if (typeof ResizeObserver !== 'undefined') {
-      let lastWidth = el.offsetWidth;
-      const ro = new ResizeObserver(() => {
-        if (el.offsetWidth > 0 && el.offsetWidth !== lastWidth) {
-          lastWidth = el.offsetWidth;
-          adjustHeight();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('• ') || trimmed.startsWith('- ')) {
+        if (inOl) {
+          result.push('</ol>');
+          inOl = false;
         }
-      });
-      ro.observe(el);
-      return () => ro.disconnect();
+        if (!inUl) {
+          result.push('<ul>');
+          inUl = true;
+        }
+        result.push(`<li>${trimmed.slice(2)}</li>`);
+      } else if (/^\d+\.\s/.test(trimmed)) {
+        if (inUl) {
+          result.push('</ul>');
+          inUl = false;
+        }
+        if (!inOl) {
+          result.push('<ol>');
+          inOl = true;
+        }
+        result.push(`<li>${trimmed.replace(/^\d+\.\s*/, '')}</li>`);
+      } else {
+        if (inUl) {
+          result.push('</ul>');
+          inUl = false;
+        }
+        if (inOl) {
+          result.push('</ol>');
+          inOl = false;
+        }
+        result.push(line ? `<div>${line}</div>` : '<div><br></div>');
+      }
     }
-  }, [adjustHeight]);
 
-  // Tambahan listener window resize
-  useEffect(() => {
-    const handleResize = () => adjustHeight();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [adjustHeight]);
+    if (inUl) result.push('</ul>');
+    if (inOl) result.push('</ol>');
 
-  const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    return result.join('');
+  }, []);
+
+  const updateActiveFormats = useCallback(() => {
+    if (typeof document === 'undefined') return;
+    try {
+      setActiveFormats({
+        bold: document.queryCommandState('bold'),
+        italic: document.queryCommandState('italic'),
+        bullet: document.queryCommandState('insertUnorderedList'),
+        number: document.queryCommandState('insertOrderedList'),
+      });
+    } catch (_) {}
+  }, []);
+
+  // Sync external value changes into the contenteditable element
+  useLayoutEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+
+    if (isUserTypingRef.current) {
+      isUserTypingRef.current = false;
+      return;
+    }
+
+    const targetHtml = toHtml(value || '');
+    if (el.innerHTML !== targetHtml) {
+      el.innerHTML = targetHtml;
+    }
+  }, [value, toHtml]);
+
+  const handleInput = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    isUserTypingRef.current = true;
+
+    let html = el.innerHTML;
+    const textContent = el.textContent || '';
+    if (!textContent.trim() && !el.querySelector('img')) {
+      html = '';
+    }
+
+    if (onChange) {
+      onChange({ target: { value: html } } as any);
+    }
+    updateActiveFormats();
+  }, [onChange, updateActiveFormats]);
+
+  const handleFocus = (e: React.FocusEvent<HTMLDivElement>) => {
     if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     setIsFocused(true);
+    updateActiveFormats();
     if (onFocus) onFocus(e);
   };
 
-  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+  const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
     blurTimeoutRef.current = setTimeout(() => {
       setIsFocused(false);
-    }, 180);
+    }, 220);
     if (onBlur) onBlur(e);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // 1. Enter key handling for automatic bullet & numbered list continuation
+    if (e.key === 'Enter') {
+      const sel = window.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
+
+      const anchor = sel.anchorNode;
+      const parentLi = (anchor.nodeType === Node.ELEMENT_NODE ? (anchor as HTMLElement) : anchor.parentElement)?.closest('li');
+
+      // Case A: Inside native <ul> / <ol> <li>
+      if (parentLi) {
+        const text = parentLi.textContent?.trim() || '';
+        if (!text) {
+          // Empty list item -> exit list
+          e.preventDefault();
+          document.execCommand('outdent', false);
+          document.execCommand('formatBlock', false, 'div');
+          handleInput();
+          return;
+        }
+        // If it has text, browser natively inserts next <li> on Enter
+        setTimeout(() => {
+          handleInput();
+          updateActiveFormats();
+        }, 10);
+        return;
+      }
+
+      // Case B: Plain text lines with bullet (•, -, *) or number (1., 2.)
+      const textNode = anchor.nodeType === Node.TEXT_NODE ? anchor : null;
+      if (textNode) {
+        const textVal = textNode.textContent || '';
+        const offset = sel.anchorOffset;
+        const textBefore = textVal.slice(0, offset);
+        const lines = textBefore.split('\n');
+        const currentLine = lines[lines.length - 1] || '';
+
+        // Check for bullet: •, -, *
+        const bulletMatch = currentLine.match(/^(\s*)([•\-*])\s(.*)$/);
+        if (bulletMatch) {
+          e.preventDefault();
+          const [_, indent, symbol, content] = bulletMatch;
+          if (!content.trim()) {
+            // Empty bullet line -> clear bullet and exit
+            const startOfLineOffset = offset - currentLine.length;
+            const range = document.createRange();
+            range.setStart(textNode, startOfLineOffset);
+            range.setEnd(textNode, offset);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            document.execCommand('delete', false);
+            document.execCommand('insertParagraph', false);
+          } else {
+            // Continue bullet
+            document.execCommand('insertParagraph', false);
+            document.execCommand('insertText', false, `${indent}${symbol} `);
+          }
+          handleInput();
+          return;
+        }
+
+        // Check for numbered list: 1., 2. etc.
+        const numMatch = currentLine.match(/^(\s*)(\d+)\.\s(.*)$/);
+        if (numMatch) {
+          e.preventDefault();
+          const [_, indent, numStr, content] = numMatch;
+          if (!content.trim()) {
+            // Empty number line -> clear number and exit
+            const startOfLineOffset = offset - currentLine.length;
+            const range = document.createRange();
+            range.setStart(textNode, startOfLineOffset);
+            range.setEnd(textNode, offset);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            document.execCommand('delete', false);
+            document.execCommand('insertParagraph', false);
+          } else {
+            // Continue next number
+            const nextNum = parseInt(numStr, 10) + 1;
+            document.execCommand('insertParagraph', false);
+            document.execCommand('insertText', false, `${indent}${nextNum}. `);
+          }
+          handleInput();
+          return;
+        }
+
+        // Check for checklist: ✓
+        const checkMatch = currentLine.match(/^(\s*)(✓)\s(.*)$/);
+        if (checkMatch) {
+          e.preventDefault();
+          const [_, indent, symbol, content] = checkMatch;
+          if (!content.trim()) {
+            const startOfLineOffset = offset - currentLine.length;
+            const range = document.createRange();
+            range.setStart(textNode, startOfLineOffset);
+            range.setEnd(textNode, offset);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            document.execCommand('delete', false);
+            document.execCommand('insertParagraph', false);
+          } else {
+            document.execCommand('insertParagraph', false);
+            document.execCommand('insertText', false, `${indent}${symbol} `);
+          }
+          handleInput();
+          return;
+        }
+      }
+    }
+
+    // 2. Backspace key handling on empty prefix
+    if (e.key === 'Backspace') {
+      const sel = window.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
+      const anchor = sel.anchorNode;
+      if (anchor.nodeType === Node.TEXT_NODE) {
+        const textVal = anchor.textContent || '';
+        const offset = sel.anchorOffset;
+        const textBefore = textVal.slice(0, offset);
+        if (/^(\s*)([•\-*]|✓|\d+\.)\s$/.test(textBefore)) {
+          e.preventDefault();
+          const range = document.createRange();
+          range.setStart(anchor, 0);
+          range.setEnd(anchor, offset);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          document.execCommand('delete', false);
+          handleInput();
+          return;
+        }
+      }
+    }
   };
 
   const applyFormat = (
     type: 'bold' | 'italic' | 'bullet' | 'number' | 'check' | 'quote' | 'case' | 'clear'
   ) => {
-    const el = textareaRef.current;
+    const el = editorRef.current;
     if (!el) return;
 
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const currentVal = String(value || '');
-    const selectedText = currentVal.substring(start, end);
-
-    let newText = currentVal;
-    let newStart = start;
-    let newEnd = end;
+    el.focus();
 
     switch (type) {
-      case 'bold': {
-        if (selectedText.startsWith('**') && selectedText.endsWith('**') && selectedText.length >= 4) {
-          const inner = selectedText.slice(2, -2);
-          newText = currentVal.substring(0, start) + inner + currentVal.substring(end);
-          newEnd = start + inner.length;
-        } else if (selectedText.length > 0) {
-          const wrapped = `**${selectedText}**`;
-          newText = currentVal.substring(0, start) + wrapped + currentVal.substring(end);
-          newEnd = start + wrapped.length;
-        } else {
-          newText = currentVal.substring(0, start) + '****' + currentVal.substring(end);
-          newStart = start + 2;
-          newEnd = start + 2;
-        }
+      case 'bold':
+        document.execCommand('bold', false);
         break;
-      }
-      case 'italic': {
-        if (
-          selectedText.startsWith('*') &&
-          selectedText.endsWith('*') &&
-          selectedText.length >= 2 &&
-          !selectedText.startsWith('**')
-        ) {
-          const inner = selectedText.slice(1, -1);
-          newText = currentVal.substring(0, start) + inner + currentVal.substring(end);
-          newEnd = start + inner.length;
-        } else if (selectedText.length > 0) {
-          const wrapped = `*${selectedText}*`;
-          newText = currentVal.substring(0, start) + wrapped + currentVal.substring(end);
-          newEnd = start + wrapped.length;
-        } else {
-          newText = currentVal.substring(0, start) + '**' + currentVal.substring(end);
-          newStart = start + 1;
-          newEnd = start + 1;
-        }
+      case 'italic':
+        document.execCommand('italic', false);
         break;
-      }
-      case 'bullet': {
-        if (selectedText.length > 0) {
-          const lines = selectedText.split('\n');
-          const allBulleted = lines.every((l) => l.startsWith('• ') || l.startsWith('- '));
-          const modified = lines
-            .map((l) =>
-              allBulleted ? l.replace(/^([•\-]\s*)/, '') : `• ${l.replace(/^([•\-]\s*)/, '')}`
-            )
-            .join('\n');
-          newText = currentVal.substring(0, start) + modified + currentVal.substring(end);
-          newEnd = start + modified.length;
-        } else {
-          const before = currentVal.substring(0, start);
-          const lastNl = before.lastIndexOf('\n');
-          const lineStart = lastNl === -1 ? 0 : lastNl + 1;
-          const lineText = currentVal.substring(lineStart, start);
-          if (lineText.startsWith('• ')) {
-            newText =
-              currentVal.substring(0, lineStart) +
-              lineText.slice(2) +
-              currentVal.substring(start);
-            newStart = Math.max(lineStart, start - 2);
-            newEnd = newStart;
-          } else {
-            newText =
-              currentVal.substring(0, lineStart) + '• ' + currentVal.substring(lineStart);
-            newStart = start + 2;
-            newEnd = newStart;
-          }
-        }
+      case 'bullet':
+        document.execCommand('insertUnorderedList', false);
         break;
-      }
-      case 'number': {
-        if (selectedText.length > 0) {
-          const lines = selectedText.split('\n');
-          const allNumbered = lines.every((l) => /^\d+\.\s*/.test(l));
-          const modified = lines
-            .map((l, i) =>
-              allNumbered ? l.replace(/^\d+\.\s*/, '') : `${i + 1}. ${l.replace(/^\d+\.\s*/, '')}`
-            )
-            .join('\n');
-          newText = currentVal.substring(0, start) + modified + currentVal.substring(end);
-          newEnd = start + modified.length;
-        } else {
-          const before = currentVal.substring(0, start);
-          const lastNl = before.lastIndexOf('\n');
-          const lineStart = lastNl === -1 ? 0 : lastNl + 1;
-          newText =
-            currentVal.substring(0, lineStart) + '1. ' + currentVal.substring(lineStart);
-          newStart = start + 3;
-          newEnd = newStart;
-        }
+      case 'number':
+        document.execCommand('insertOrderedList', false);
         break;
-      }
       case 'check': {
-        if (selectedText.length > 0) {
-          const lines = selectedText.split('\n');
-          const allChecked = lines.every((l) => l.startsWith('✓ ') || l.startsWith('[✓] '));
-          const modified = lines
-            .map((l) =>
-              allChecked ? l.replace(/^(\[✓\]\s*|✓\s*)/, '') : `✓ ${l.replace(/^(\[✓\]\s*|✓\s*)/, '')}`
-            )
-            .join('\n');
-          newText = currentVal.substring(0, start) + modified + currentVal.substring(end);
-          newEnd = start + modified.length;
-        } else {
-          const before = currentVal.substring(0, start);
-          const lastNl = before.lastIndexOf('\n');
-          const lineStart = lastNl === -1 ? 0 : lastNl + 1;
-          newText =
-            currentVal.substring(0, lineStart) + '✓ ' + currentVal.substring(lineStart);
-          newStart = start + 2;
-          newEnd = newStart;
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          const selected = range.toString();
+          if (selected.startsWith('✓ ')) {
+            document.execCommand('insertText', false, selected.slice(2));
+          } else if (selected.length > 0) {
+            document.execCommand('insertText', false, `✓ ${selected}`);
+          } else {
+            document.execCommand('insertText', false, '✓ ');
+          }
         }
         break;
       }
       case 'quote': {
-        if (selectedText.length > 0) {
-          const lines = selectedText.split('\n');
-          const allQuoted = lines.every((l) => l.startsWith('> '));
-          const modified = lines
-            .map((l) => (allQuoted ? l.replace(/^>\s*/, '') : `> ${l.replace(/^>\s*/, '')}`))
-            .join('\n');
-          newText = currentVal.substring(0, start) + modified + currentVal.substring(end);
-          newEnd = start + modified.length;
-        } else {
-          const before = currentVal.substring(0, start);
-          const lastNl = before.lastIndexOf('\n');
-          const lineStart = lastNl === -1 ? 0 : lastNl + 1;
-          newText =
-            currentVal.substring(0, lineStart) + '> ' + currentVal.substring(lineStart);
-          newStart = start + 2;
-          newEnd = newStart;
-        }
+        document.execCommand('formatBlock', false, 'blockquote');
         break;
       }
       case 'case': {
-        if (selectedText.length > 0) {
-          let transformed = selectedText;
-          if (selectedText === selectedText.toUpperCase()) {
-            transformed = selectedText.toLowerCase();
-          } else if (selectedText === selectedText.toLowerCase()) {
-            transformed = selectedText.replace(/\b\w/g, (c) => c.toUpperCase());
-          } else {
-            transformed = selectedText.toUpperCase();
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const selected = sel.toString();
+          if (selected.length > 0) {
+            let transformed = selected;
+            if (selected === selected.toUpperCase()) {
+              transformed = selected.toLowerCase();
+            } else if (selected === selected.toLowerCase()) {
+              transformed = selected.replace(/\b\w/g, (c) => c.toUpperCase());
+            } else {
+              transformed = selected.toUpperCase();
+            }
+            document.execCommand('insertText', false, transformed);
           }
-          newText = currentVal.substring(0, start) + transformed + currentVal.substring(end);
-          newEnd = start + transformed.length;
         }
         break;
       }
-      case 'clear': {
-        if (selectedText.length > 0) {
-          const cleaned = selectedText
-            .replace(/\*\*(.*?)\*\*/g, '$1')
-            .replace(/\*(.*?)\*/g, '$1')
-            .replace(/^[\s*•\-–—✓>]+\s*/gm, '')
-            .replace(/^\d+\.\s*/gm, '');
-          newText = currentVal.substring(0, start) + cleaned + currentVal.substring(end);
-          newEnd = start + cleaned.length;
-        } else {
-          const cleaned = currentVal
-            .replace(/\*\*(.*?)\*\*/g, '$1')
-            .replace(/\*(.*?)\*/g, '$1')
-            .replace(/^[\s*•\-–—✓>]+\s*/gm, '')
-            .replace(/^\d+\.\s*/gm, '');
-          newText = cleaned;
-          newStart = 0;
-          newEnd = cleaned.length;
-        }
+      case 'clear':
+        document.execCommand('removeFormat', false);
+        document.execCommand('formatBlock', false, 'div');
         break;
-      }
     }
 
-    isUserTypingRef.current = true;
-    if (onChange) {
-      onChange({ target: { value: newText } } as any);
-    }
-
-    requestAnimationFrame(() => {
-      el.focus();
-      try {
-        el.setSelectionRange(newStart, newEnd);
-      } catch (_) {}
-      adjustHeight();
-    });
+    handleInput();
+    updateActiveFormats();
   };
 
   if (!enableRichText) {
@@ -424,9 +494,7 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
         rows={minRows}
         value={value}
         onChange={(e) => {
-          isUserTypingRef.current = true;
           if (onChange) onChange(e);
-          adjustHeight();
         }}
         style={{
           ...style,
@@ -436,14 +504,16 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
         }}
         className={className}
         placeholder={placeholder}
-        {...props}
       />
     );
   }
 
+  const isEmpty = !value || value.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() === '';
+
   return (
     <div
-      className={`relative w-full rounded-xl transition-all duration-200 ${
+      onClick={() => editorRef.current?.focus()}
+      className={`relative w-full rounded-xl transition-all duration-200 cursor-text ${
         isFocused
           ? isAmberTheme
             ? 'border border-amber-400 ring-2 ring-amber-400/25 bg-white shadow-xs'
@@ -462,7 +532,10 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
               : 'max-h-12 opacity-100 border-b border-slate-100 bg-slate-50/90 px-2 sm:px-2.5 py-1 pointer-events-auto'
             : 'max-h-0 opacity-0 py-0 px-2 sm:px-2.5 border-b-0 pointer-events-none'
         }`}
-        onMouseDown={(e) => e.preventDefault()}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         onTouchStart={() => {
           if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
         }}
@@ -472,8 +545,12 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           <button
             type="button"
             onClick={() => applyFormat('bold')}
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
-            title="Tebal (Bold)"
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs ${
+              activeFormats.bold
+                ? 'bg-teal-600 text-white font-bold'
+                : 'text-slate-600 hover:text-teal-700 hover:bg-white'
+            }`}
+            title="Tebal Langsung (Bold)"
           >
             <Bold className="w-3.5 h-3.5" />
           </button>
@@ -482,8 +559,12 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           <button
             type="button"
             onClick={() => applyFormat('italic')}
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
-            title="Miring (Italic)"
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs ${
+              activeFormats.italic
+                ? 'bg-teal-600 text-white font-bold'
+                : 'text-slate-600 hover:text-teal-700 hover:bg-white'
+            }`}
+            title="Miring Langsung (Italic)"
           >
             <Italic className="w-3.5 h-3.5" />
           </button>
@@ -495,8 +576,12 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           <button
             type="button"
             onClick={() => applyFormat('bullet')}
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
-            title="Daftar Poin (Bullet List)"
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs ${
+              activeFormats.bullet
+                ? 'bg-teal-600 text-white font-bold'
+                : 'text-slate-600 hover:text-teal-700 hover:bg-white'
+            }`}
+            title="Daftar Poin (Auto-Bullet on Enter)"
           >
             <List className="w-3.5 h-3.5" />
           </button>
@@ -505,8 +590,12 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
           <button
             type="button"
             onClick={() => applyFormat('number')}
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-teal-700 hover:bg-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
-            title="Daftar Angka (Numbered List)"
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs ${
+              activeFormats.number
+                ? 'bg-teal-600 text-white font-bold'
+                : 'text-slate-600 hover:text-teal-700 hover:bg-white'
+            }`}
+            title="Daftar Angka (Auto-Increment on Enter)"
           >
             <ListOrdered className="w-3.5 h-3.5" />
           </button>
@@ -559,30 +648,38 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
         </div>
       </div>
 
-      {/* Textarea */}
-      <textarea
-        ref={textareaRef}
-        rows={minRows}
-        value={value}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        onChange={(e) => {
-          isUserTypingRef.current = true;
-          if (onChange) onChange(e);
-          adjustHeight();
-        }}
-        placeholder={placeholder}
-        style={{
-          boxSizing: 'border-box',
-          overflow: 'hidden',
-          resize: 'none',
-          ...style,
-        }}
-        className={`w-full bg-transparent p-2 sm:p-2.5 text-[11.6px] outline-none transition leading-[1.45] placeholder:text-slate-400 ${
-          isAmberTheme ? 'font-bold text-slate-900' : 'text-slate-800'
-        }`}
-        {...props}
-      />
+      {/* Editor Container with Placeholder Overlay */}
+      <div className="relative w-full">
+        {isEmpty && placeholder && (
+          <div className="pointer-events-none absolute left-2 sm:left-2.5 top-2 sm:top-2.5 text-slate-400 text-[11.6px] leading-[1.5] select-none">
+            {placeholder}
+          </div>
+        )}
+
+        <div
+          ref={editorRef}
+          contentEditable={!disabled && !readOnly}
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onKeyUp={updateActiveFormats}
+          onMouseUp={updateActiveFormats}
+          style={{
+            minHeight: `${minRows * 20 + 12}px`,
+            outline: 'none',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            ...style,
+          }}
+          className={`w-full bg-transparent p-2 sm:p-2.5 text-[11.6px] leading-[1.5] outline-none transition cursor-text select-text ${
+            isAmberTheme ? 'font-bold text-slate-900' : 'text-slate-800'
+          } [&_b]:font-black [&_strong]:font-black [&_i]:italic [&_em]:italic [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-teal-500 [&_blockquote]:pl-2.5 [&_blockquote]:italic [&_blockquote]:text-slate-600`}
+        />
+      </div>
     </div>
   );
 };

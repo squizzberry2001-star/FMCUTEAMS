@@ -300,8 +300,17 @@ export async function generateTaroBatchAnalysis(
 ): Promise<TaroBatchAnalysisResult | null> {
   if (!allCaptions || allCaptions.length === 0) return null;
 
+  const cleanHtml = (txt: string) =>
+    String(txt || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>|<\/div>|<\/li>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
   const captionListStr = allCaptions
-    .map((c) => `[Foto #${c.index}]: ${c.caption}`)
+    .map((c) => `[Foto #${c.index}]: ${cleanHtml(c.caption)}`)
     .join('\n');
 
   const systemPrompt = buildFamilyMartSystemPrompt();
@@ -686,8 +695,13 @@ function generateLocalRuleBasedBatchAnalysis(
   const coveredTopics = new Set<string>();
 
   for (const item of allCaptions) {
-    const matched = matchHoldingTimeRule(item.caption);
-    const lower = item.caption.toLowerCase();
+    const cleanCap = String(item.caption || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const matched = matchHoldingTimeRule(cleanCap);
+    const lower = cleanCap.toLowerCase();
 
     if (matched && !coveredTopics.has(matched.product)) {
       coveredTopics.add(matched.product);
@@ -695,7 +709,7 @@ function generateLocalRuleBasedBatchAnalysis(
         title: `Kepatuhan ${matched.product}`,
         type: 'QSC',
         category: 'Food Safety & Holding Time',
-        auditFinding: item.caption,
+        auditFinding: cleanCap,
         idealCondition: matched.idealHolding,
         operationalImpact: matched.impact,
         rootCause: matched.rootCause,
