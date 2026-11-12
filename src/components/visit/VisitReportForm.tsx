@@ -4300,11 +4300,11 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
           FLOATING QUICK ACTIONS (POJOK KANAN BAWAH TEPAT DI ATAS NAVBAR)
           - Section 2 (Observasi): Tombol + & Navigasi Cepat Antar Card Temuan (Liquid Glass)
           - Section 3 (Bukti): Tombol Icon Camera & Gallery (Liquid Glass)
-          Selalu aktif dan tidak menghilang saat scroll ke bawah
+          Khusus Mobile (md:hidden). Untuk Desktop (md:flex), diposisikan di samping bottom navbar beda dock.
           ===================================================================== */}
       {activeSection === 3 && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          className={`md:hidden fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             isScrolled
               ? 'translate-y-28 opacity-0 pointer-events-none scale-90'
               : 'translate-y-0 opacity-100 pointer-events-auto scale-100'
@@ -4351,7 +4351,7 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
 
       {activeSection === 2 && (
         <div
-          className={`fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          className={`md:hidden fixed bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2.5 select-none will-change-transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             isScrolled
               ? 'translate-y-28 opacity-0 pointer-events-none scale-90'
               : 'translate-y-0 opacity-100 pointer-events-auto scale-100'
@@ -4382,137 +4382,223 @@ export const VisitReportForm: React.FC<VisitReportFormProps> = ({
       {/* ============================================================
           BOTTOM NAVBAR FORM VISIT (3 SECTION: INFO, OBSERVASI, BUKTI)
           Ala Glass iPhone dengan Smooth Sliding Lens Pill (Image 1 Aesthetic)
+          + DOCK ACTION KHUSUS DESKTOP DI SAMPING NAVBAR (BEDA DOCK)
           ============================================================ */}
       <div className="fixed bottom-4 sm:bottom-5 left-0 right-0 mx-auto flex justify-center pointer-events-none z-40 select-none px-4">
-        <div
-          onClick={handleResetScale}
-          style={{
-            transform: isScrolled ? 'scale(0.90)' : 'scale(1)',
-          }}
-          className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-full ${
-            isScrolled ? 'iphone-glass-dock-scrolled' : 'iphone-glass-dock'
-          }`}
-        >
-          {/* Top Specular Hairline Reflection */}
-          <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/95 to-transparent opacity-90 z-10" />
-
-          {/* Ambient Bottom Refraction Rim */}
-          <div className="pointer-events-none absolute inset-x-12 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-60 z-10" />
-
-          {/* SLIDING ACTIVE GLASS LENS PILL (High-Contrast Apple Dark Lens, Image 1 Aesthetic) */}
+        <div className="relative flex items-center justify-center w-full max-w-md">
+          {/* Main 3-Tab Bottom Navbar Dock */}
           <div
-            className="absolute top-1.5 bottom-1.5 rounded-full iphone-glass-pill pointer-events-none dock-pill-transition z-0"
+            onClick={handleResetScale}
             style={{
-              width: 'calc((100% - 12px) / 3)',
-              transform: `translateX(calc(${activeSection - 1} * 100%))`,
-              left: '6px',
+              transform: isScrolled ? 'scale(0.90)' : 'scale(1)',
             }}
+            className={`w-full max-w-md flex items-center pointer-events-auto dock-transition origin-center relative overflow-hidden select-none p-1.5 rounded-full ${
+              isScrolled ? 'iphone-glass-dock-scrolled' : 'iphone-glass-dock'
+            }`}
           >
-            <div className="pointer-events-none absolute inset-x-4 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-95" />
-            <div className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/10 via-transparent to-transparent" />
+            {/* Top Specular Hairline Reflection */}
+            <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/95 to-transparent opacity-90 z-10" />
+
+            {/* Ambient Bottom Refraction Rim */}
+            <div className="pointer-events-none absolute inset-x-12 bottom-0 h-[0.75px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-60 z-10" />
+
+            {/* SLIDING ACTIVE GLASS LENS PILL (High-Contrast Apple Dark Lens, Image 1 Aesthetic) */}
+            <div
+              className="absolute top-1.5 bottom-1.5 rounded-full iphone-glass-pill pointer-events-none dock-pill-transition z-0"
+              style={{
+                width: 'calc((100% - 12px) / 3)',
+                transform: `translateX(calc(${activeSection - 1} * 100%))`,
+                left: '6px',
+              }}
+            >
+              <div className="pointer-events-none absolute inset-x-4 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-95" />
+              <div className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/10 via-transparent to-transparent" />
+            </div>
+
+            {/* Section 1 = INFO */}
+            <button
+              type="button"
+              onPointerDown={handleResetScale}
+              onClick={() => {
+                handleSwitchSection(1);
+                handleResetScale();
+              }}
+              className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
+            >
+              <div className="relative flex items-center justify-center">
+                <Store
+                  className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
+                    activeSection === 1
+                      ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
+                      : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
+                  }`}
+                />
+              </div>
+              <span
+                className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
+                  activeSection === 1
+                    ? 'text-slate-900 font-black scale-[1.02]'
+                    : 'text-slate-600 font-bold group-hover:text-black'
+                }`}
+              >
+                INFO
+              </span>
+            </button>
+
+            {/* Section 2 = BUKTI */}
+            <button
+              type="button"
+              onPointerDown={handleResetScale}
+              onClick={() => {
+                handleSwitchSection(2);
+                handleResetScale();
+              }}
+              className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
+            >
+              <div className="relative flex items-center justify-center">
+                <Camera
+                  className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
+                    activeSection === 2
+                      ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
+                      : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
+                  }`}
+                />
+
+                {formData.evidencePhotos.length + (formData.caPhotos?.length || 0) > 0 && (
+                  <span className="absolute -top-1 -right-2 z-20 w-4 h-4 rounded-full aspect-square flex items-center justify-center text-[9px] font-black bg-[#FF3B30] text-white shadow-sm ring-2 ring-white leading-none select-none">
+                    {formData.evidencePhotos.length + (formData.caPhotos?.length || 0)}
+                  </span>
+                )}
+              </div>
+              <span
+                className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
+                  activeSection === 2
+                    ? 'text-slate-900 font-black scale-[1.02]'
+                    : 'text-slate-600 font-bold group-hover:text-black'
+                }`}
+              >
+                BUKTI
+              </span>
+            </button>
+
+            {/* Section 3 = Observasi */}
+            <button
+              type="button"
+              onPointerDown={handleResetScale}
+              onClick={() => {
+                handleSwitchSection(3);
+                handleResetScale();
+              }}
+              className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
+            >
+              <div className="relative flex items-center justify-center">
+                <ClipboardCheck
+                  className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
+                    activeSection === 3
+                      ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
+                      : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
+                  }`}
+                />
+
+                {formData.observations.length > 0 && (
+                  <span className="absolute -top-1 -right-2 z-20 w-4 h-4 rounded-full aspect-square flex items-center justify-center text-[9px] font-black bg-[#FF3B30] text-white shadow-sm ring-2 ring-white leading-none select-none">
+                    {formData.observations.length}
+                  </span>
+                )}
+              </div>
+              <span
+                className={`tracking-tight leading-none text-[10px] transition-all duration-300 ${
+                  activeSection === 3
+                    ? 'text-slate-900 font-black scale-[1.02]'
+                    : 'text-slate-600 font-bold group-hover:text-black'
+                }`}
+              >
+                Observasi
+              </span>
+            </button>
           </div>
 
-          {/* Section 1 = INFO */}
-          <button
-            type="button"
-            onPointerDown={handleResetScale}
-            onClick={() => {
-              handleSwitchSection(1);
-              handleResetScale();
-            }}
-            className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
-          >
-            <div className="relative flex items-center justify-center">
-              <Store
-                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                  activeSection === 1
-                    ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
-                    : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
-                }`}
-              />
-            </div>
-            <span
-              className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
-                activeSection === 1
-                  ? 'text-slate-900 font-black scale-[1.02]'
-                  : 'text-slate-600 font-bold group-hover:text-black'
-              }`}
+          {/* DESKTOP SEPARATE ACTION DOCK - Section 2 (Bukti: Gallery & Camera) */}
+          {activeSection === 2 && (
+            <div
+              onClick={handleResetScale}
+              style={{
+                transform: isScrolled ? 'scale(0.90)' : 'scale(1)',
+              }}
+              className="hidden md:flex absolute left-[calc(100%+12px)] pointer-events-auto dock-transition origin-left select-none will-change-transform"
             >
-              INFO
-            </span>
-          </button>
-
-          {/* Section 2 = BUKTI */}
-          <button
-            type="button"
-            onPointerDown={handleResetScale}
-            onClick={() => {
-              handleSwitchSection(2);
-              handleResetScale();
-            }}
-            className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
-          >
-            <div className="relative flex items-center justify-center">
-              <Camera
-                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                  activeSection === 2
-                    ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
-                    : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
-                }`}
-              />
-
-              {formData.evidencePhotos.length + (formData.caPhotos?.length || 0) > 0 && (
-                <span className="absolute -top-1 -right-2 z-20 w-4 h-4 rounded-full aspect-square flex items-center justify-center text-[9px] font-black bg-[#FF3B30] text-white shadow-sm ring-2 ring-white leading-none select-none">
-                  {formData.evidencePhotos.length + (formData.caPhotos?.length || 0)}
-                </span>
-              )}
+              <div className="iphone-glass-mini-dock h-[52px] px-2.5 rounded-full flex items-center gap-1.5 shadow-lg border border-white/80">
+                <button
+                  type="button"
+                  onClick={() => evidenceGalleryInputRef.current?.click()}
+                  title="Pilih Foto dari Galeri"
+                  className="w-10 h-10 rounded-full hover:bg-slate-900/5 active:bg-slate-900/10 flex items-center justify-center text-slate-700 hover:text-black active:scale-95 transition-all duration-150 cursor-pointer"
+                >
+                  <ImageIcon className="w-5 h-5 stroke-[2.2]" />
+                </button>
+                <div className="w-[1px] h-4 bg-slate-300/60" />
+                <button
+                  type="button"
+                  onClick={() => evidenceCameraInputRef.current?.click()}
+                  title="Ambil Foto dengan Kamera"
+                  className="w-10 h-10 rounded-full hover:bg-teal-500/10 active:bg-teal-500/20 flex items-center justify-center text-teal-700 hover:text-teal-900 active:scale-95 transition-all duration-150 cursor-pointer"
+                >
+                  <Camera className="w-5 h-5 stroke-[2.4]" />
+                </button>
+              </div>
             </div>
-            <span
-              className={`tracking-tight leading-none uppercase text-[10px] transition-all duration-300 ${
-                activeSection === 2
-                  ? 'text-slate-900 font-black scale-[1.02]'
-                  : 'text-slate-600 font-bold group-hover:text-black'
-              }`}
+          )}
+
+          {/* DESKTOP SEPARATE ACTION DOCK - Section 3 (Observasi: Quick Nav & Tambah Temuan) */}
+          {activeSection === 3 && (
+            <div
+              onClick={handleResetScale}
+              style={{
+                transform: isScrolled ? 'scale(0.90)' : 'scale(1)',
+              }}
+              className="hidden md:flex absolute left-[calc(100%+12px)] pointer-events-auto dock-transition origin-left select-none will-change-transform"
             >
-              BUKTI
-            </span>
-          </button>
+              <div className="iphone-glass-mini-dock h-[52px] px-2.5 rounded-full flex items-center gap-1.5 shadow-lg border border-white/80">
+                {currentObsList.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-0.5 px-1">
+                      <button
+                        type="button"
+                        onClick={() => handleJumpToObsCard(activeObsIdx - 1, currentObsList)}
+                        disabled={activeObsIdx <= 0}
+                        className="w-7 h-7 rounded-full hover:bg-black/10 disabled:opacity-30 flex items-center justify-center active:scale-95 transition-transform duration-150 cursor-pointer"
+                        title="Temuan Sebelumnya"
+                      >
+                        <ChevronUp className="w-4 h-4 stroke-[2.4]" />
+                      </button>
+                      <span className="text-[11px] font-black px-1 tracking-tight text-teal-800 whitespace-nowrap">
+                        #{Math.min(activeObsIdx + 1, currentObsList.length)}/{currentObsList.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleJumpToObsCard(activeObsIdx + 1, currentObsList)}
+                        disabled={activeObsIdx >= currentObsList.length - 1}
+                        className="w-7 h-7 rounded-full hover:bg-black/10 disabled:opacity-30 flex items-center justify-center active:scale-95 transition-transform duration-150 cursor-pointer"
+                        title="Temuan Berikutnya"
+                      >
+                        <ChevronDown className="w-4 h-4 stroke-[2.4]" />
+                      </button>
+                    </div>
+                    <div className="w-[1px] h-4 bg-slate-300/60" />
+                  </>
+                )}
 
-          {/* Section 3 = Observasi */}
-          <button
-            type="button"
-            onPointerDown={handleResetScale}
-            onClick={() => {
-              handleSwitchSection(3);
-              handleResetScale();
-            }}
-            className="relative z-10 flex-1 rounded-full flex flex-col items-center justify-center dock-btn-transition active:scale-95 group cursor-pointer focus:outline-none py-2 px-1.5 gap-1"
-          >
-            <div className="relative flex items-center justify-center">
-              <ClipboardCheck
-                className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.35,1)] ${
-                  activeSection === 3
-                    ? 'scale-110 text-slate-900 stroke-[2.5] -translate-y-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.12)]'
-                    : 'scale-100 stroke-[2] text-slate-600 group-hover:text-black group-hover:scale-105'
-                }`}
-              />
-
-              {formData.observations.length > 0 && (
-                <span className="absolute -top-1 -right-2 z-20 w-4 h-4 rounded-full aspect-square flex items-center justify-center text-[9px] font-black bg-[#FF3B30] text-white shadow-sm ring-2 ring-white leading-none select-none">
-                  {formData.observations.length}
-                </span>
-              )}
+                <button
+                  type="button"
+                  onClick={() => handleAddObservation(obsSubTab.toUpperCase() as 'QSC' | 'OPI')}
+                  title={`Tambah Temuan ${obsSubTab.toUpperCase()} Baru`}
+                  className="w-10 h-10 rounded-full hover:bg-teal-500/10 active:bg-teal-500/20 flex items-center justify-center text-teal-800 hover:text-teal-950 active:scale-95 transition-all duration-150 cursor-pointer"
+                >
+                  <Plus className="w-5 h-5 stroke-[2.8]" />
+                </button>
+              </div>
             </div>
-            <span
-              className={`tracking-tight leading-none text-[10px] transition-all duration-300 ${
-                activeSection === 3
-                  ? 'text-slate-900 font-black scale-[1.02]'
-                  : 'text-slate-600 font-bold group-hover:text-black'
-              }`}
-            >
-              Observasi
-            </span>
-          </button>
+          )}
         </div>
       </div>
 
