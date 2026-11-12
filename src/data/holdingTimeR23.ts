@@ -636,11 +636,13 @@ const STORAGE_KEY = 'fmcu_holding_time_standards_v1';
 
 export const getActiveHoldingTimeStandards = (): HoldingTimeStandards => {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && Array.isArray(parsed.categories) && parsed.categories.length > 0) {
-        return parsed;
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+          return parsed;
+        }
       }
     }
   } catch (e) {
@@ -651,7 +653,9 @@ export const getActiveHoldingTimeStandards = (): HoldingTimeStandards => {
 
 export const saveHoldingTimeStandards = (standards: HoldingTimeStandards): void => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(standards));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(standards));
+    }
   } catch (e) {
     console.error('Failed to save holding time standards:', e);
   }
