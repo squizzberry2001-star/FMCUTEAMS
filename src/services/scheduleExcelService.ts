@@ -133,9 +133,35 @@ export function formatWeekRangeDisplay(mondayStr: string): string {
   return `${String(startDay).padStart(2, '0')} ${startMonth} - ${String(endDay).padStart(2, '0')} ${endMonth} ${year}`;
 }
 
+const MONTH_NAME_MAP: Record<string, number> = {
+  jan: 1, january: 1, januari: 1,
+  feb: 2, february: 2, februari: 2, peb: 2, pebruari: 2,
+  mar: 3, march: 3, maret: 3,
+  apr: 4, april: 4,
+  may: 5, mei: 5,
+  jun: 6, june: 6, juni: 6,
+  jul: 7, july: 7, juli: 7,
+  aug: 8, august: 8, agu: 8, agt: 8, agustus: 8,
+  sep: 9, sept: 9, september: 9,
+  oct: 10, october: 10, okt: 10, oktober: 10,
+  nov: 11, november: 11, nop: 11, nopember: 11,
+  dec: 12, december: 12, des: 12, desember: 12,
+};
+
+function expandTwoDigitYear(y: number): number {
+  if (y >= 100) return y;
+  return y >= 70 ? 1900 + y : 2000 + y;
+}
+
+function isValidYmd(y: number, m: number, d: number): boolean {
+  if (y < 1990 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
 export function parseExcelSerialDate(val: any): string | null {
   if (val === undefined || val === null || val === '') return null;
-  if (typeof val === 'number') {
+  if (typeof val === 'number' && Number.isFinite(val)) {
     // Excel 1900 date epoch without local timezone offset shift
     const utcDays = Math.round(val - 25569);
     const d = new Date(utcDays * 86400 * 1000);
@@ -152,16 +178,78 @@ export function parseExcelSerialDate(val: any): string | null {
     const dd = String(adjusted.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
-  const str = String(val).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  const parts = str.split(/[/-]/);
-  if (parts.length === 3) {
-    if (parts[0].length === 4) {
-      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-    } else if (parts[2].length === 4) {
-      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+
+  let str = String(val)
+    .replace(/\u00a0/g, ' ')
+    .trim();
+  if (!str) return null;
+
+  // Numeric Excel serial passed as string (e.g. "46335")
+  if (/^\d{5}(\.\d+)?$/.test(str)) {
+    const num = Number(str);
+    if (num >= 30000 && num <= 70000) {
+      return parseExcelSerialDate(num);
     }
   }
+
+  // Strip weekday prefix e.g. "Senin, 09 Nov 2026"
+  str = str.replace(/^(senin|selasa|rabu|kamis|jumat|jum'at|sabtu|minggu|mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+/i, '').trim();
+
+  // ISO YYYY-MM-DD (or with time suffix)
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
+  if (isoMatch) {
+    const y = Number(isoMatch[1]);
+    const m = Number(isoMatch[2]);
+    const d = Number(isoMatch[3]);
+    if (isValidYmd(y, m, d)) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  // Month name formats: "02-Nov-2026", "2 Nov 2026", "2 November 26", "Nov 2, 2026"
+  const dmyTextMatch = str.match(/^(\d{1,2})[\s\-/.]+([a-zA-Z]+)[\s\-/.,]+(\d{2,4})$/);
+  if (dmyTextMatch) {
+    const d = Number(dmyTextMatch[1]);
+    const m = MONTH_NAME_MAP[dmyTextMatch[2].toLowerCase()];
+    const y = expandTwoDigitYear(Number(dmyTextMatch[3]));
+    if (m && isValidYmd(y, m, d)) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  const mdyTextMatch = str.match(/^([a-zA-Z]+)[\s\-/.]+(\d{1,2}),?[\s\-/.]+(\d{2,4})$/);
+  if (mdyTextMatch) {
+    const m = MONTH_NAME_MAP[mdyTextMatch[1].toLowerCase()];
+    const d = Number(mdyTextMatch[2]);
+    const y = expandTwoDigitYear(Number(mdyTextMatch[3]));
+    if (m && isValidYmd(y, m, d)) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  // Numeric separated formats: YYYY/MM/DD, DD/MM/YYYY, DD-MM-YY, MM/DD/YYYY
+  const parts = str.split(/[\/.\-]/).map((p) => p.trim());
+  if (parts.length === 3 && parts.every((p) => /^\d+$/.test(p))) {
+    const n0 = Number(parts[0]);
+    const n1 = Number(parts[1]);
+    const n2 = Number(parts[2]);
+
+    if (parts[0].length === 4) {
+      if (isValidYmd(n0, n1, n2)) {
+        return `${n0}-${String(n1).padStart(2, '0')}-${String(n2).padStart(2, '0')}`;
+      }
+    } else {
+      const y = expandTwoDigitYear(n2);
+      // Indonesian default DD/MM/YYYY; fallback to MM/DD/YYYY if middle part > 12
+      if (n1 > 12 && n0 <= 12 && isValidYmd(y, n0, n1)) {
+        return `${y}-${String(n0).padStart(2, '0')}-${String(n1).padStart(2, '0')}`;
+      }
+      if (isValidYmd(y, n1, n0)) {
+        return `${y}-${String(n1).padStart(2, '0')}-${String(n0).padStart(2, '0')}`;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -331,6 +419,15 @@ export function matchStoreFromLocationPart(
   return { store: null, cleanName: cleaned };
 }
 
+function normalizePicForMatch(name: string): string {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function matchOrRegisterUserByName(
   rawName: string,
   usersList: User[]
@@ -338,51 +435,73 @@ export function matchOrRegisterUserByName(
   const clean = String(rawName || '')
     .replace(/\s+/g, ' ')
     .trim();
-  const norm = clean
-    .toLowerCase()
-    .replace(/[.,]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+
+  // Guard: never auto-register blank or placeholder names
+  if (!clean || clean === '-' || /^(nama|name|total|jumlah|keterangan)$/i.test(clean)) {
+    return {
+      user: {
+        id: '',
+        name: '',
+        email: '',
+        role: 'FMCU Specialist',
+        isAdmin: false,
+      },
+      isNew: false,
+    };
+  }
+
+  const norm = normalizePicForMatch(clean);
 
   // 1. Exact or normalized match
-  const exact = usersList.find((u) => {
-    const uNorm = String(u.name || '')
-      .toLowerCase()
-      .replace(/[.,]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return uNorm === norm;
-  });
+  const exact = usersList.find((u) => normalizePicForMatch(u.name || '') === norm);
   if (exact) return { user: exact, isNew: false };
 
-  // 2. Token match (e.g. "M. Ghifary" vs "M Ghifary" or partial name)
-  const tokens = norm.split(' ').filter((t) => t.length >= 2);
+  // 2. Token + Initial match (e.g. "M. Ghifary" / "M Ghifary" vs "Muhammad Ghifary")
+  const tokens = norm.split(' ').filter((t) => t.length >= 1);
   let bestUser: User | null = null;
-  let bestOverlap = 0;
+  let bestScore = 0;
+
   for (const u of usersList) {
     if (u.isAdmin) continue;
-    const uNorm = String(u.name || '')
-      .toLowerCase()
-      .replace(/[.,]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const uTokens = uNorm.split(' ').filter((t) => t.length >= 2);
-    let overlap = 0;
+    const uNorm = normalizePicForMatch(u.name || '');
+    const uTokens = uNorm.split(' ').filter((t) => t.length >= 1);
+    if (uTokens.length === 0 || tokens.length === 0) continue;
+
+    let exactMatches = 0;
+    let initialMatches = 0;
+
     for (const t of tokens) {
-      if (uTokens.includes(t) || uNorm.includes(t)) overlap++;
+      if (t.length >= 2 && uTokens.includes(t)) {
+        exactMatches++;
+      } else if (t.length === 1 && uTokens.some((ut) => ut.startsWith(t))) {
+        initialMatches++;
+      }
     }
-    if (overlap > bestOverlap && overlap >= Math.min(2, tokens.length)) {
-      bestOverlap = overlap;
+
+    const totalScore = exactMatches * 2 + initialMatches;
+    const minRequired = tokens.length >= 2 ? 3 : 2; // e.g., 1 exact (>=2 chars) + 1 initial = 3, or 2 exact = 4
+    if (exactMatches >= 1 && totalScore >= minRequired && totalScore > bestScore) {
+      bestScore = totalScore;
       bestUser = u;
     }
   }
   if (bestUser) return { user: bestUser, isNew: false };
 
-  // 3. Auto-register new employee account with default password "0000"
+  // 3. Auto-register new employee account with default password "0000" (deterministic unique slug)
+  const baseSlug = clean
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'user';
+  let candidateId = `usr-${baseSlug}`;
+  let suffix = 2;
+  while (usersList.some((u) => u.id === candidateId)) {
+    candidateId = `usr-${baseSlug}-${suffix++}`;
+  }
+
   const newUser: User = {
-    id: `usr-${clean.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`,
+    id: candidateId,
     name: clean,
-    email: `${clean.toLowerCase().replace(/[^a-z0-9]/g, '.')}@fmcu.com`,
+    email: `${baseSlug.replace(/-/g, '.')}@fmcu.com`,
     role: 'FMCU Specialist',
     password: '0000',
     isAdmin: false,
@@ -443,7 +562,7 @@ export function parseScheduleExcelSheet(
   let offCount = 0;
   let cutiCount = 0;
 
-  // Detect header row
+  // Detect header row (supports Indonesian/English variants)
   let startRow = 0;
   for (let i = 0; i < Math.min(10, rows.length); i++) {
     const firstCell = String(rows[i]?.[0] || '')
@@ -452,15 +571,27 @@ export function parseScheduleExcelSheet(
     const secondCell = String(rows[i]?.[1] || '')
       .trim()
       .toLowerCase();
-    if (firstCell === 'nama' || secondCell.includes('start date')) {
+    if (
+      firstCell === 'nama' ||
+      firstCell === 'name' ||
+      firstCell === 'pic' ||
+      secondCell.includes('start date') ||
+      secondCell.includes('tanggal')
+    ) {
       startRow = i + 1;
       break;
     }
   }
 
+  let lastValidRawName = '';
+  const safeSheetSlug = sheetName.replace(/[^a-zA-Z0-9_-]/g, '') || 'Sheet';
+
   for (let r = startRow; r < rows.length; r++) {
     const row = rows[r];
-    if (!row || row.length < 2) continue;
+    if (!row || row.length < 2) {
+      lastValidRawName = '';
+      continue;
+    }
 
     const rawName = String(row[0] || '').trim();
     const rawStartDate = row[1];
@@ -470,13 +601,27 @@ export function parseScheduleExcelSheet(
     const rawDesc = String(row[5] || '').trim();
     const rawLoc = String(row[6] || '').trim();
 
-    if (!rawName && !rawStartDate) continue;
+    if (!rawName && !rawStartDate && !rawDesc && !rawLoc) {
+      lastValidRawName = '';
+      continue;
+    }
 
-    const { user: matchedUser, isNew } = matchOrRegisterUserByName(rawName, workingUsers);
-    if (isNew) newUsersCount++;
+    // Skip repeated header or summary rows
+    if (rawName && /^(nama|name|total|jumlah|keterangan)$/i.test(rawName)) {
+      continue;
+    }
+
+    // Carry forward merged-cell PIC name ONLY if this row has a valid date + activity
+    const effectiveRawName = rawName || (rawStartDate && (rawDesc || rawLoc) ? lastValidRawName : '');
+    if (!effectiveRawName) continue;
+    if (rawName) lastValidRawName = rawName;
 
     const dateStr = parseExcelSerialDate(rawStartDate);
-    if (!matchedUser || !dateStr) continue;
+    if (!dateStr) continue;
+
+    const { user: matchedUser, isNew } = matchOrRegisterUserByName(effectiveRawName, workingUsers);
+    if (!matchedUser || !matchedUser.name) continue;
+    if (isNew) newUsersCount++;
 
     const endDateStr = parseExcelSerialDate(rawEndDate) || dateStr;
     const startTime = parseExcelTime24(rawStartTime, '08:30');
@@ -504,7 +649,7 @@ export function parseScheduleExcelSheet(
     if (descLower === 'cuti' || /^cuti\b/i.test(descClean)) {
       cutiCount++;
       agendas.push({
-        id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-cuti`,
+        id: `xl-${safeSheetSlug}-${r}-cuti`,
         title: 'CUTI',
         date: dateStr,
         endDate: endDateStr,
@@ -533,7 +678,7 @@ export function parseScheduleExcelSheet(
       offCount++;
       const isGantiOff = /ganti\s+off/i.test(descClean);
       agendas.push({
-        id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-off`,
+        id: `xl-${safeSheetSlug}-${r}-off`,
         title: isGantiOff ? `GANTI OFF (${descClean})` : 'HARI LIBUR / OFF',
         date: dateStr,
         endDate: endDateStr,
@@ -653,7 +798,7 @@ export function parseScheduleExcelSheet(
               nonStoreAgendaCount++;
               const cat = classifyNonVisitCategory(cleanPointTitle, subLoc);
               agendas.push({
-                id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-${idx}-${subIdx}`,
+                id: `xl-${safeSheetSlug}-${r}-${idx}-${subIdx}`,
                 title: cleanPointTitle,
                 date: dateStr,
                 endDate: endDateStr,
@@ -687,7 +832,7 @@ export function parseScheduleExcelSheet(
             visitCount++;
 
             agendas.push({
-              id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-${idx}-${subIdx}`,
+              id: `xl-${safeSheetSlug}-${r}-${idx}-${subIdx}`,
               title: `${visitPrefix} - ${storeName}`,
               date: dateStr,
               endDate: endDateStr,
@@ -728,7 +873,7 @@ export function parseScheduleExcelSheet(
           visitCount++;
 
           agendas.push({
-            id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-${idx}`,
+            id: `xl-${safeSheetSlug}-${r}-${idx}`,
             title: `${visitPrefix} - ${storeName}`,
             date: dateStr,
             endDate: endDateStr,
@@ -776,7 +921,7 @@ export function parseScheduleExcelSheet(
         const { store: refStore } = matchStoreFromLocationPart(locPart || cleanPointTitle, allStores);
 
         agendas.push({
-          id: `xl-${sheetName.replace(/\s+/g, '')}-${r}-${idx}`,
+          id: `xl-${safeSheetSlug}-${r}-${idx}`,
           title: agendaTitle,
           date: dateStr,
           endDate: endDateStr,
@@ -841,7 +986,7 @@ export function parseScheduleExcelSheet(
         if (!userDatesSet.has(dObj.dateStr)) {
           offCount++;
           agendas.push({
-            id: `xl-auto-off-${sheetName.replace(/\s+/g, '')}-${userName.replace(/\s+/g, '')}-${dObj.dateStr}`,
+            id: `xl-auto-off-${safeSheetSlug}-${userName.replace(/[^a-zA-Z0-9_-]/g, '')}-${dObj.dateStr}`,
             title: dObj.isWeekend ? 'WEEKEND / OFF' : 'HARI LIBUR / OFF',
             date: dObj.dateStr,
             endDate: dObj.dateStr,
@@ -899,7 +1044,7 @@ export async function parseScheduleExcelFile(
 ): Promise<ExcelWorkbookParseResult> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array' });
-  const availableSheets = workbook.SheetNames || [];
+  const availableSheets: string[] = workbook.SheetNames || [];
 
   const combinedAgendas: ScheduleAgenda[] = [];
   let workingUsers = [...existingUsers];
@@ -916,14 +1061,22 @@ export async function parseScheduleExcelFile(
     sheetNameOption === 'ALL'
       ? availableSheets
       : availableSheets.filter(
-          (s) => s.trim().toLowerCase() === sheetNameOption.trim().toLowerCase()
+          (s: string) => s.trim().toLowerCase() === sheetNameOption.trim().toLowerCase()
         );
 
-  sheetsToParse.forEach((sName) => {
+  const seenAgendaIds = new Set<string>();
+  sheetsToParse.forEach((sName: string, sheetIdx: number) => {
     const ws = workbook.Sheets[sName];
     if (!ws) return;
     const res = parseScheduleExcelSheet(ws, sName, workingUsers);
-    combinedAgendas.push(...res.agendas);
+    for (const ag of res.agendas) {
+      let uniqueId = ag.id;
+      if (seenAgendaIds.has(uniqueId)) {
+        uniqueId = `${ag.id}-s${sheetIdx}`;
+      }
+      seenAgendaIds.add(uniqueId);
+      combinedAgendas.push(uniqueId === ag.id ? ag : { ...ag, id: uniqueId });
+    }
     workingUsers = res.updatedUsers;
     totalVisit += res.stats.visitCount;
     totalNso += res.stats.nsoCount;
@@ -1133,10 +1286,600 @@ export function exportScheduleToTemplateExcel(
 }
 
 // ============================================================================
-// EXPORT MASTER DATA TOKO (610) & TOKO KEPEMILIKAN BESTIE (531) TO EXCEL
+// MASTER TOKO EXCEL PARSER, VALIDATOR, MERGE PREVIEW & TEMPLATE EXPORTER
 // ============================================================================
-export function exportMasterStoresToExcel(): void {
-  const masterStores = getMasterStores();
+export interface MasterStoreMergeResult {
+  stores: MasterStore[];
+  addedCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  invalidCount: number;
+  errors: string[];
+}
+
+export interface ParsedMasterStoreExcelResult {
+  sheetName: string;
+  availableSheets: string[];
+  incomingStores: Partial<MasterStore>[];
+  mergePreview: MasterStoreMergeResult;
+  invalidRows: { row: number; reason: string }[];
+  detectedColumns: Record<string, string>;
+}
+
+type MasterStoreFieldKey =
+  | 'code'
+  | 'name'
+  | 'type'
+  | 'city'
+  | 'region'
+  | 'address'
+  | 'areaManager'
+  | 'areaManagerEmail'
+  | 'regionalManager'
+  | 'regionalManagerEmail'
+  | 'storeHead'
+  | 'email'
+  | 'storePhone'
+  | 'lat'
+  | 'lng'
+  | 'coordinates';
+
+const MASTER_STORE_HEADER_ALIASES: Record<MasterStoreFieldKey, string[]> = {
+  code: ['kode toko', 'store code', 'kd toko', 'id toko', 'no toko', 'kode', 'code', 'store_code', 'store id'],
+  name: ['nama toko', 'store name', 'nama cabang', 'cabang', 'outlet', 'toko', 'name', 'store_name'],
+  type: ['tipe toko', 'store type', 'store class', 'kategori toko', 'tipe', 'type', 'class', 'kelas', 'format'],
+  city: ['kota / wilayah', 'kota/wilayah', 'kota / kabupaten', 'kota/kabupaten', 'kota', 'city', 'kabupaten'],
+  region: ['wilayah', 'region', 'regional', 'area'],
+  address: ['alamat lengkap', 'alamat toko', 'alamat', 'address', 'lokasi'],
+  areaManager: ['area manager (am)', 'area manager', 'nama am', 'area_manager', 'am'],
+  areaManagerEmail: ['email am', 'am email', 'area manager email', 'email area manager'],
+  regionalManager: ['regional manager (rm)', 'regional manager', 'nama rm', 'regional_manager', 'rm'],
+  regionalManagerEmail: ['email rm', 'rm email', 'regional manager email', 'email regional manager'],
+  storeHead: ['store head', 'kepala toko', 'pic toko', 'store leader', 'store_head', 'sh'],
+  email: ['email toko', 'store email', 'e-mail', 'email'],
+  storePhone: [
+    'no. telepon toko',
+    'no telepon toko',
+    'no. telp toko',
+    'no telp toko',
+    'telepon toko',
+    'no telepon',
+    'no telp',
+    'telepon',
+    'telp',
+    'store phone',
+    'phone',
+    'no hp',
+    'hp',
+    'whatsapp',
+  ],
+  lat: ['latitude', 'koordinat lat', 'lintang', 'lat'],
+  lng: ['longitude', 'koordinat lng', 'koordinat lon', 'bujur', 'lng', 'lon', 'long'],
+  coordinates: ['koordinat', 'coordinates', 'lat,lng', 'lat/lng', 'lat lng'],
+};
+
+function normalizeHeaderCell(val: any): string {
+  return String(val || '')
+    .toLowerCase()
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchHeaderField(headerText: string): MasterStoreFieldKey | null {
+  const norm = normalizeHeaderCell(headerText);
+  if (!norm) return null;
+
+  // 1. Exact alias match first (most specific)
+  for (const [field, aliases] of Object.entries(MASTER_STORE_HEADER_ALIASES) as [
+    MasterStoreFieldKey,
+    string[],
+  ][]) {
+    if (aliases.some((alias) => norm === alias)) {
+      return field;
+    }
+  }
+
+  // 2. Normalized punctuation-stripped match (longest alias first to avoid 'email' matching 'email am')
+  const stripped = norm.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const ranked: { field: MasterStoreFieldKey; alias: string }[] = [];
+  for (const [field, aliases] of Object.entries(MASTER_STORE_HEADER_ALIASES) as [
+    MasterStoreFieldKey,
+    string[],
+  ][]) {
+    for (const alias of aliases) {
+      ranked.push({ field, alias: alias.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim() });
+    }
+  }
+  ranked.sort((a, b) => b.alias.length - a.alias.length);
+
+  for (const entry of ranked) {
+    if (stripped === entry.alias) return entry.field;
+  }
+  for (const entry of ranked) {
+    if (entry.alias.length >= 4 && stripped.includes(entry.alias)) {
+      return entry.field;
+    }
+  }
+  return null;
+}
+
+function getWorksheetCellDisplayString(ws: XLSX.WorkSheet, r: number, c: number): string {
+  const addr = XLSX.utils.encode_cell({ r, c });
+  const cell = ws[addr];
+  if (!cell) return '';
+  if (cell.w !== undefined && cell.w !== null && String(cell.w).trim() !== '') {
+    return String(cell.w).trim();
+  }
+  if (cell.v !== undefined && cell.v !== null) {
+    return String(cell.v).trim();
+  }
+  return '';
+}
+
+function getWorksheetCellRawValue(ws: XLSX.WorkSheet, r: number, c: number): any {
+  const addr = XLSX.utils.encode_cell({ r, c });
+  const cell = ws[addr];
+  return cell ? cell.v : '';
+}
+
+function parseCoordinateValue(val: any): number | null {
+  if (val === undefined || val === null || val === '') return null;
+  if (typeof val === 'number') {
+    return Number.isFinite(val) ? val : null;
+  }
+  const cleaned = String(val)
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/,/g, '.');
+  if (!cleaned || cleaned === '-') return null;
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeIncomingStoreCode(rawCode: string, existingCodeSet: Set<string>): string {
+  const trimmed = rawCode.trim().toUpperCase();
+  if (!trimmed) return '';
+  if (/^\d{1,3}$/.test(trimmed)) {
+    const padded4 = trimmed.padStart(4, '0');
+    if (existingCodeSet.has(padded4) || !existingCodeSet.has(trimmed)) {
+      return padded4;
+    }
+  }
+  return trimmed;
+}
+
+function buildMasterStoreMergePreview(
+  existingStores: MasterStore[],
+  incomingStores: Partial<MasterStore>[],
+  mode: 'merge' | 'replace',
+  initialInvalidCount = 0,
+  initialErrors: string[] = []
+): MasterStoreMergeResult {
+  const errors = [...initialErrors];
+  let invalidCount = initialInvalidCount;
+  let addedCount = 0;
+  let updatedCount = 0;
+  let unchangedCount = 0;
+
+  const existingMap = new Map<string, MasterStore>();
+  for (const s of existingStores) {
+    const code = String(s.code || '').trim().toUpperCase();
+    if (code) existingMap.set(code, s);
+  }
+
+  const normalizeLat = (val: any, fallback = 0): number => {
+    const n = parseCoordinateValue(val);
+    return n !== null && n >= -90 && n <= 90 ? n : fallback;
+  };
+  const normalizeLng = (val: any, fallback = 0): number => {
+    const n = parseCoordinateValue(val);
+    return n !== null && n >= -180 && n <= 180 ? n : fallback;
+  };
+  const pickStr = (incomingVal: any, fallback: string): string => {
+    const s = String(incomingVal ?? '').trim();
+    return s && s !== '-' ? s : fallback;
+  };
+
+  if (mode === 'replace') {
+    const nextList: MasterStore[] = [];
+    const seen = new Set<string>();
+    for (const inc of incomingStores) {
+      const code = String(inc.code || '').trim().toUpperCase();
+      const name = String(inc.name || '').trim();
+      if (!code || !name) {
+        invalidCount++;
+        errors.push(`Data tidak valid (kode/nama toko kosong): ${code || name || '(kosong)'}`);
+        continue;
+      }
+      if (seen.has(code)) continue;
+      seen.add(code);
+
+      const prev = existingMap.get(code);
+      const lat = normalizeLat(inc.lat ?? inc.latitude, prev?.lat ?? 0);
+      const lng = normalizeLng(inc.lng ?? inc.longitude, prev?.lng ?? 0);
+
+      const nextStore: MasterStore = {
+        code,
+        name,
+        type: pickStr(inc.type, prev?.type || 'CVS'),
+        city: pickStr(inc.city, prev?.city || ''),
+        address: pickStr(inc.address, prev?.address || ''),
+        lat,
+        lng,
+        latitude: lat,
+        longitude: lng,
+        email: pickStr(inc.email, prev?.email || ''),
+        storePhone: pickStr(inc.storePhone, prev?.storePhone || ''),
+        storeHead: pickStr(inc.storeHead, prev?.storeHead || ''),
+        areaManager: pickStr(inc.areaManager, prev?.areaManager || ''),
+        areaManagerEmail: pickStr(inc.areaManagerEmail, prev?.areaManagerEmail || ''),
+        regionalManager: pickStr(inc.regionalManager, prev?.regionalManager || ''),
+        regionalManagerEmail: pickStr(inc.regionalManagerEmail, prev?.regionalManagerEmail || ''),
+      };
+      nextList.push(nextStore);
+      if (prev) updatedCount++;
+      else addedCount++;
+    }
+
+    return {
+      stores: nextList,
+      addedCount,
+      updatedCount,
+      unchangedCount,
+      invalidCount,
+      errors,
+    };
+  }
+
+  // mode === 'merge' (upsert preserving existing fields/coordinates when incoming cells are blank)
+  const mergedMap = new Map<string, MasterStore>();
+  for (const s of existingStores) {
+    const code = String(s.code || '').trim().toUpperCase();
+    if (code) mergedMap.set(code, { ...s, code });
+  }
+
+  for (const inc of incomingStores) {
+    const code = String(inc.code || '').trim().toUpperCase();
+    if (!code) {
+      invalidCount++;
+      continue;
+    }
+
+    const prev = mergedMap.get(code);
+    if (!prev) {
+      const name = String(inc.name || '').trim();
+      if (!name) {
+        invalidCount++;
+        errors.push(`Toko baru kode ${code} tidak memiliki Nama Toko.`);
+        continue;
+      }
+      const lat = normalizeLat(inc.lat ?? inc.latitude, 0);
+      const lng = normalizeLng(inc.lng ?? inc.longitude, 0);
+      mergedMap.set(code, {
+        code,
+        name,
+        type: pickStr(inc.type, 'CVS'),
+        city: pickStr(inc.city, ''),
+        address: pickStr(inc.address, ''),
+        lat,
+        lng,
+        latitude: lat,
+        longitude: lng,
+        email: pickStr(inc.email, ''),
+        storePhone: pickStr(inc.storePhone, ''),
+        storeHead: pickStr(inc.storeHead, ''),
+        areaManager: pickStr(inc.areaManager, ''),
+        areaManagerEmail: pickStr(inc.areaManagerEmail, ''),
+        regionalManager: pickStr(inc.regionalManager, ''),
+        regionalManagerEmail: pickStr(inc.regionalManagerEmail, ''),
+      });
+      addedCount++;
+    } else {
+      const nextLat = normalizeLat(inc.lat ?? inc.latitude, prev.lat);
+      const nextLng = normalizeLng(inc.lng ?? inc.longitude, prev.lng);
+      const updated: MasterStore = {
+        code,
+        name: pickStr(inc.name, prev.name),
+        type: pickStr(inc.type, prev.type),
+        city: pickStr(inc.city, prev.city),
+        address: pickStr(inc.address, prev.address),
+        lat: nextLat,
+        lng: nextLng,
+        latitude: nextLat,
+        longitude: nextLng,
+        email: pickStr(inc.email, prev.email),
+        storePhone: pickStr(inc.storePhone, prev.storePhone),
+        storeHead: pickStr(inc.storeHead, prev.storeHead),
+        areaManager: pickStr(inc.areaManager, prev.areaManager),
+        areaManagerEmail: pickStr(inc.areaManagerEmail, prev.areaManagerEmail),
+        regionalManager: pickStr(inc.regionalManager, prev.regionalManager),
+        regionalManagerEmail: pickStr(inc.regionalManagerEmail, prev.regionalManagerEmail),
+      };
+
+      const changed = (
+        ['name', 'type', 'city', 'address', 'lat', 'lng', 'email', 'storePhone', 'storeHead', 'areaManager', 'areaManagerEmail', 'regionalManager', 'regionalManagerEmail'] as (keyof MasterStore)[]
+      ).some((k) => updated[k] !== prev[k]);
+
+      if (changed) {
+        mergedMap.set(code, updated);
+        updatedCount++;
+      } else {
+        unchangedCount++;
+      }
+    }
+  }
+
+  return {
+    stores: Array.from(mergedMap.values()),
+    addedCount,
+    updatedCount,
+    unchangedCount,
+    invalidCount,
+    errors,
+  };
+}
+
+/**
+ * Parse a Master Toko Excel file (.xlsx / .xls / .csv) with flexible Indonesian/English column detection,
+ * coordinate & field validation, duplicate code deduplication, and merge/replace preview.
+ */
+export async function parseMasterStoreExcelFile(
+  file: File,
+  existingStores: MasterStore[] = getMasterStores(),
+  mode: 'merge' | 'replace' = 'merge',
+  sheetNameOption?: string
+): Promise<ParsedMasterStoreExcelResult> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const availableSheets: string[] = workbook.SheetNames || [];
+  if (availableSheets.length === 0) {
+    throw new Error('Berkas Excel tidak memiliki worksheet yang dapat dibaca.');
+  }
+
+  const targetSheetName =
+    sheetNameOption && availableSheets.includes(sheetNameOption)
+      ? sheetNameOption
+      : availableSheets.find((s: string) => /master|toko|store/i.test(s)) || availableSheets[0];
+
+  const ws = workbook.Sheets[targetSheetName];
+  if (!ws || !ws['!ref']) {
+    throw new Error(`Worksheet "${targetSheetName}" kosong.`);
+  }
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+
+  // Detect header row within first 10 rows
+  let headerRowIdx = -1;
+  let colMap = new Map<number, MasterStoreFieldKey>();
+  const detectedColumns: Record<string, string> = {};
+
+  for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 10); r++) {
+    const candidateMap = new Map<number, MasterStoreFieldKey>();
+    const candidateLabels: Record<string, string> = {};
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const headerStr = getWorksheetCellDisplayString(ws, r, c);
+      const matchedField = matchHeaderField(headerStr);
+      if (matchedField && !Array.from(candidateMap.values()).includes(matchedField)) {
+        candidateMap.set(c, matchedField);
+        candidateLabels[matchedField] = headerStr;
+      }
+    }
+    const fields = new Set(candidateMap.values());
+    if (fields.has('code') && (fields.has('name') || candidateMap.size >= 3)) {
+      headerRowIdx = r;
+      colMap = candidateMap;
+      Object.assign(detectedColumns, candidateLabels);
+      break;
+    }
+  }
+
+  if (headerRowIdx === -1) {
+    throw new Error(
+      'Header kolom Master Toko tidak terdeteksi. Pastikan terdapat minimal kolom "Kode Toko" (Code) dan "Nama Toko" (Name).'
+    );
+  }
+
+  const existingCodeSet = new Set(
+    existingStores.map((s) => String(s.code || '').trim().toUpperCase()).filter(Boolean)
+  );
+
+  const dedupedByCode = new Map<string, Partial<MasterStore>>();
+  const invalidRows: { row: number; reason: string }[] = [];
+  const validationErrors: string[] = [];
+
+  for (let r = headerRowIdx + 1; r <= range.e.r; r++) {
+    const rawRecord: Partial<Record<MasterStoreFieldKey, any>> = {};
+    let hasAnyValue = false;
+
+    colMap.forEach((field, c) => {
+      const strVal = getWorksheetCellDisplayString(ws, r, c);
+      const rawVal = getWorksheetCellRawValue(ws, r, c);
+      if (strVal !== '' || (rawVal !== '' && rawVal !== undefined && rawVal !== null)) {
+        hasAnyValue = true;
+      }
+      // Preserve formatted string for code and phone so leading zeros ("0001", "0811...") are never lost
+      if (field === 'code' || field === 'storePhone') {
+        rawRecord[field] = strVal || String(rawVal ?? '').trim();
+      } else if (field === 'lat' || field === 'lng') {
+        rawRecord[field] = rawVal !== '' && rawVal !== undefined ? rawVal : strVal;
+      } else {
+        rawRecord[field] = strVal || String(rawVal ?? '').trim();
+      }
+    });
+
+    if (!hasAnyValue) continue;
+
+    const excelRowNum = r + 1;
+    const code = normalizeIncomingStoreCode(String(rawRecord.code || ''), existingCodeSet);
+    const name = String(rawRecord.name || '').trim();
+
+    if (!code) {
+      const reason = `Baris ${excelRowNum}: Kode Toko kosong.`;
+      invalidRows.push({ row: excelRowNum, reason });
+      validationErrors.push(reason);
+      continue;
+    }
+
+    if (!name && (mode === 'replace' || !existingCodeSet.has(code))) {
+      const reason = `Baris ${excelRowNum} (${code}): Nama Toko kosong.`;
+      invalidRows.push({ row: excelRowNum, reason });
+      validationErrors.push(reason);
+      continue;
+    }
+
+    let parsedLat = parseCoordinateValue(rawRecord.lat);
+    let parsedLng = parseCoordinateValue(rawRecord.lng);
+
+    if ((parsedLat === null || parsedLng === null) && rawRecord.coordinates) {
+      const coordParts = String(rawRecord.coordinates)
+        .split(/[\/;|\s]+|,(?=\s*-?\d)/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (coordParts.length >= 2) {
+        if (parsedLat === null) parsedLat = parseCoordinateValue(coordParts[0]);
+        if (parsedLng === null) parsedLng = parseCoordinateValue(coordParts[1]);
+      }
+    }
+
+    if (parsedLat !== null && (parsedLat < -90 || parsedLat > 90)) {
+      validationErrors.push(`Baris ${excelRowNum} (${code}): Latitude di luar rentang valid (${parsedLat}).`);
+      parsedLat = null;
+    }
+    if (parsedLng !== null && (parsedLng < -180 || parsedLng > 180)) {
+      validationErrors.push(`Baris ${excelRowNum} (${code}): Longitude di luar rentang valid (${parsedLng}).`);
+      parsedLng = null;
+    }
+
+    const cityOrRegion = String(rawRecord.city || rawRecord.region || '').trim();
+
+    const storeObj: Partial<MasterStore> = {
+      code,
+      ...(name ? { name } : {}),
+      ...(rawRecord.type ? { type: String(rawRecord.type).trim() } : {}),
+      ...(cityOrRegion ? { city: cityOrRegion } : {}),
+      ...(rawRecord.region ? ({ region: String(rawRecord.region).trim() } as Partial<MasterStore>) : {}),
+      ...(rawRecord.address ? { address: String(rawRecord.address).trim() } : {}),
+      ...(rawRecord.storeHead ? { storeHead: String(rawRecord.storeHead).trim() } : {}),
+      ...(rawRecord.areaManager ? { areaManager: String(rawRecord.areaManager).trim() } : {}),
+      ...(rawRecord.areaManagerEmail ? { areaManagerEmail: String(rawRecord.areaManagerEmail).trim() } : {}),
+      ...(rawRecord.regionalManager ? { regionalManager: String(rawRecord.regionalManager).trim() } : {}),
+      ...(rawRecord.regionalManagerEmail ? { regionalManagerEmail: String(rawRecord.regionalManagerEmail).trim() } : {}),
+      ...(rawRecord.email ? { email: String(rawRecord.email).trim() } : {}),
+      ...(rawRecord.storePhone ? { storePhone: String(rawRecord.storePhone).trim() } : {}),
+      ...(parsedLat !== null ? { lat: parsedLat, latitude: parsedLat } : {}),
+      ...(parsedLng !== null ? { lng: parsedLng, longitude: parsedLng } : {}),
+    };
+
+    const prevDup = dedupedByCode.get(code);
+    if (prevDup) {
+      dedupedByCode.set(code, { ...prevDup, ...storeObj });
+    } else {
+      dedupedByCode.set(code, storeObj);
+    }
+  }
+
+  const incomingStores = Array.from(dedupedByCode.values());
+  const mergePreview = buildMasterStoreMergePreview(
+    existingStores,
+    incomingStores,
+    mode,
+    invalidRows.length,
+    validationErrors
+  );
+
+  return {
+    sheetName: targetSheetName,
+    availableSheets,
+    incomingStores,
+    mergePreview,
+    invalidRows,
+    detectedColumns,
+  };
+}
+
+export function downloadMasterStoreTemplateExcel(): void {
+  const header = [
+    'Kode Toko',
+    'Nama Toko',
+    'Tipe Toko',
+    'Kota / Wilayah',
+    'Store Head',
+    'Area Manager (AM)',
+    'Email AM',
+    'Regional Manager (RM)',
+    'Email RM',
+    'Email Toko',
+    'No. Telepon Toko',
+    'Alamat Lengkap',
+    'Latitude',
+    'Longitude',
+  ];
+
+  const sampleRows = [
+    [
+      '0001',
+      'CIBUBUR',
+      'FamiSuper',
+      'Depok',
+      'Rio Pratama',
+      'Satrio Handoyo',
+      'satrio.handoyo@familymartindonesia.com',
+      'Sariyo, SS',
+      'sariyo@familymartindonesia.com',
+      'store.fmcibubur@familymartindonesia.com',
+      '08118894794',
+      'Jl. Alternatif Cibubur, Perumahan Raffles Hills, Cimanggis Depok',
+      -6.37632,
+      106.90414,
+    ],
+    [
+      '3006',
+      'BDG R.E MARTADINATA',
+      'CVS',
+      'Bandung',
+      'Store Head Contoh',
+      'Area Manager Contoh',
+      'am.contoh@familymartindonesia.com',
+      'Regional Manager Contoh',
+      'rm.contoh@familymartindonesia.com',
+      'store.bdgriau@familymartindonesia.com',
+      '08110000000',
+      'Jl. L.L.R.E. Martadinata No. 123, Bandung',
+      -6.90734,
+      107.61842,
+    ],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet([header, ...sampleRows]);
+  ws['!cols'] = [
+    { wch: 12 },
+    { wch: 28 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 30 },
+    { wch: 22 },
+    { wch: 30 },
+    { wch: 32 },
+    { wch: 16 },
+    { wch: 50 },
+    { wch: 12 },
+    { wch: 12 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Master Toko');
+  XLSX.writeFile(wb, 'Template_Update_Master_Toko_FMCU.xlsx');
+}
+
+// ============================================================================
+// EXPORT MASTER DATA TOKO & TOKO KEPEMILIKAN BESTIE TO EXCEL
+// ============================================================================
+export function exportMasterStoresToExcel(storesOverride?: MasterStore[]): void {
+  const masterStores =
+    Array.isArray(storesOverride) && storesOverride.length > 0 ? storesOverride : getMasterStores();
   const ownerships = getBestieInChargeAssignments();
 
   const ownerByCode = new Map<string, string>();
@@ -1146,7 +1889,7 @@ export function exportMasterStoresToExcel(): void {
     }
   });
 
-  // Sheet 1: 610 Master Stores
+  // Sheet 1: Master Stores
   const storesHeader = [
     'Kode Toko',
     'Nama Toko',
@@ -1202,7 +1945,7 @@ export function exportMasterStoresToExcel(): void {
     { wch: 12 },
   ];
 
-  // Sheet 2: 531 Bestie In Charge Ownerships
+  // Sheet 2: Bestie In Charge Ownerships
   const ownershipHeader = [
     'Bestie In Charge',
     'Kode Toko',
@@ -1231,11 +1974,10 @@ export function exportMasterStoresToExcel(): void {
   ];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, wsStores, 'Master Data Toko (610)');
-  XLSX.utils.book_append_sheet(wb, wsOwnership, 'Toko Kepemilikan (531)');
+  XLSX.utils.book_append_sheet(wb, wsStores, `Master Data Toko (${masterStores.length})`);
+  XLSX.utils.book_append_sheet(wb, wsOwnership, `Toko Kepemilikan (${ownerships.length})`);
 
-  XLSX.writeFile(
-    wb,
-    `FMCU_Master_Toko_Dan_Kepemilikan_${new Date().toISOString().split('T')[0]}.xlsx`
-  );
+  const now = new Date();
+  const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  XLSX.writeFile(wb, `FMCU_Master_Toko_Dan_Kepemilikan_${ymd}.xlsx`);
 }
