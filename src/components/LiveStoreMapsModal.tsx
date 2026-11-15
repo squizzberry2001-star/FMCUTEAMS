@@ -19,6 +19,7 @@ import {
   ChevronUp,
   Clock,
   CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 import { ScheduleAgenda, User } from '../types';
 import {
@@ -33,6 +34,9 @@ import {
   buildAdminUserPinpoints,
   isNonStoreAgenda,
   getLocalDateYmd,
+  isNsoGeoPoint,
+  createStorePinLeafletIcon,
+  createPersonilPinLeafletIcon,
 } from '../utils/mapGeoUtils';
 import {
   UserLivePresence,
@@ -437,10 +441,13 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
         if (bounds.contains([st.lat, st.lng])) {
           const shortName = getMinimalistStoreLabel(st.name);
           const isToday = todayByCodeMap.has(String(st.code).toUpperCase());
+          const isNso = isNsoGeoPoint(st);
 
-          const html = isToday
-            ? `<div style="transform:translate(-50%,9px);pointer-events:none;background:#059669;color:#fff;font-size:9px;font-weight:900;padding:2px 6px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;line-height:1.2;border:1px solid #34D399;">#${st.routeOrder || ''} ${shortName} (Hari Ini)</div>`
-            : `<div style="transform:translate(-50%,8px);pointer-events:none;background:#0F172A;color:#fff;font-size:8.5px;font-weight:800;padding:1.5px 5px;border-radius:5px;box-shadow:0 2px 5px rgba(0,0,0,0.25);white-space:nowrap;line-height:1.2;border:1px solid #38BDF8;"><span style="color:#38BDF8;">${st.agendaDate ? st.agendaDate.slice(5) : 'Kedepan'}</span> • ${shortName}</div>`;
+          const html = isNso
+            ? `<div style="transform:translate(-50%,6px);pointer-events:none;background:${isToday ? '#92400E' : '#7C2D12'};color:#FEF3C7;font-size:9px;font-weight:900;padding:2px 6px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.32);white-space:nowrap;line-height:1.2;border:1px solid #FBBF24;">★ NSO ${isToday ? `#${st.routeOrder || ''} ` : st.agendaDate ? `${st.agendaDate.slice(5)} • ` : ''}${shortName}</div>`
+            : isToday
+            ? `<div style="transform:translate(-50%,6px);pointer-events:none;background:#059669;color:#fff;font-size:9px;font-weight:900;padding:2px 6px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;line-height:1.2;border:1px solid #34D399;">#${st.routeOrder || ''} ${shortName} (Hari Ini)</div>`
+            : `<div style="transform:translate(-50%,6px);pointer-events:none;background:#0F172A;color:#fff;font-size:8.5px;font-weight:800;padding:1.5px 5px;border-radius:5px;box-shadow:0 2px 5px rgba(0,0,0,0.25);white-space:nowrap;line-height:1.2;border:1px solid #38BDF8;"><span style="color:#38BDF8;">${st.agendaDate ? st.agendaDate.slice(5) : 'Kedepan'}</span> • ${shortName}</div>`;
 
           const icon = L.divIcon({
             className: 'fmcu-fast-label',
@@ -642,86 +649,37 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
       });
     }
 
-    // C. STORE PINPOINTS (HANYA MENAMPILKAN TOKO TERJADWAL ACTUAL ATAU KEDEPAN SAJA)
+    // C. STORE PINPOINTS (DIBEDAKAN: ICON VISIT TOKO VS ICON NSO TOKO BARU)
     if (!isAdmin || showStorePinpoints) {
       displayedStorePoints.forEach((st) => {
         focusBoundsCoords.push([st.lat, st.lng]);
         const isToday = todayByCodeMap.has(String(st.code).toUpperCase());
+        const isNso = isNsoGeoPoint(st);
 
-        if (isToday) {
-          // Toko Hari Ini (Actual): Emerald Halo + Pin Hijau Berenergi
-          L.circleMarker([st.lat, st.lng], {
-            renderer,
-            radius: 12,
-            fillColor: '#10B981',
-            fillOpacity: 0.28,
-            weight: 0,
-            interactive: false,
-          }).addTo(vectorGroup);
+        const pinIcon = createStorePinLeafletIcon(L, st, { isToday });
+        const marker = L.marker([st.lat, st.lng], {
+          icon: pinIcon,
+          zIndexOffset: isNso ? 350 : isToday ? 250 : 100,
+        }).addTo(vectorGroup);
 
-          const dot = L.circleMarker([st.lat, st.lng], {
-            renderer,
-            radius: 8,
-            fillColor: '#059669',
-            fillOpacity: 1,
-            color: '#FFFFFF',
-            weight: 2.5,
-          }).addTo(vectorGroup);
-
-          dot.on('click', () => {
-            setSelectedStore(st);
-          });
-        } else {
-          // Toko Jadwal Mendatang (Kedepan): Sky / Blue-Teal Marker
-          L.circleMarker([st.lat, st.lng], {
-            renderer,
-            radius: 10,
-            fillColor: '#0284C7',
-            fillOpacity: 0.2,
-            weight: 0,
-            interactive: false,
-          }).addTo(vectorGroup);
-
-          const dot = L.circleMarker([st.lat, st.lng], {
-            renderer,
-            radius: 7,
-            fillColor: '#0284C7',
-            fillOpacity: 1,
-            color: '#FFFFFF',
-            weight: 2.2,
-          }).addTo(vectorGroup);
-
-          dot.on('click', () => {
-            setSelectedStore(st);
-          });
-        }
+        marker.on('click', () => {
+          setSelectedStore(st);
+        });
       });
     }
 
-    // D. ADMIN USER PINPOINTS (HANYA USER YANG BENAR TERDETEKSI GPS AKTUAL / REALTIME)
+    // D. ADMIN PERSONIL GPS PINPOINTS (ICON PERSONIL BERBEDA DARI VISIT & NSO)
     if (isAdmin && showUserPinpoints) {
       adminUserPinpoints.forEach((up) => {
         focusBoundsCoords.push([up.lat, up.lng]);
 
-        L.circleMarker([up.lat, up.lng], {
-          renderer,
-          radius: 13,
-          fillColor: '#3B82F6',
-          fillOpacity: 0.22,
-          weight: 0,
-          interactive: false,
+        const personilIcon = createPersonilPinLeafletIcon(L, up);
+        const uMarker = L.marker([up.lat, up.lng], {
+          icon: personilIcon,
+          zIndexOffset: 500,
         }).addTo(vectorGroup);
 
-        const uCircle = L.circleMarker([up.lat, up.lng], {
-          renderer,
-          radius: 7.5,
-          fillColor: '#2563EB',
-          fillOpacity: 1,
-          color: '#FFFFFF',
-          weight: 2.4,
-        }).addTo(vectorGroup);
-
-        uCircle.on('click', () => {
+        uMarker.on('click', () => {
           const hasStore = Boolean(up.hasStoreVisitToday && up.targetStoreCode);
           L.popup({ closeButton: true, autoPan: true })
             .setLatLng([up.lat, up.lng])
@@ -1077,11 +1035,11 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                       onClick={() => setShowUserPinpoints((v) => !v)}
                       className={`py-2 rounded-xl text-[10px] font-extrabold border cursor-pointer transition ${
                         showUserPinpoints
-                          ? 'bg-blue-600 text-white border-blue-600'
+                          ? 'bg-indigo-600 text-white border-indigo-600'
                           : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      User ({adminUserPinpoints.length})
+                      Personil ({adminUserPinpoints.length})
                     </button>
                     <button
                       type="button"
@@ -1138,6 +1096,30 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                 </div>
               )}
 
+              {/* Legenda Icon Peta (Visit vs NSO vs Personil) */}
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200/80 text-[10px] font-bold text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                    <Store className="w-2.5 h-2.5" />
+                  </span>
+                  <span>Visit Toko</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-md bg-amber-500 text-white flex items-center justify-center">
+                    <Sparkles className="w-2.5 h-2.5" />
+                  </span>
+                  <span>NSO</span>
+                </span>
+                {isAdmin && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                      <Users className="w-2.5 h-2.5" />
+                    </span>
+                    <span>Personil</span>
+                  </span>
+                )}
+              </div>
+
               <button
                 type="button"
                 onClick={() => setShowFloatingControls(false)}
@@ -1183,6 +1165,34 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               </>
             )}
           </button>
+
+          {/* LEGENDA ICON PINPOINT (VISIT / NSO / PERSONIL) */}
+          <div className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-2xl bg-white/95 backdrop-blur-sm border border-slate-200/90 shadow-lg text-[10px] font-extrabold text-slate-700">
+            <span className="flex items-center gap-1.5" title="Pin Visit Toko (Hijau: Hari Ini • Biru: Kedepan)">
+              <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-2xs">
+                <Store className="w-2.5 h-2.5" />
+              </span>
+              <span>Visit</span>
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="flex items-center gap-1.5" title="Pin Shield Emas Bintang: NSO Toko Baru">
+              <span className="w-4 h-4 rounded-md bg-amber-500 text-white flex items-center justify-center shadow-2xs">
+                <Sparkles className="w-2.5 h-2.5" />
+              </span>
+              <span>NSO</span>
+            </span>
+            {isAdmin && (
+              <>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1.5" title="Badge Radar Indigo: Lokasi GPS Live Personil">
+                  <span className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-2xs">
+                    <Users className="w-2.5 h-2.5" />
+                  </span>
+                  <span>Personil</span>
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         {/* NOTICE JIKA TIDAK ADA TOKO TERJADWAL */}
@@ -1213,6 +1223,17 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                   <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
                     #{selectedStore.code} • {selectedStore.type}
                   </span>
+                  {isNsoGeoPoint(selectedStore) ? (
+                    <span className="text-[9.5px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300 flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                      NSO Toko Baru
+                    </span>
+                  ) : (
+                    <span className="text-[9.5px] font-black text-teal-700 bg-teal-50/70 px-2 py-0.5 rounded-md border border-teal-200 flex items-center gap-1">
+                      <Store className="w-2.5 h-2.5 text-teal-600" />
+                      Visit
+                    </span>
+                  )}
                   {selectedStore.agendaDate === todayYmd ? (
                     <span className="text-[9.5px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                       Hari Ini #{selectedStore.routeOrder || 1}
@@ -1345,6 +1366,7 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
               bottomStripPoints.map((st, idx) => {
                 const isSelected = selectedStore?.code === st.code;
                 const isToday = todayByCodeMap.has(String(st.code).toUpperCase());
+                const isNso = isNsoGeoPoint(st);
 
                 return (
                   <button
@@ -1354,6 +1376,8 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                     className={`shrink-0 text-left p-2 rounded-2xl border transition cursor-pointer min-w-[210px] max-w-[230px] ${
                       isSelected
                         ? 'bg-teal-50 border-teal-500'
+                        : isNso
+                        ? 'bg-amber-50/75 hover:bg-amber-100/60 border-amber-300'
                         : isToday
                         ? 'bg-emerald-50/70 hover:bg-emerald-100/50 border-emerald-300'
                         : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
@@ -1363,10 +1387,10 @@ export const LiveStoreMapsModal: React.FC<LiveStoreMapsModalProps> = ({
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span
                           className={`w-4 h-4 rounded-full text-white text-[9px] font-black flex items-center justify-center shrink-0 ${
-                            isToday ? 'bg-emerald-600' : 'bg-sky-600'
+                            isNso ? 'bg-amber-500' : isToday ? 'bg-emerald-600' : 'bg-sky-600'
                           }`}
                         >
-                          {isToday ? st.routeOrder || idx + 1 : '•'}
+                          {isNso ? '★' : isToday ? st.routeOrder || idx + 1 : '•'}
                         </span>
                         <span className="text-[11px] font-black text-slate-800 truncate">
                           {st.name}

@@ -639,3 +639,165 @@ export function buildAdminUserPinpoints(
 
   return result;
 }
+
+/**
+ * Determine whether a scheduled StoreGeoPoint represents an NSO (New Store Opening) agenda.
+ */
+export function isNsoGeoPoint(
+  pt?: Pick<StoreGeoPoint, 'agendaCategory' | 'agendaTitle' | 'schedules'> | null
+): boolean {
+  if (!pt) return false;
+  if (String(pt.agendaCategory || '').toUpperCase() === 'NSO') return true;
+  if (
+    Array.isArray(pt.schedules) &&
+    pt.schedules.some((s) => String(s?.category || '').toUpperCase() === 'NSO')
+  ) {
+    return true;
+  }
+  const t = String(pt.agendaTitle || '').toLowerCase();
+  return (
+    /\bnso\b/.test(t) ||
+    t.includes('new store opening') ||
+    t.includes('grand opening') ||
+    t.includes('soft opening')
+  );
+}
+
+let _pinSvgCounter = 0;
+
+/**
+ * Distinct SVG pinpoint icon for Store points:
+ * - NSO: Amber-Gold Shield/Star Pin with 4-point Sparkle icon + mini "NSO" ribbon
+ * - VISIT: Emerald/Sky Teardrop Pin with Storefront icon
+ */
+export function createStorePinLeafletIcon(
+  L: any,
+  pt: Pick<StoreGeoPoint, 'agendaCategory' | 'agendaTitle' | 'schedules' | 'routeOrder'>,
+  options: { isToday: boolean; showOrder?: boolean }
+): any {
+  const uid = ++_pinSvgCounter;
+  const isNso = isNsoGeoPoint(pt);
+  const isToday = options.isToday;
+  const orderText =
+    options.showOrder !== false && pt.routeOrder ? String(pt.routeOrder) : '';
+
+  if (isNso) {
+    const fillTop = isToday ? '#F59E0B' : '#F97316';
+    const fillBottom = isToday ? '#B45309' : '#C2410C';
+    const ringColor = isToday ? 'rgba(245, 158, 11, 0.34)' : 'rgba(249, 115, 22, 0.24)';
+
+    const html = `
+      <div style="position:relative;width:38px;height:44px;display:flex;align-items:flex-end;justify-content:center;cursor:pointer;">
+        ${
+          isToday
+            ? `<div style="position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:22px;height:10px;border-radius:9999px;background:${ringColor};box-shadow:0 0 8px ${ringColor};pointer-events:none;"></div>`
+            : ''
+        }
+        <svg width="36" height="42" viewBox="0 0 36 42" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 3px 5px rgba(180,83,9,0.45));display:block;">
+          <defs>
+            <linearGradient id="nsoGrad-${uid}" x1="4" y1="2" x2="32" y2="38" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="${fillTop}"/>
+              <stop offset="100%" stop-color="${fillBottom}"/>
+            </linearGradient>
+          </defs>
+          <!-- Hexagonal Shield / Crown Pin for NSO -->
+          <path d="M18 2L31 8.5V20.5C31 28.5 23.8 35.8 18 40.5C12.2 35.8 5 28.5 5 20.5V8.5L18 2Z" fill="url(#nsoGrad-${uid})" stroke="#FFFFFF" stroke-width="2.2" stroke-linejoin="round"/>
+          <!-- Sparkles / NSO Star Icon -->
+          <path d="M18 10.5L19.9 15.6L25 17.5L19.9 19.4L18 24.5L16.1 19.4L11 17.5L16.1 15.6L18 10.5Z" fill="#FFFFFF"/>
+          <circle cx="24.5" cy="11.5" r="1.4" fill="#FEF3C7"/>
+        </svg>
+        <span style="position:absolute;top:-3px;left:50%;transform:translateX(-50%);background:#78350F;color:#FEF3C7;font-size:7.5px;font-weight:900;letter-spacing:0.4px;padding:0.5px 4px;border-radius:9999px;border:1px solid #FDE68A;line-height:1.15;box-shadow:0 1px 3px rgba(0,0,0,0.28);pointer-events:none;">NSO</span>
+        ${
+          orderText
+            ? `<span style="position:absolute;top:7px;right:-2px;min-width:14px;height:14px;padding:0 3px;border-radius:9999px;background:#0F172A;color:#FDE68A;font-size:8px;font-weight:900;display:flex;align-items:center;justify-content:center;border:1.5px solid #FFFFFF;line-height:1;pointer-events:none;">${orderText}</span>`
+            : ''
+        }
+      </div>
+    `;
+
+    return L.divIcon({
+      className: 'fmcu-nso-pin',
+      html,
+      iconSize: [38, 44],
+      iconAnchor: [19, 42],
+    });
+  }
+
+  // VISIT Store Pinpoint (Teardrop with Storefront SVG)
+  const fillTop = isToday ? '#10B981' : '#0EA5E9';
+  const fillBottom = isToday ? '#047857' : '#0369A1';
+  const halo = isToday ? 'rgba(16, 185, 129, 0.34)' : 'rgba(14, 165, 233, 0.24)';
+
+  const html = `
+    <div style="position:relative;width:32px;height:40px;display:flex;align-items:flex-end;justify-content:center;cursor:pointer;">
+      ${
+        isToday
+          ? `<div style="position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);width:18px;height:8px;border-radius:9999px;background:${halo};box-shadow:0 0 8px ${halo};pointer-events:none;"></div>`
+          : ''
+      }
+      <svg width="30" height="38" viewBox="0 0 30 38" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 3px 4px rgba(15,23,42,0.34));display:block;">
+        <defs>
+          <linearGradient id="visitGrad-${uid}" x1="3" y1="2" x2="27" y2="34" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="${fillTop}"/>
+            <stop offset="100%" stop-color="${fillBottom}"/>
+          </linearGradient>
+        </defs>
+        <!-- Classic Teardrop Pin for Store Visit -->
+        <path d="M15 2C8.37 2 3 7.37 3 14C3 22.8 15 36 15 36C15 36 27 22.8 27 14C27 7.37 21.63 2 15 2Z" fill="url(#visitGrad-${uid})" stroke="#FFFFFF" stroke-width="2.1"/>
+        <!-- Crisp Storefront SVG Icon -->
+        <path d="M9.5 12.2L10.3 9.8H19.7L20.5 12.2" stroke="#FFFFFF" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9.2 12.2H20.8V13.6C20.8 14.3 20.2 14.8 19.5 14.8C18.8 14.8 18.2 14.3 18.2 13.6C18.2 14.3 17.6 14.8 16.9 14.8C16.2 14.8 15.6 14.3 15.6 13.6C15.6 14.3 15 14.8 14.3 14.8C13.6 14.8 13 14.3 13 13.6C13 14.3 12.4 14.8 11.7 14.8C11 14.8 10.4 14.3 10.4 13.6V12.2H9.2Z" fill="#FFFFFF"/>
+        <path d="M10.4 15.2V19.2H19.6V15.2" stroke="#FFFFFF" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="13.7" y="16.4" width="2.6" height="2.8" rx="0.4" fill="#FFFFFF"/>
+      </svg>
+      ${
+        orderText
+          ? `<span style="position:absolute;top:-2px;right:-2px;min-width:14px;height:14px;padding:0 3px;border-radius:9999px;background:#0F172A;color:#FFFFFF;font-size:8px;font-weight:900;display:flex;align-items:center;justify-content:center;border:1.5px solid #FFFFFF;line-height:1;pointer-events:none;">${orderText}</span>`
+          : ''
+      }
+    </div>
+  `;
+
+  return L.divIcon({
+    className: 'fmcu-visit-pin',
+    html,
+    iconSize: [32, 40],
+    iconAnchor: [16, 38],
+  });
+}
+
+/**
+ * Distinct Circular GPS Avatar Badge for Personil (Admin Live User Pinpoint)
+ */
+export function createPersonilPinLeafletIcon(
+  L: any,
+  up: { userName: string; isInsideRadius: boolean; hasStoreVisitToday?: boolean }
+): any {
+  const firstName = String(up.userName || 'Tim').trim().split(/\s+/)[0] || 'Tim';
+  const statusDot = !up.hasStoreVisitToday
+    ? '#94A3B8'
+    : up.isInsideRadius
+    ? '#10B981'
+    : '#F59E0B';
+
+  const html = `
+    <div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+      <div style="position:absolute;inset:-3px;border-radius:9999px;background:rgba(79,70,229,0.22);border:1px solid rgba(99,102,241,0.4);pointer-events:none;"></div>
+      <div style="position:relative;width:30px;height:30px;border-radius:9999px;background:linear-gradient(135deg,#4F46E5,#312E81);border:2.4px solid #FFFFFF;box-shadow:0 3px 8px rgba(49,46,129,0.5);display:flex;align-items:center;justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="8" r="3.6" fill="#FFFFFF"/>
+          <path d="M5.5 19.5C5.5 15.91 8.41 13 12 13C15.59 13 18.5 15.91 18.5 19.5" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+        <span style="position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:9999px;background:${statusDot};border:1.5px solid #FFFFFF;box-shadow:0 0 5px ${statusDot};"></span>
+      </div>
+      <div style="position:absolute;top:33px;left:50%;transform:translateX(-50%);background:#312E81;color:#E0E7FF;font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:9999px;border:1px solid #818CF8;white-space:nowrap;box-shadow:0 2px 5px rgba(15,23,42,0.3);pointer-events:none;line-height:1.2;">${firstName}</div>
+    </div>
+  `;
+
+  return L.divIcon({
+    className: 'fmcu-personil-pin',
+    html,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  });
+}

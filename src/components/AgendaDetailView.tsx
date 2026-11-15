@@ -31,6 +31,8 @@ import {
   loadLeaflet,
   resolveAgendaGeoPoints,
   resolvePrimaryAgendaGeoPoint,
+  createStorePinLeafletIcon,
+  isNsoGeoPoint,
 } from '../utils/mapGeoUtils';
 import { isSamePersonName } from '../data/masterStoresData';
 import {
@@ -295,31 +297,37 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
       });
     }
 
-    // Add Minimalist Store Pinpoints (No long oval!)
+    // Add Store Pinpoints (Differentiated Visit vs NSO Icon)
     activePoints.forEach((pt, idx) => {
       boundsCoords.push([pt.lat, pt.lng]);
       const shortLabel = getMinimalistPinLabel(pt.name);
+      const enrichedPt = {
+        ...pt,
+        agendaCategory: pt.agendaCategory || agenda.category,
+        agendaTitle: pt.agendaTitle || agenda.title,
+        routeOrder: activePoints.length > 1 ? idx + 1 : undefined,
+      };
+      const isNso = isNsoGeoPoint(enrichedPt);
 
-      const pinIcon = L.divIcon({
-        className: 'fmcu-detail-minimal-pin',
-        html: `
-          <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-90%);">
-            <div style="width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#0D9488,#059669);color:#fff;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(13,148,136,0.5);">
-              ${activePoints.length > 1 ? idx + 1 : '•'}
-            </div>
-            <div style="margin-top:1px;background:rgba(15,23,42,0.9);color:#fff;font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15;">
-              ${shortLabel}
-            </div>
-          </div>
-        `,
+      const storePinIcon = createStorePinLeafletIcon(L, enrichedPt, {
+        isToday: isActualToday,
+        showOrder: activePoints.length > 1,
+      });
+
+      const labelIcon = L.divIcon({
+        className: 'fmcu-detail-pin-label',
+        html: `<div style="transform:translate(-50%,5px);pointer-events:none;background:${isNso ? '#78350F' : 'rgba(15,23,42,0.92)'};color:${isNso ? '#FEF3C7' : '#fff'};font-size:8px;font-weight:800;padding:1px 5px;border-radius:4px;max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2;border:1px solid ${isNso ? '#FBBF24' : 'rgba(255,255,255,0.25)'};box-shadow:0 2px 5px rgba(0,0,0,0.25);">${isNso ? '★ NSO • ' : ''}${shortLabel}</div>`,
         iconSize: [0, 0],
         iconAnchor: [0, 0],
       });
 
-      L.marker([pt.lat, pt.lng], { icon: pinIcon })
+      L.marker([pt.lat, pt.lng], { icon: labelIcon, interactive: false, keyboard: false }).addTo(map);
+
+      L.marker([pt.lat, pt.lng], { icon: storePinIcon, zIndexOffset: isNso ? 250 : 150 })
         .addTo(map)
         .bindPopup(
           `<div style="font-family:system-ui,sans-serif;font-size:11px;">
+            <span style="display:inline-block;margin-bottom:2px;font-size:9px;font-weight:900;padding:1px 5px;border-radius:4px;background:${isNso ? '#FEF3C7' : '#ECFDF5'};color:${isNso ? '#92400E' : '#047857'};">${isNso ? '★ NSO Toko Baru' : '🏬 Visit Toko'}</span><br/>
             <strong>Toko ${pt.name}</strong> ${pt.code !== 'FMCU' ? `(#${pt.code})` : ''}<br/>
             <span style="color:#64748B;font-size:10px;">${pt.address}</span><br/>
             <span style="color:#0D9488;font-weight:800;font-size:10px;">Lat: ${pt.lat.toFixed(5)}° • Lng: ${pt.lng.toFixed(5)}° • Alt: ${pt.altitude} mdpl</span>
@@ -343,7 +351,7 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
         mapInstanceRef.current = null;
       }
     };
-  }, [isVisitAgenda, leafletReady, primaryGeoPoint, activePoints, currentUser?.isAdmin, agenda.date, todayYmd]);
+  }, [isVisitAgenda, leafletReady, primaryGeoPoint, activePoints, currentUser?.isAdmin, agenda.date, agenda.category, agenda.title, todayYmd]);
 
   const renderCategoryIcon = (category: ScheduleCategory) => {
     switch (category) {
