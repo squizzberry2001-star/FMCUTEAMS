@@ -16,10 +16,11 @@ const DELETED_AGENDA_IDS_KEY = 'fmcu_deleted_agenda_ids_v5';
 const SCHEDULE_WRITE_LOCK_KEY = 'fmcu_schedule_write_protect_until_v1';
 const PENDING_SCHEDULES_QUEUE_KEY = 'fmcu_pending_schedules_queue_v1';
 
-const MASTER_STORES_COLLECTION = 'master_stores';
-const MASTER_STORES_META_COLLECTION = 'master_stores_meta';
-const MASTER_STORES_CHUNK_SIZE = 45; // ~30 KB per chunk (safe for D1 & GAS)
+const MASTER_STORES_COLLECTION = 'stores'; // Cloudflare D1 only allows 'schedules', 'users', 'reports', 'stores'
+const GAS_MASTER_STORES_META_COLLECTION = 'master_stores_meta';
+const MASTER_STORES_CHUNK_SIZE = 200; // Fallback chunk size if db_save_collection hits size limits
 const KEEP_ALIVE_MAX_BYTES = 48_000; // Browser fetch keepalive hard cap is 64 KiB
+const GAS_BACKGROUND_GRACE_MS = 1_800; // Do not stall Admin UI spinner for slow GAS Drive writes after D1 succeeds
 
 export interface CloudSyncResult {
   ok: boolean;
@@ -58,6 +59,7 @@ export interface PushSchedulesOptions {
 // WRITE-PROTECTION & OFFLINE RETRY QUEUE (Prevents 5s polling overwrite race)
 // ============================================================================
 let isBulkWriteInFlight = false;
+let isGasBackupInFlight = false;
 let inMemoryWriteProtectUntilMs = 0;
 let isFlushingPendingQueue = false;
 
@@ -135,13 +137,47 @@ export function isScheduleSyncProtected(): boolean {
 }
 
 export async function flushPendingSchedulesQueue(): Promise<CloudSyncResult | null> {
-  if (isFlushingPendingQueue || isBulkWriteInFlight) return null;
+  if (isFlushingPendingQueue || isBulkWriteInFlight || isGasBackupInFlight) return null;
   const pending = getPendingSchedulesQueue();
   if (!pending) return null;
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
 
+  // Avoid hammering GAS every 5s if D1 already synced and GAS just recently attempted
+  if (!pending.d1Pending && pending.gasPending && Date.now() - (pending.savedAtMs || 0) < 15_000) {
+    return null;
+  }
+
   isFlushingPendingQueue = true;
   try {
+    if (!pending.d1Pending && pending.gasPending) {
+      isGasBackupInFlight = true;
+      try {
+        const enriched = pending.agendas.map(enrichAgendaForCloud);
+        const importedIds = new Set(pending.agendas.map((a) => String(a.id)));
+        await cleanGasTombstonesForIds(importedIds, false);
+        const gasOk = await pushCollectionWithFallback(GAS_VAULT_API_URL, 'schedules', enriched, {
+          singleItemAction: 'db_save_schedule',
+          singleItemKey: 'schedule',
+          deleteItemAction: 'db_delete_schedule',
+          deleteIdKey: 'scheduleId',
+          concurrency: 4,
+          maxDirectCollectionBytes: 2_500_000,
+          timeoutMs: 25_000,
+        });
+        if (gasOk) {
+          clearPendingSchedulesQueue();
+        }
+        return {
+          ok: true,
+          d1Synced: true,
+          gasSynced: gasOk,
+          syncedCount: pending.agendas.length,
+        };
+      } finally {
+        isGasBackupInFlight = false;
+      }
+    }
+
     return await pushAllSchedulesToCloud(pending.agendas, pending.users, {
       clearDeletedTombstones: true,
     });
@@ -556,50 +592,65 @@ function parseUpdatedAtMs(item: any): number {
   return 0;
 }
 
+let cachedTombstonesMap: Map<string, number> = new Map();
+let lastTombstoneFetchMs = 0;
+
 /**
  * Fetch latest schedules from Cloudflare D1 Edge DB (or fallback to Google Apps Script Vault).
  * Returns null if BOTH cloud endpoints failed (offline/error), or ScheduleAgenda[] (possibly []) on success.
  */
 export async function fetchSchedulesFromCloud(): Promise<ScheduleAgenda[] | null> {
-  // 0. Parallel tombstone sync from GAS Vault (preserving deletedAtMs timestamps)
-  const tombstonePromise = (async (): Promise<Map<string, number>> => {
-    const map = new Map<string, number>();
-    try {
-      const resp = await postCloudEndpoint(
-        GAS_VAULT_API_URL,
-        {
-          action: 'db_get_collection',
-          collection: 'deleted_schedules',
-        },
-        { timeoutMs: 10_000 }
-      );
-      if (isCloudRespSuccess(resp) && Array.isArray(resp.data)) {
-        resp.data.forEach((item: any) => {
-          const id = String(item?.id || item || '').trim();
-          const deletedAtMs = Number(item?.deletedAtMs || 0);
-          if (id) {
-            const prev = map.get(id) || 0;
-            map.set(id, Math.max(prev, deletedAtMs));
+  // 0. Fetch GAS tombstones with 20s cache so 5s polling hits fast D1 (~800ms) instead of stalling on GAS
+  const tombstoneAgeMs = Date.now() - lastTombstoneFetchMs;
+  const tombstonePromise =
+    tombstoneAgeMs < 20_000 && lastTombstoneFetchMs > 0
+      ? Promise.resolve(cachedTombstonesMap)
+      : (async (): Promise<Map<string, number>> => {
+          const map = new Map<string, number>();
+          try {
+            const resp = await postCloudEndpoint(
+              GAS_VAULT_API_URL,
+              {
+                action: 'db_get_collection',
+                collection: 'deleted_schedules',
+              },
+              { timeoutMs: 8_000 }
+            );
+            if (isCloudRespSuccess(resp) && Array.isArray(resp.data)) {
+              resp.data.forEach((item: any) => {
+                const id = String(item?.id || item || '').trim();
+                const deletedAtMs = Number(item?.deletedAtMs || 0);
+                if (id) {
+                  const prev = map.get(id) || 0;
+                  map.set(id, Math.max(prev, deletedAtMs));
+                }
+              });
+              cachedTombstonesMap = map;
+              lastTombstoneFetchMs = Date.now();
+            }
+          } catch {
+            // ignore
           }
-        });
-      }
-    } catch {
-      // ignore
-    }
-    return map;
-  })();
+          return cachedTombstonesMap.size > 0 ? cachedTombstonesMap : map;
+        })();
 
-  // 1. Try Cloudflare D1 Edge SQLite first (~20ms)
-  const d1Promise = postCloudEndpoint(
+  // 1. Try Cloudflare D1 Edge SQLite first (~200-900ms)
+  const d1Resp = await postCloudEndpoint(
     CLOUDFLARE_D1_API_URL,
     {
       action: 'db_get_collection',
       collection: 'schedules',
     },
-    { timeoutMs: 12_000 }
+    { timeoutMs: 10_000 }
   );
 
-  const [cloudTombstones, d1Resp] = await Promise.all([tombstonePromise, d1Promise]);
+  // Give GAS tombstones at most 1s extra if cache is stale; otherwise use cached map immediately
+  const cloudTombstones = await Promise.race([
+    tombstonePromise,
+    new Promise<Map<string, number>>((resolve) =>
+      setTimeout(() => resolve(cachedTombstonesMap), 1_000)
+    ),
+  ]);
   const localDeletedIds = getDeletedAgendaIds();
 
   let rawList: any[] | null =
@@ -800,11 +851,7 @@ export async function pushAllSchedulesToCloud(
             }))
         : null;
 
-    // Clean GAS tombstones first/in-parallel so re-imported xl-* IDs don't get erased by old tombstones
-    const tombstoneCleanPromise = clearTombstones
-      ? cleanGasTombstonesForIds(importedIds, Boolean(options.replaceAll))
-      : Promise.resolve();
-
+    // Fast primary path: push schedules & users directly to Cloudflare D1 (~0.5-1.5s via db_save_collection)
     const d1SchedulesPromise = pushCollectionWithFallback(
       CLOUDFLARE_D1_API_URL,
       'schedules',
@@ -814,24 +861,9 @@ export async function pushAllSchedulesToCloud(
         singleItemKey: 'item',
         deleteItemAction: 'db_delete_item',
         deleteIdKey: 'id',
-        concurrency: 6,
-        maxDirectCollectionBytes: 240_000,
-        timeoutMs: 25_000,
-      }
-    );
-
-    const gasSchedulesPromise = pushCollectionWithFallback(
-      GAS_VAULT_API_URL,
-      'schedules',
-      enriched,
-      {
-        singleItemAction: 'db_save_schedule',
-        singleItemKey: 'schedule',
-        deleteItemAction: 'db_delete_schedule',
-        deleteIdKey: 'scheduleId',
-        concurrency: 3,
-        maxDirectCollectionBytes: 600_000,
-        timeoutMs: 35_000,
+        concurrency: 12,
+        maxDirectCollectionBytes: 2_500_000,
+        timeoutMs: 20_000,
       }
     );
 
@@ -839,29 +871,83 @@ export async function pushAllSchedulesToCloud(
       ? pushCollectionWithFallback(CLOUDFLARE_D1_API_URL, 'users', cleanUsers, {
           singleItemAction: 'db_save_item',
           singleItemKey: 'item',
-          concurrency: 5,
-          maxDirectCollectionBytes: 240_000,
-          timeoutMs: 20_000,
+          concurrency: 10,
+          maxDirectCollectionBytes: 2_500_000,
+          timeoutMs: 15_000,
         })
       : Promise.resolve(true);
 
-    const gasUsersPromise = cleanUsers
-      ? pushCollectionWithFallback(GAS_VAULT_API_URL, 'users', cleanUsers, {
-          singleItemAction: 'db_save_item',
-          singleItemKey: 'item',
-          concurrency: 3,
-          maxDirectCollectionBytes: 500_000,
-          timeoutMs: 25_000,
-        })
-      : Promise.resolve(true);
+    // Run GAS Vault backup sequentially in one promise to avoid GAS LockService contention
+    isGasBackupInFlight = true;
+    const gasBackupPromise = (async (): Promise<boolean> => {
+      try {
+        if (clearTombstones) {
+          cachedTombstonesMap = new Map();
+          lastTombstoneFetchMs = 0;
+          await cleanGasTombstonesForIds(importedIds, Boolean(options.replaceAll));
+        }
+        const gasSchedOk = await pushCollectionWithFallback(
+          GAS_VAULT_API_URL,
+          'schedules',
+          enriched,
+          {
+            singleItemAction: 'db_save_schedule',
+            singleItemKey: 'schedule',
+            deleteItemAction: 'db_delete_schedule',
+            deleteIdKey: 'scheduleId',
+            concurrency: 4,
+            maxDirectCollectionBytes: 2_500_000,
+            timeoutMs: 25_000,
+          }
+        );
+        if (cleanUsers) {
+          await pushCollectionWithFallback(GAS_VAULT_API_URL, 'users', cleanUsers, {
+            singleItemAction: 'db_save_item',
+            singleItemKey: 'item',
+            concurrency: 4,
+            maxDirectCollectionBytes: 2_500_000,
+            timeoutMs: 20_000,
+          });
+        }
+        return gasSchedOk;
+      } catch (err) {
+        console.warn('GAS schedules backup warning:', err);
+        return false;
+      } finally {
+        isGasBackupInFlight = false;
+      }
+    })();
 
-    const [, d1SchedulesOk, gasSchedulesOk] = await Promise.all([
-      tombstoneCleanPromise,
-      d1SchedulesPromise,
-      gasSchedulesPromise,
-      d1UsersPromise,
-      gasUsersPromise,
-    ]);
+    // Wait for Primary Cloudflare D1 first (instant ~1s)
+    const [d1SchedulesOk] = await Promise.all([d1SchedulesPromise, d1UsersPromise]);
+
+    let gasSchedulesOk = false;
+    if (d1SchedulesOk) {
+      // D1 already succeeded! Give GAS backup a brief grace window, then return to UI immediately
+      // while letting GAS finish gracefully in the background.
+      const settled = await Promise.race([
+        gasBackupPromise.then((res) => ({ done: true as const, res })),
+        new Promise<{ done: false; res: boolean }>((resolve) =>
+          setTimeout(() => resolve({ done: false, res: false }), GAS_BACKGROUND_GRACE_MS)
+        ),
+      ]);
+      if (settled.done) {
+        gasSchedulesOk = settled.res;
+      } else {
+        // Attach background completion handler to clear pending queue once GAS finishes
+        gasBackupPromise.then((bgGasOk) => {
+          if (bgGasOk) {
+            const curPending = getPendingSchedulesQueue();
+            if (curPending && !curPending.d1Pending) {
+              clearPendingSchedulesQueue();
+            }
+          }
+        });
+      }
+    } else {
+      // D1 failed: await GAS Vault fallback completely
+      gasSchedulesOk = await gasBackupPromise;
+    }
 
     const ok = d1SchedulesOk || gasSchedulesOk;
 
@@ -875,7 +961,7 @@ export async function pushAllSchedulesToCloud(
         } catch {}
       }
     } else if (ok) {
-      // One target succeeded; keep queue for whichever target is still pending
+      // D1 or GAS succeeded; keep queue only for whichever target is still pending
       savePendingSchedulesQueue({
         agendas,
         users,
@@ -883,7 +969,7 @@ export async function pushAllSchedulesToCloud(
         d1Pending: !d1SchedulesOk,
         gasPending: !gasSchedulesOk,
       });
-      inMemoryWriteProtectUntilMs = Date.now() + 15_000;
+      inMemoryWriteProtectUntilMs = Date.now() + 12_000;
       if (typeof localStorage !== 'undefined') {
         try {
           localStorage.setItem(SCHEDULE_WRITE_LOCK_KEY, String(inMemoryWriteProtectUntilMs));
@@ -912,7 +998,7 @@ export async function pushAllSchedulesToCloud(
       d1Synced: d1SchedulesOk,
       gasSynced: gasSchedulesOk,
       syncedCount: ok ? agendas.length : 0,
-      queuedOffline: !d1SchedulesOk || !gasSchedulesOk,
+      queuedOffline: !d1SchedulesOk && !gasSchedulesOk,
       error: ok ? undefined : 'Gagal terhubung ke Cloudflare D1 dan GAS Vault. Jadwal disimpan lokal untuk sinkronisasi otomatis.',
     };
   } catch (err: any) {
@@ -1120,6 +1206,23 @@ function extractMasterStoresFromRawCollection(
   return Array.from(byCode.values());
 }
 
+function extractEmbeddedStoreMeta(rawData: any[]): MasterStoreMetadata | null {
+  if (!Array.isArray(rawData)) return null;
+  const carrier = rawData.find((it: any) => it && typeof it._metaVersion === 'number' && it._metaVersion > 0);
+  if (!carrier) return null;
+  const version = Number(carrier._metaVersion);
+  return {
+    version,
+    updatedAt: String(carrier._metaUpdatedAt || new Date(version).toISOString()),
+    updatedBy: String(carrier._metaUpdatedBy || 'Admin FMCU'),
+    sourceFilename: carrier._metaSource ? String(carrier._metaSource) : undefined,
+    totalStores: Number(carrier._metaTotal || rawData.length),
+    addedCount: Number(carrier._metaAdded || 0),
+    updatedCount: Number(carrier._metaUpdated || 0),
+    cloudSynced: true,
+  };
+}
+
 function extractMetaFromRawCollection(rawMetaData: any): MasterStoreMetadata | null {
   if (!Array.isArray(rawMetaData) || rawMetaData.length === 0) return null;
   const current =
@@ -1137,20 +1240,47 @@ function extractMetaFromRawCollection(rawMetaData: any): MasterStoreMetadata | n
   };
 }
 
-async function fetchMasterStoresFromEndpoint(
-  url: string,
-  timeoutMs: number
-): Promise<{ stores: MasterStore[]; meta: MasterStoreMetadata | null } | null> {
+async function fetchMasterStoresFromD1(): Promise<{
+  stores: MasterStore[];
+  meta: MasterStoreMetadata | null;
+} | null> {
+  // Cloudflare D1 ONLY accepts 'stores' (never query 'master_stores' or 'master_stores_meta' on D1)
+  const storesResp = await postCloudEndpoint(
+    CLOUDFLARE_D1_API_URL,
+    { action: 'db_get_collection', collection: MASTER_STORES_COLLECTION },
+    { timeoutMs: 10_000, retries: 1 }
+  );
+
+  if (!isCloudRespSuccess(storesResp) || !Array.isArray(storesResp.data)) {
+    return null;
+  }
+
+  const embeddedMeta = extractEmbeddedStoreMeta(storesResp.data);
+  const stores = extractMasterStoresFromRawCollection(storesResp.data, embeddedMeta);
+  if (stores.length === 0) return null;
+
+  return {
+    stores,
+    meta: embeddedMeta
+      ? { ...embeddedMeta, totalStores: embeddedMeta.totalStores || stores.length, cloudSynced: true }
+      : null,
+  };
+}
+
+async function fetchMasterStoresFromGas(): Promise<{
+  stores: MasterStore[];
+  meta: MasterStoreMetadata | null;
+} | null> {
   const [metaResp, storesResp] = await Promise.all([
     postCloudEndpoint(
-      url,
-      { action: 'db_get_collection', collection: MASTER_STORES_META_COLLECTION },
-      { timeoutMs, retries: 1 }
+      GAS_VAULT_API_URL,
+      { action: 'db_get_collection', collection: GAS_MASTER_STORES_META_COLLECTION },
+      { timeoutMs: 18_000, retries: 1 }
     ),
     postCloudEndpoint(
-      url,
+      GAS_VAULT_API_URL,
       { action: 'db_get_collection', collection: MASTER_STORES_COLLECTION },
-      { timeoutMs: timeoutMs + 5000, retries: 1 }
+      { timeoutMs: 22_000, retries: 1 }
     ),
   ]);
 
@@ -1158,43 +1288,35 @@ async function fetchMasterStoresFromEndpoint(
     return null;
   }
 
-  const meta =
+  const gasMeta =
     isCloudRespSuccess(metaResp) && Array.isArray(metaResp.data)
       ? extractMetaFromRawCollection(metaResp.data)
       : null;
+  const embeddedMeta = extractEmbeddedStoreMeta(storesResp.data);
+  const meta = gasMeta || embeddedMeta;
 
   const stores = extractMasterStoresFromRawCollection(storesResp.data, meta);
   if (stores.length === 0) return null;
 
   return {
     stores,
-    meta: meta
-      ? { ...meta, totalStores: meta.totalStores || stores.length, cloudSynced: true }
-      : {
-          version: Date.now(),
-          updatedAt: new Date().toISOString(),
-          updatedBy: 'Cloud Sync',
-          totalStores: stores.length,
-          addedCount: 0,
-          updatedCount: 0,
-          cloudSynced: true,
-        },
+    meta: meta ? { ...meta, totalStores: meta.totalStores || stores.length, cloudSynced: true } : null,
   };
 }
 
 /**
- * Fetch latest Master Toko list & version metadata from Cloudflare D1 (fallback to GAS Vault)
+ * Fetch latest Master Toko list & version metadata from Cloudflare D1 (1-call fast read; fallback to GAS Vault)
  */
 export async function fetchMasterStoresFromCloud(): Promise<{
   stores: MasterStore[];
   meta: MasterStoreMetadata | null;
 } | null> {
-  const d1Result = await fetchMasterStoresFromEndpoint(CLOUDFLARE_D1_API_URL, 12_000);
+  const d1Result = await fetchMasterStoresFromD1();
   if (d1Result && d1Result.stores.length > 0) {
     return d1Result;
   }
 
-  const gasResult = await fetchMasterStoresFromEndpoint(GAS_VAULT_API_URL, 22_000);
+  const gasResult = await fetchMasterStoresFromGas();
   if (gasResult && gasResult.stores.length > 0) {
     return gasResult;
   }
@@ -1202,84 +1324,64 @@ export async function fetchMasterStoresFromCloud(): Promise<{
   return null;
 }
 
-async function pushMasterStoresChunkedToTarget(
-  url: string,
+async function pushMasterStoresBackupToGas(
+  flatItems: Record<string, any>[],
   chunks: Record<string, any>[],
-  metaItem: Record<string, any>,
-  concurrency: number,
-  timeoutMs: number
+  metaItem: Record<string, any>
 ): Promise<boolean> {
-  // 1. Inspect existing IDs so stale trailing chunks or legacy flat items can be pruned after upload
-  let existingIds: string[] = [];
   try {
-    const existingResp = await postCloudEndpoint(
-      url,
-      { action: 'db_get_collection', collection: MASTER_STORES_COLLECTION },
-      { timeoutMs: 15_000, retries: 1 }
+    // 1. Try fast single-call collection save first (~250 KB JSON fits easily in Drive)
+    const directResp = await postCloudEndpoint(
+      GAS_VAULT_API_URL,
+      {
+        action: 'db_save_collection',
+        collection: MASTER_STORES_COLLECTION,
+        data: flatItems,
+      },
+      { timeoutMs: 25_000, retries: 1 }
     );
-    if (isCloudRespSuccess(existingResp) && Array.isArray(existingResp.data)) {
-      existingIds = existingResp.data.map((it: any) => String(it?.id || '')).filter(Boolean);
-    }
-  } catch {
-    // ignore
-  }
 
-  // 2. Upload all chunks with retry
-  const chunkResults = await runWithConcurrency(chunks, concurrency, async (chunkItem) => {
-    const resp = await postCloudEndpoint(
-      url,
+    let storesOk = isCloudRespSuccess(directResp);
+
+    // 2. Fallback to bounded chunks only if direct collection save fails
+    if (!storesOk) {
+      const chunkResults = await runWithConcurrency(chunks, 2, async (chunkItem) => {
+        const resp = await postCloudEndpoint(
+          GAS_VAULT_API_URL,
+          {
+            action: 'db_save_item',
+            collection: MASTER_STORES_COLLECTION,
+            item: chunkItem,
+          },
+          { timeoutMs: 25_000, retries: 1 }
+        );
+        return isCloudRespSuccess(resp);
+      });
+      storesOk = chunkResults.every(Boolean);
+    }
+
+    if (!storesOk) return false;
+
+    const metaResp = await postCloudEndpoint(
+      GAS_VAULT_API_URL,
       {
         action: 'db_save_item',
-        collection: MASTER_STORES_COLLECTION,
-        item: chunkItem,
+        collection: GAS_MASTER_STORES_META_COLLECTION,
+        item: metaItem,
       },
-      { timeoutMs, retries: 2 }
+      { timeoutMs: 20_000, retries: 1 }
     );
-    return isCloudRespSuccess(resp);
-  });
 
-  if (!chunkResults.every(Boolean)) {
+    return isCloudRespSuccess(metaResp);
+  } catch (err) {
+    console.warn('GAS master stores backup warning:', err);
     return false;
   }
-
-  // 3. Save metadata pointer once all chunks succeed
-  const metaResp = await postCloudEndpoint(
-    url,
-    {
-      action: 'db_save_item',
-      collection: MASTER_STORES_META_COLLECTION,
-      item: metaItem,
-    },
-    { timeoutMs, retries: 2 }
-  );
-
-  if (!isCloudRespSuccess(metaResp)) {
-    return false;
-  }
-
-  // 4. Clean up obsolete chunk IDs / legacy flat store items
-  const validChunkIds = new Set(chunks.map((c) => String(c.id)));
-  const staleIds = existingIds.filter((id) => !validChunkIds.has(id));
-  if (staleIds.length > 0) {
-    await runWithConcurrency(staleIds, concurrency, async (staleId) => {
-      await postCloudEndpoint(
-        url,
-        {
-          action: 'db_delete_item',
-          collection: MASTER_STORES_COLLECTION,
-          id: staleId,
-        },
-        { timeoutMs: 12_000, retries: 1 }
-      );
-    });
-  }
-
-  return true;
 }
 
 /**
- * Push updated Master Toko list + version metadata to Cloudflare D1 ('master_stores', 'master_stores_meta')
- * and GAS Vault backup using chunked batching with retry + BroadcastChannel live sync.
+ * Push updated Master Toko list + version metadata to Cloudflare D1 ('stores' single-batch write)
+ * and GAS Vault backup (runs fast grace window + background completion after D1 succeeds).
  */
 export async function pushMasterStoresToCloud(
   stores: MasterStore[],
@@ -1298,6 +1400,26 @@ export async function pushMasterStoresToCloud(
 
   const version = meta.version || Date.now();
   const updatedAt = meta.updatedAt || new Date(version).toISOString();
+
+  // Keep flat MasterStore records (compatible with D1 'stores' schema) and embed version metadata on item[0]
+  const flatItems: Record<string, any>[] = cleanStores.map((st, idx) =>
+    idx === 0
+      ? {
+          id: st.code,
+          ...st,
+          _metaVersion: version,
+          _metaUpdatedAt: updatedAt,
+          _metaUpdatedBy: meta.updatedBy || 'Admin FMCU',
+          _metaSource: meta.sourceFilename || '',
+          _metaTotal: cleanStores.length,
+          _metaAdded: meta.addedCount ?? 0,
+          _metaUpdated: meta.updatedCount ?? 0,
+        }
+      : {
+          id: st.code,
+          ...st,
+        }
+  );
 
   const chunks: Record<string, any>[] = [];
   for (let i = 0; i < cleanStores.length; i += MASTER_STORES_CHUNK_SIZE) {
@@ -1323,14 +1445,39 @@ export async function pushMasterStoresToCloud(
     addedCount: meta.addedCount ?? 0,
     updatedCount: meta.updatedCount ?? 0,
     chunkCount: chunks.length,
-    storageFormat: 'chunked_v1',
+    storageFormat: 'flat_v2',
     mode: options.mode || 'merge',
   };
 
-  const [d1Synced, gasSynced] = await Promise.all([
-    pushMasterStoresChunkedToTarget(CLOUDFLARE_D1_API_URL, chunks, metaItem, 4, 20_000),
-    pushMasterStoresChunkedToTarget(GAS_VAULT_API_URL, chunks, metaItem, 2, 30_000),
-  ]);
+  // Start D1 primary sync (1 fast db_save_collection call ~1s) and GAS backup in parallel
+  const d1Promise = pushCollectionWithFallback(CLOUDFLARE_D1_API_URL, MASTER_STORES_COLLECTION, flatItems, {
+    singleItemAction: 'db_save_item',
+    singleItemKey: 'item',
+    concurrency: 12,
+    maxDirectCollectionBytes: 2_500_000,
+    timeoutMs: 20_000,
+  });
+
+  const gasBackupPromise = pushMasterStoresBackupToGas(flatItems, chunks, metaItem);
+
+  const d1Synced = await d1Promise;
+  let gasSynced = false;
+
+  if (d1Synced) {
+    // D1 succeeded! Give GAS a brief grace window, then return immediately so Admin UI never stalls.
+    const settled = await Promise.race([
+      gasBackupPromise.then((res) => ({ done: true as const, res })),
+      new Promise<{ done: false; res: boolean }>((resolve) =>
+        setTimeout(() => resolve({ done: false, res: false }), GAS_BACKGROUND_GRACE_MS)
+      ),
+    ]);
+    if (settled.done) {
+      gasSynced = settled.res;
+    }
+  } else {
+    // D1 failed: await full GAS Vault fallback
+    gasSynced = await gasBackupPromise;
+  }
 
   const ok = d1Synced || gasSynced;
   const syncedMeta: MasterStoreMetadata = {
