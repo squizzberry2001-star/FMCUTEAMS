@@ -16,12 +16,20 @@ import { PageTransitionLoader } from './components/PageTransitionLoader';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import {
   fetchSchedulesFromCloud,
+  fetchUsersFromCloud,
   pushAllSchedulesToCloud,
   pushSingleAgendaToCloud,
   deleteAgendaFromCloud,
   subscribeToLocalSync,
   getDeletedAgendaIds,
   markAgendaDeletedLocally,
+  markScheduleWriteProtection,
+  isScheduleSyncProtected,
+  getPendingSchedulesQueue,
+  flushPendingSchedulesQueue,
+  fetchMasterStoresFromCloud,
+  subscribeMasterStoresCloudSync,
+  type CloudSyncResult,
 } from './services/cloudScheduleSyncService';
 import { fetchAllVisitReportsFromCloud } from './services/crossDeviceVisitSyncService';
 import {
@@ -30,7 +38,12 @@ import {
   flushOfflineAttendanceQueue,
 } from './services/actualAttendanceService';
 import { exportScheduleToTemplateExcel } from './services/scheduleExcelService';
-import { isSamePersonName } from './data/masterStoresData';
+import {
+  isSamePersonName,
+  hydrateMasterStoresFromIdb,
+  saveMasterStoresDurable,
+  getMasterStoreMetadata,
+} from './data/masterStoresData';
 import {
   startLivePresenceHeartbeat,
   stopLivePresenceHeartbeat,
@@ -277,19 +290,72 @@ export const App: React.FC = () => {
   // CROSS-DEVICE REAL-TIME ONLINE SCHEDULE SYNC (Cloudflare D1 + GAS Vault)
   // ==========================================================================
   const isSyncingCloudRef = useRef(false);
+  const lastMasterStoreSyncRef = useRef(0);
+
+  const syncMasterStoresFromCloud = async (force = false) => {
+    const nowMs = Date.now();
+    if (!force && nowMs - lastMasterStoreSyncRef.current < 30000) return;
+    lastMasterStoreSyncRef.current = nowMs;
+
+    try {
+      const localHydrated = await hydrateMasterStoresFromIdb();
+      const localMeta = localHydrated.meta || getMasterStoreMetadata();
+      const remote = await fetchMasterStoresFromCloud();
+      if (remote && Array.isArray(remote.stores) && remote.stores.length > 0) {
+        const remoteVersion = Number(remote.meta?.version || 0);
+        const localVersion = Number(localMeta?.version || 0);
+        if (remoteVersion > localVersion || (!localMeta && remote.meta)) {
+          await saveMasterStoresDurable(remote.stores, {
+            ...(remote.meta || {}),
+            totalStores: remote.stores.length,
+            cloudSynced: true,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Master store cloud sync warning:', err);
+    }
+  };
 
   const syncSchedulesFromCloud = async () => {
     if (isSyncingCloudRef.current) return;
     isSyncingCloudRef.current = true;
     try {
-      const [cloudAgendas, cloudReports, rawCloudPasswords] = await Promise.all([
+      // Retry any offline/failed bulk import queue first
+      if (getPendingSchedulesQueue()) {
+        await flushPendingSchedulesQueue();
+      }
+
+      const [cloudAgendas, cloudUsers, cloudReports, rawCloudPasswords] = await Promise.all([
         fetchSchedulesFromCloud(),
+        fetchUsersFromCloud().catch(() => null),
         fetchAllVisitReportsFromCloud(true).catch(() => null),
         fetchOnlineUserPasswords().catch(() => ({} as Record<string, string>)),
       ]);
       const cloudPasswords: Record<string, string> = (rawCloudPasswords as Record<string, string>) || {};
 
-      // Cross-device online password sync
+      // Never overwrite local agendas/users while a bulk write is in-flight or pending retry
+      const writeProtected = isScheduleSyncProtected() || getPendingSchedulesQueue() !== null;
+
+      // Cross-device user sync (newly auto-registered Excel PICs) + online password sync
+      if (!writeProtected && cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+        setUsers((prev) => {
+          const cleanName = (n: string) =>
+            (n || '').toLowerCase().replace(/\([^)]+\)\s*/g, '').replace(/\s+/g, ' ').trim();
+          const byKey = new Map(prev.map((u) => [cleanName(u.name), u]));
+          let changed = false;
+          for (const cu of cloudUsers) {
+            const key = cleanName(cu.name);
+            if (!key) continue;
+            if (!byKey.has(key)) {
+              byKey.set(key, cu);
+              changed = true;
+            }
+          }
+          return changed ? Array.from(byKey.values()) : prev;
+        });
+      }
+
       if (cloudPasswords && Object.keys(cloudPasswords).length > 0) {
         setUsers((prev) => {
           const { updatedList, hasChanges } = mergeUsersWithOnlinePasswords(prev, cloudPasswords);
@@ -332,58 +398,61 @@ export const App: React.FC = () => {
         }
       }
 
-      if (cloudAgendas && cloudAgendas.length > 0) {
-        let hydratedCloud = hydrateAgendasWithLocalAttendance(cloudAgendas);
+      // Guard: Do NOT let polling overwrite local agendas while a write is protected or queued
+      if (!writeProtected && cloudAgendas !== null) {
+        const deletedIds = getDeletedAgendaIds();
+        if (cloudAgendas.length > 0 || deletedIds.size > 0) {
+          let hydratedCloud = hydrateAgendasWithLocalAttendance(cloudAgendas);
 
-        if (cloudReports && cloudReports.length > 0) {
-          const reportMap = new Map<string, any>();
-          cloudReports.forEach((r) => {
-            if (r.agendaId) reportMap.set(r.agendaId, r);
-            if (r.id) reportMap.set(r.id, r);
-          });
+          if (cloudReports && cloudReports.length > 0) {
+            const reportMap = new Map<string, any>();
+            cloudReports.forEach((r) => {
+              if (r.agendaId) reportMap.set(r.agendaId, r);
+              if (r.id) reportMap.set(r.id, r);
+            });
 
-          hydratedCloud = hydratedCloud.map((a) => {
-            const matchedRep = reportMap.get(a.id);
-            if (matchedRep) {
-              return {
-                ...a,
-                completed: true,
-                actualIn: a.actualIn || matchedRep.actualIn,
-                actualOut: a.actualOut || matchedRep.actualOut,
-              };
+            hydratedCloud = hydratedCloud.map((a) => {
+              const matchedRep = reportMap.get(a.id);
+              if (matchedRep) {
+                return {
+                  ...a,
+                  completed: true,
+                  actualIn: a.actualIn || matchedRep.actualIn,
+                  actualOut: a.actualOut || matchedRep.actualOut,
+                };
+              }
+              return a;
+            });
+          }
+
+          const filteredCloud = hydratedCloud.filter((a) => !deletedIds.has(String(a.id)));
+          const cloudIdSet = new Set(filteredCloud.map((a) => a.id));
+
+          setAgendas((prev) => {
+            // Cloud is the master cross-device source of truth!
+            // Keep un-synced local drafts (draft-, local-) that are not deleted
+            const unsyncedLocal = prev.filter(
+              (a) =>
+                !cloudIdSet.has(a.id) &&
+                !deletedIds.has(String(a.id)) &&
+                (a.id.startsWith('local-') || a.id.startsWith('draft-'))
+            );
+            const merged = unsyncedLocal.length > 0 ? [...unsyncedLocal, ...filteredCloud] : filteredCloud;
+
+            const buildSig = (list: ScheduleAgenda[]) =>
+              list
+                .map(
+                  (a) =>
+                    `${a.id}:${a.date}:${a.pic}:${a.title}:${a.category}:${a.completed ? 1 : 0}:${a.actualIn || ''}:${a.actualOut || ''}`
+                )
+                .sort()
+                .join('|');
+            if (buildSig(prev) !== buildSig(merged)) {
+              return merged;
             }
-            return a;
+            return prev;
           });
         }
-
-        const deletedIds = getDeletedAgendaIds();
-        const filteredCloud = hydratedCloud.filter((a) => !deletedIds.has(String(a.id)));
-        const cloudIdSet = new Set(filteredCloud.map((a) => a.id));
-
-        setAgendas((prev) => {
-          // Cloud is the master cross-device source of truth!
-          // NEVER resurrect missing cloud items (sch-). ONLY keep un-synced local drafts (draft-, local-) that are not deleted!
-          const unsyncedLocal = prev.filter(
-            (a) =>
-              !cloudIdSet.has(a.id) &&
-              !deletedIds.has(String(a.id)) &&
-              (a.id.startsWith('local-') || a.id.startsWith('draft-'))
-          );
-          const merged = unsyncedLocal.length > 0 ? [...unsyncedLocal, ...filteredCloud] : filteredCloud;
-
-          const buildSig = (list: ScheduleAgenda[]) =>
-            list
-              .map(
-                (a) =>
-                  `${a.id}:${a.date}:${a.pic}:${a.title}:${a.category}:${a.completed ? 1 : 0}:${a.actualIn || ''}:${a.actualOut || ''}`
-              )
-              .sort()
-              .join('|');
-          if (buildSig(prev) !== buildSig(merged)) {
-            return merged;
-          }
-          return prev;
-        });
       }
     } catch (err) {
       console.warn('Cloud schedule sync warning:', err);
@@ -393,21 +462,33 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // 1. Initial sync on load
+    // 1. Initial sync on load (Schedules + Master Toko IDB/Cloud hydration)
     syncSchedulesFromCloud();
+    syncMasterStoresFromCloud(true);
 
     // 2. Poll every 5 seconds when tab is active so changes from other devices appear online
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         syncSchedulesFromCloud();
+        syncMasterStoresFromCloud(false);
       }
     }, 5000);
 
     // 3. Sync immediately when user focuses or switches back to the app
     const handleVisibility = () => {
-      if (!document.hidden) syncSchedulesFromCloud();
+      if (!document.hidden) {
+        syncSchedulesFromCloud();
+        syncMasterStoresFromCloud(false);
+      }
     };
-    const handleFocus = () => syncSchedulesFromCloud();
+    const handleFocus = () => {
+      syncSchedulesFromCloud();
+      syncMasterStoresFromCloud(false);
+    };
+    const handleOnline = () => {
+      syncSchedulesFromCloud();
+      syncMasterStoresFromCloud(true);
+    };
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'fmcu_agendas_master_v6' && e.newValue) {
         try {
@@ -430,7 +511,7 @@ export const App: React.FC = () => {
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', handleStorage);
-    window.addEventListener('online', syncSchedulesFromCloud);
+    window.addEventListener('online', handleOnline);
 
     // BroadcastChannel handler for 0ms same-device sync
     const unsubBroadcast = subscribeToLocalSync((payload: any) => {
@@ -439,7 +520,15 @@ export const App: React.FC = () => {
         markAgendaDeletedLocally(delId);
         setAgendas((prev) => prev.filter((a) => String(a.id) !== delId));
       }
+      if (payload && payload.type === 'MASTER_STORES_UPDATED') {
+        hydrateMasterStoresFromIdb();
+      }
       syncSchedulesFromCloud();
+    });
+
+    const unsubMasterCloud = subscribeMasterStoresCloudSync(() => {
+      hydrateMasterStoresFromIdb();
+      syncMasterStoresFromCloud(true);
     });
 
     // Custom window event listener for 0ms cross-component sync
@@ -457,9 +546,10 @@ export const App: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('online', syncSchedulesFromCloud);
+      window.removeEventListener('online', handleOnline);
       window.removeEventListener('fmcu:schedule:deleted', handleScheduleDeletedEvent);
       unsubBroadcast();
+      unsubMasterCloud();
     };
   }, []);
 
@@ -545,6 +635,7 @@ export const App: React.FC = () => {
 
   const handleAddNewAgenda = (newAgenda: ScheduleAgenda) => {
     if (user?.isExecutiveViewer) return;
+    markScheduleWriteProtection(10000);
     const updated = [newAgenda, ...agendas];
     setAgendas(updated);
     setSelectedAgenda(newAgenda);
@@ -561,6 +652,7 @@ export const App: React.FC = () => {
 
   const handleUpdateAgenda = (updated: ScheduleAgenda) => {
     if (user?.isExecutiveViewer) return;
+    markScheduleWriteProtection(10000);
     setAgendas((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
     if (selectedAgenda && selectedAgenda.id === updated.id) {
       setSelectedAgenda(updated);
@@ -570,6 +662,7 @@ export const App: React.FC = () => {
 
   const handleDeleteAgenda = (id: string) => {
     if (user?.isExecutiveViewer) return;
+    markScheduleWriteProtection(10000);
     const cleanId = String(id);
     markAgendaDeletedLocally(cleanId);
     setAgendas((prev) => prev.filter((a) => String(a.id) !== cleanId));
@@ -598,22 +691,34 @@ export const App: React.FC = () => {
   };
 
   // Handlers for Admin & User Excel Import & Sync
-  const handleImportExcel = (
+  const handleImportExcel = async (
     importedUsers: User[],
     importedAgendas: ScheduleAgenda[],
     mode: 'merge' | 'replace' = 'merge'
-  ) => {
-    if (user?.isExecutiveViewer) return;
-    // Merge users
-    const existingMap = new Map(users.map((u) => [u.name.toLowerCase(), u]));
+  ): Promise<CloudSyncResult> => {
+    if (user?.isExecutiveViewer) {
+      return {
+        ok: false,
+        d1Synced: false,
+        gasSynced: false,
+        syncedCount: 0,
+        error: 'Akses Executive Viewer bersifat Read-Only.',
+      };
+    }
+
+    const cleanUserKey = (name: string) =>
+      (name || '').toLowerCase().replace(/\([^)]+\)\s*/g, '').replace(/\s+/g, ' ').trim();
+
+    // Merge users without duplicating normalized names
+    const existingMap = new Map(users.map((u) => [cleanUserKey(u.name), u]));
     importedUsers.forEach((u) => {
-      if (!existingMap.has(u.name.toLowerCase())) {
-        existingMap.set(u.name.toLowerCase(), u);
+      const key = cleanUserKey(u.name);
+      if (key && !existingMap.has(key)) {
+        existingMap.set(key, u);
       }
     });
 
     const nextUsers = Array.from(existingMap.values());
-    setUsers(nextUsers);
 
     let nextAgendas: ScheduleAgenda[];
     if (mode === 'replace') {
@@ -625,8 +730,25 @@ export const App: React.FC = () => {
       nextAgendas = [...importedAgendas, ...keptOtherDates];
     }
 
+    // Immediate local persistence + state update BEFORE cloud push so Admin & User views update immediately
+    try {
+      localStorage.setItem(FMCU_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
+      localStorage.setItem('fmcu_users_v5', JSON.stringify(nextUsers));
+      localStorage.setItem('fmcu_agendas_master_v6', JSON.stringify(nextAgendas));
+    } catch (e) {
+      console.warn('localStorage quota warning during Excel import:', e);
+    }
+
+    setUsers(nextUsers);
     setAgendas(nextAgendas);
-    pushAllSchedulesToCloud(nextAgendas, nextUsers);
+
+    // Protect local state from being reverted by 5s polling / focus while cloud push runs
+    markScheduleWriteProtection(20000);
+
+    return await pushAllSchedulesToCloud(nextAgendas, nextUsers, {
+      clearDeletedTombstones: true,
+      replaceAll: mode === 'replace',
+    });
   };
 
   const handleAddUser = (newUser: User) => {
@@ -927,9 +1049,8 @@ export const App: React.FC = () => {
           existingUsers={users}
           currentAgendasCount={agendas.length}
           onClose={() => setShowExcelUploadModal(false)}
-          onImportSuccess={(updatedUsers, newAgendas, mode, summaryMsg) => {
-            handleImportExcel(updatedUsers, newAgendas, mode);
-            alert(summaryMsg);
+          onImportSuccess={async (updatedUsers, newAgendas, mode) => {
+            return await handleImportExcel(updatedUsers, newAgendas, mode);
           }}
         />
       )}

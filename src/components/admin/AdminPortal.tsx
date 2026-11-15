@@ -50,12 +50,16 @@ import {
   HelpCircle,
   LayoutGrid,
   List,
+  Cloud,
+  Database,
+  RotateCw,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ScheduleAgenda, ScheduleCategory, User, VisitReportData } from '../../types';
 import { DeveloperFooter } from '../DeveloperFooter';
 import { HoldingTimeR23Modal } from '../visit/HoldingTimeR23Modal';
 import { ExecutiveReportPreviewModal } from '../executive/ExecutiveReportPreviewModal';
+import { ExcelScheduleUploadModal } from '../ExcelScheduleUploadModal';
 import { fetchAllVisitReportsFromCloud } from '../../services/crossDeviceVisitSyncService';
 import {
   UserLivePresence,
@@ -67,8 +71,13 @@ import {
 } from '../../services/userLivePresenceService';
 import {
   MasterStore,
+  MasterStoreMetadata,
   getMasterStores,
-  saveMasterStores,
+  getMasterStoreMetadata,
+  hydrateMasterStoresFromIdb,
+  saveMasterStoresDurable,
+  mergeMasterStores,
+  subscribeMasterStoresUpdate,
   findMasterStoreByCodeOrName,
 } from '../../data/masterStoresData';
 import {
@@ -81,8 +90,26 @@ import {
   parseScheduleExcelFile,
   exportScheduleToTemplateExcel,
   exportMasterStoresToExcel,
+  downloadMasterStoreTemplateExcel,
+  parseMasterStoreExcelFile,
   ParsedExcelScheduleSummary,
+  ParsedMasterStoreExcelResult,
 } from '../../services/scheduleExcelService';
+import {
+  pushMasterStoresToCloud,
+  fetchMasterStoresFromCloud,
+  flushPendingSchedulesQueue,
+  getPendingSchedulesQueue,
+  type CloudSyncResult,
+} from '../../services/cloudScheduleSyncService';
+
+/** Format tanggal lokal (WIB / browser local time) ke YYYY-MM-DD tanpa pergeseran UTC */
+function formatLocalYmd(d: Date = new Date()): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 // ============================================================================
 // PROPS INTERFACE
@@ -98,7 +125,7 @@ interface AdminPortalProps {
     importedUsers: User[],
     importedAgendas: ScheduleAgenda[],
     mode?: 'merge' | 'replace'
-  ) => void;
+  ) => Promise<CloudSyncResult> | CloudSyncResult | void;
   onSwitchToUserView: () => void;
   onLogout: () => void;
   onAddUser?: (newUser: User) => void;
@@ -591,7 +618,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // Calendar State
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => formatLocalYmd());
 
   // Cloud Reports State
   const [cloudReports, setCloudReports] = useState<VisitReportData[]>([]);
@@ -613,21 +640,45 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // Raw Data Export Modal
   const [showExportModal, setShowExportModal] = useState(false);
 
-  // Master Store Data
+  // Master Store Data + Durable IDB/Cloud Sync State
   const [masterStores, setMasterStores] = useState<MasterStore[]>(() => getMasterStores());
-  const [storeSearch, setStoreSearch] = useState('');
-  const [storeFeedback, setStoreFeedback] = useState<string | null>(null);
+  const [masterStoreMeta, setMasterStoreMeta] = useState<MasterStoreMetadata | null>(() =>
+    getMasterStoreMetadata()
+  );
+  const [masterExcelFile, setMasterExcelFile] = useState<File | null>(null);
+  const [masterParseResult, setMasterParseResult] = useState<ParsedMasterStoreExcelResult | null>(null);
+  const [masterSelectedSheet, setMasterSelectedSheet] = useState<string>('');
+  const [masterImportMode, setMasterImportMode] = useState<'merge' | 'replace'>('merge');
+  const [isParsingMasterExcel, setIsParsingMasterExcel] = useState(false);
+  const [isExecutingMasterUpdate, setIsExecutingMasterUpdate] = useState(false);
+  const [isSyncingMasterCloud, setIsSyncingMasterCloud] = useState(false);
+  const [masterFeedback, setMasterFeedback] = useState<{
+    ok: boolean;
+    cloudSynced?: boolean;
+    title: string;
+    detail: string;
+  } | null>(null);
+  const masterFileInputRef = useRef<HTMLInputElement>(null);
 
   // Excel Schedule Import
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelSummary, setExcelSummary] = useState<ParsedExcelScheduleSummary | null>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [isParsingExcel, setIsParsingExcel] = useState(false);
+  const [isExecutingImport, setIsExecutingImport] = useState(false);
+  const [isRetryingScheduleSync, setIsRetryingScheduleSync] = useState(false);
+  const [showScheduleUploadModal, setShowScheduleUploadModal] = useState(false);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
+  const [scheduleSyncFeedback, setScheduleSyncFeedback] = useState<{
+    ok: boolean;
+    queuedOffline?: boolean;
+    title: string;
+    detail: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Today Date
-  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  // Today Date (Local WIB)
+  const todayIso = useMemo(() => formatLocalYmd(), []);
 
   // Fetch Cloud Reports
   const loadReports = async () => {
@@ -646,6 +697,40 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   useEffect(() => {
     loadReports();
+  }, []);
+
+  // Hydrate Master Toko from IndexedDB + Cloud & subscribe to cross-tab updates
+  useEffect(() => {
+    let active = true;
+    const unsub = subscribeMasterStoresUpdate((stores, meta) => {
+      if (!active) return;
+      setMasterStores(stores);
+      setMasterStoreMeta(meta);
+    });
+
+    hydrateMasterStoresFromIdb()
+      .then(async ({ stores, meta }) => {
+        if (!active) return;
+        setMasterStores(stores);
+        setMasterStoreMeta(meta);
+        const remote = await fetchMasterStoresFromCloud().catch(() => null);
+        if (!active || !remote || !Array.isArray(remote.stores) || remote.stores.length === 0) return;
+        const remoteVer = Number(remote.meta?.version || 0);
+        const localVer = Number(meta?.version || 0);
+        if (remoteVer > localVer || (!meta && remote.meta)) {
+          await saveMasterStoresDurable(remote.stores, {
+            ...(remote.meta || {}),
+            totalStores: remote.stores.length,
+            cloudSynced: true,
+          });
+        }
+      })
+      .catch((err) => console.warn('Master stores hydrate warning:', err));
+
+    return () => {
+      active = false;
+      unsub();
+    };
   }, []);
 
   // Live Presences (Heartbeat from mobile staff)
@@ -880,7 +965,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
 
-    const toIso = (d: Date) => d.toISOString().split('T')[0];
+    const toIso = (d: Date) => formatLocalYmd(d);
 
     return {
       today: toIso(today),
@@ -1016,7 +1101,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       const d = prevMonthLastDay - i + 1;
       const prevDate = new Date(year, month - 1, d);
       matrix.push({
-        dateStr: prevDate.toISOString().split('T')[0],
+        dateStr: formatLocalYmd(prevDate),
         dayNum: d,
         isCurrentMonth: false,
       });
@@ -1026,7 +1111,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     for (let d = 1; d <= daysInMonth; d++) {
       const currDate = new Date(year, month, d);
       matrix.push({
-        dateStr: currDate.toISOString().split('T')[0],
+        dateStr: formatLocalYmd(currDate),
         dayNum: d,
         isCurrentMonth: true,
       });
@@ -1038,7 +1123,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       for (let d = 1; d <= remaining; d++) {
         const nextDate = new Date(year, month + 1, d);
         matrix.push({
-          dateStr: nextDate.toISOString().split('T')[0],
+          dateStr: formatLocalYmd(nextDate),
           dayNum: d,
           isCurrentMonth: false,
         });
@@ -1116,6 +1201,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setExcelFile(file);
     setIsParsingExcel(true);
     setImportFeedback(null);
+    setScheduleSyncFeedback(null);
 
     try {
       const parseRes = await parseScheduleExcelFile(file, users);
@@ -1124,22 +1210,78 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setImportFeedback(`Gagal membaca Excel: ${err?.message || 'Format tidak valid'}`);
     } finally {
       setIsParsingExcel(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  // Execute Excel Schedule Import
-  const handleExecuteImport = () => {
-    if (!excelSummary) return;
+  // Execute Excel Schedule Import (Awaits Cloud D1 + GAS Sync)
+  const handleExecuteImport = async () => {
+    if (!excelSummary || isExecutingImport) return;
+    const count = excelSummary.agendas.length;
+    setIsExecutingImport(true);
+    setImportFeedback(null);
+    setScheduleSyncFeedback(null);
+
     try {
-      onImportExcel(excelSummary.updatedUsers, excelSummary.agendas, importMode);
-      setImportFeedback(
-        `Sukses mengimpor ${excelSummary.agendas.length} agenda (${importMode === 'replace' ? 'Mode Timpa Penuh' : 'Mode Gabung'}).`
-      );
+      const res = await onImportExcel(excelSummary.updatedUsers, excelSummary.agendas, importMode);
+      if (res && typeof res === 'object' && 'ok' in res) {
+        const d1Label = res.d1Synced ? 'D1: OK' : 'D1: Tertunda';
+        const gasLabel = res.gasSynced ? 'GAS: OK' : 'GAS: Tertunda';
+
+        if (res.ok && !res.queuedOffline) {
+          setScheduleSyncFeedback({
+            ok: true,
+            title: `Berhasil menyimpan & sinkronisasi ${count} agenda ke Cloud!`,
+            detail: `${importMode === 'replace' ? 'Mode Timpa Semua' : 'Mode Gabung'} • ${d1Label} • ${gasLabel}`,
+          });
+        } else {
+          setScheduleSyncFeedback({
+            ok: false,
+            queuedOffline: Boolean(res.queuedOffline),
+            title: `Tersimpan lokal (${count} agenda), sinkronisasi Cloud tertunda`,
+            detail: `${d1Label} • ${gasLabel}${res.error ? ` — ${res.error}` : ''}. Masuk antrean retry otomatis.`,
+          });
+        }
+      } else {
+        setScheduleSyncFeedback({
+          ok: true,
+          title: `Berhasil menerapkan ${count} agenda`,
+          detail: importMode === 'replace' ? 'Mode Timpa Penuh' : 'Mode Gabung',
+        });
+      }
+
       setExcelFile(null);
       setExcelSummary(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err: any) {
       setImportFeedback(`Gagal menyimpan data impor: ${err?.message || 'Error tidak diketahui'}`);
+    } finally {
+      setIsExecutingImport(false);
+    }
+  };
+
+  // Manual Retry for Pending Schedule Queue
+  const handleRetryPendingScheduleSync = async () => {
+    if (isRetryingScheduleSync) return;
+    setIsRetryingScheduleSync(true);
+    try {
+      const res = await flushPendingSchedulesQueue();
+      if (res && res.ok && !res.queuedOffline) {
+        setScheduleSyncFeedback({
+          ok: true,
+          title: `Antrean berhasil disinkronkan (${res.syncedCount} agenda)!`,
+          detail: `D1: ${res.d1Synced ? 'OK' : 'Gagal'} • GAS: ${res.gasSynced ? 'OK' : 'Gagal'}`,
+        });
+      } else {
+        setScheduleSyncFeedback({
+          ok: false,
+          queuedOffline: true,
+          title: 'Sinkronisasi ulang masih tertunda',
+          detail: res?.error || 'Koneksi ke server cloud belum tersedia.',
+        });
+      }
+    } finally {
+      setIsRetryingScheduleSync(false);
     }
   };
 
@@ -1148,9 +1290,171 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     exportScheduleToTemplateExcel(agendas, users);
   };
 
+  // Master Toko Live Merge Preview (updates immediately if mode changes)
+  const masterLivePreview = useMemo(() => {
+    if (!masterParseResult) return null;
+    return mergeMasterStores(masterStores, masterParseResult.incomingStores, masterImportMode);
+  }, [masterParseResult, masterStores, masterImportMode]);
+
+  // Master Toko Excel Upload & Parse
+  const handleMasterExcelFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMasterExcelFile(file);
+    setMasterSelectedSheet('');
+    setIsParsingMasterExcel(true);
+    setMasterFeedback(null);
+
+    try {
+      const parsed = await parseMasterStoreExcelFile(file, masterStores, masterImportMode);
+      setMasterParseResult(parsed);
+      setMasterSelectedSheet(parsed.sheetName);
+    } catch (err: any) {
+      setMasterParseResult(null);
+      setMasterFeedback({
+        ok: false,
+        title: 'Gagal membaca file Excel Master Toko',
+        detail: err?.message || 'Pastikan terdapat kolom Kode Toko dan Nama Toko yang valid.',
+      });
+    } finally {
+      setIsParsingMasterExcel(false);
+      if (masterFileInputRef.current) masterFileInputRef.current.value = '';
+    }
+  };
+
+  const handleMasterSheetChange = async (sheetName: string) => {
+    if (!masterExcelFile) return;
+    setMasterSelectedSheet(sheetName);
+    setIsParsingMasterExcel(true);
+    try {
+      const parsed = await parseMasterStoreExcelFile(masterExcelFile, masterStores, masterImportMode, sheetName);
+      setMasterParseResult(parsed);
+    } catch (err: any) {
+      setMasterFeedback({
+        ok: false,
+        title: `Gagal membaca sheet "${sheetName}"`,
+        detail: err?.message || 'Format kolom pada sheet ini tidak valid.',
+      });
+    } finally {
+      setIsParsingMasterExcel(false);
+    }
+  };
+
+  // Execute Master Toko Update (IndexedDB + localStorage + Cloudflare D1 + GAS Vault)
+  const handleExecuteMasterStoreUpdate = async () => {
+    if (!masterParseResult || !masterLivePreview || isExecutingMasterUpdate) return;
+    if (masterLivePreview.stores.length === 0) {
+      setMasterFeedback({
+        ok: false,
+        title: 'Tidak ada data toko valid untuk disimpan',
+        detail: 'Periksa kembali file Excel Anda.',
+      });
+      return;
+    }
+
+    setIsExecutingMasterUpdate(true);
+    setMasterFeedback(null);
+
+    try {
+      const nextStores = masterLivePreview.stores;
+      const savedMeta = await saveMasterStoresDurable(nextStores, {
+        updatedBy: adminUser?.name || 'Admin FMCU',
+        sourceFilename: masterExcelFile?.name,
+        totalStores: nextStores.length,
+        addedCount: masterLivePreview.addedCount,
+        updatedCount: masterLivePreview.updatedCount,
+        cloudSynced: false,
+      });
+
+      setMasterStores(nextStores);
+      setMasterStoreMeta(savedMeta);
+
+      const cloudRes = await pushMasterStoresToCloud(nextStores, savedMeta, { mode: masterImportMode });
+
+      if (cloudRes.ok) {
+        const syncedMeta = await saveMasterStoresDurable(nextStores, {
+          ...savedMeta,
+          version: savedMeta.version,
+          updatedAt: savedMeta.updatedAt,
+          cloudSynced: true,
+        });
+        setMasterStoreMeta(syncedMeta);
+        setMasterFeedback({
+          ok: true,
+          cloudSynced: true,
+          title: `Master Toko Diperbarui (${nextStores.length} Toko • v${syncedMeta.version})`,
+          detail: `+${masterLivePreview.addedCount} baru, ~${masterLivePreview.updatedCount} diperbarui. Tersimpan di IndexedDB + D1 (${cloudRes.d1Synced ? 'OK' : 'Pending'}) + GAS (${cloudRes.gasSynced ? 'OK' : 'Pending'}).`,
+        });
+        setMasterExcelFile(null);
+        setMasterParseResult(null);
+      } else {
+        setMasterFeedback({
+          ok: false,
+          cloudSynced: false,
+          title: `Tersimpan di Perangkat Ini (${nextStores.length} Toko), Sinkronisasi Cloud Gagal`,
+          detail: `${cloudRes.error || 'Koneksi ke D1/GAS gagal.'} Data lokal sudah aktif — klik "Sinkronkan Ulang ke Cloud" saat online.`,
+        });
+      }
+    } catch (err: any) {
+      setMasterFeedback({
+        ok: false,
+        cloudSynced: false,
+        title: 'Gagal menyimpan Master Toko',
+        detail: err?.message || 'Terjadi kesalahan sistem.',
+      });
+    } finally {
+      setIsExecutingMasterUpdate(false);
+    }
+  };
+
+  // Manual Cloud Push Retry for current Master Toko
+  const handleRetryMasterCloudSync = async () => {
+    if (isSyncingMasterCloud) return;
+    setIsSyncingMasterCloud(true);
+    try {
+      const meta: MasterStoreMetadata = masterStoreMeta || {
+        version: Date.now(),
+        updatedAt: new Date().toISOString(),
+        updatedBy: adminUser?.name || 'Admin FMCU',
+        totalStores: masterStores.length,
+        addedCount: 0,
+        updatedCount: 0,
+        cloudSynced: false,
+      };
+      const cloudRes = await pushMasterStoresToCloud(masterStores, meta, { mode: 'replace' });
+      if (cloudRes.ok) {
+        const syncedMeta = await saveMasterStoresDurable(masterStores, {
+          ...meta,
+          cloudSynced: true,
+        });
+        setMasterStoreMeta(syncedMeta);
+        setMasterFeedback({
+          ok: true,
+          cloudSynced: true,
+          title: `Master Toko Berhasil Disinkronkan ke Cloud (${masterStores.length} Toko)`,
+          detail: `D1: ${cloudRes.d1Synced ? 'OK' : 'Pending'} • GAS: ${cloudRes.gasSynced ? 'OK' : 'Pending'}`,
+        });
+      } else {
+        setMasterFeedback({
+          ok: false,
+          cloudSynced: false,
+          title: 'Sinkronisasi Cloud Gagal',
+          detail: cloudRes.error || 'Periksa koneksi internet Anda.',
+        });
+      }
+    } finally {
+      setIsSyncingMasterCloud(false);
+    }
+  };
+
+  // Download Master Store Template
+  const handleDownloadMasterTemplate = () => {
+    downloadMasterStoreTemplateExcel();
+  };
+
   // Download Master Stores
   const handleDownloadMasterStores = () => {
-    exportMasterStoresToExcel();
+    exportMasterStoresToExcel(masterStores);
   };
 
   // Export Filtered Agendas to Raw Excel
@@ -2053,7 +2357,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     onClick={() => {
                       const now = new Date();
                       setCalendarMonth(now);
-                      setSelectedCalendarDate(now.toISOString().split('T')[0]);
+                      setSelectedCalendarDate(formatLocalYmd(now));
                     }}
                     className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
                   >
@@ -2750,7 +3054,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             TAB 5: DATA HUB & EXCEL SYNC (Schedule, Master Toko, R23)
             ============================================================ */}
         {activeTab === 'datahub' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
             {/* Box 1: Excel Schedule Sync */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
               <div className="flex items-center gap-2">
@@ -2762,7 +3066,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     1. Sinkronisasi Jadwal Kerja
                   </h3>
                   <p className="text-[11px] font-medium text-slate-500">
-                    Upload & Download Jadwal Excel
+                    Upload, Preview &amp; Cloud Sync (D1 + GAS)
                   </p>
                 </div>
               </div>
@@ -2778,11 +3082,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
                 <button
                   type="button"
+                  disabled={isParsingExcel || isExecutingImport}
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
                 >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Pilih File Excel Jadwal...</span>
+                  {isParsingExcel ? (
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isParsingExcel ? 'Membaca File Excel...' : 'Pilih File Excel Jadwal...'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowScheduleUploadModal(true)}
+                  className="w-full py-2 px-3 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Upload dengan Preview Multi-Sheet</span>
                 </button>
 
                 <button
@@ -2795,38 +3113,111 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </button>
 
                 {importFeedback && (
-                  <div className="p-2.5 rounded-xl bg-slate-100 text-[11px] font-bold text-slate-700">
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[11px] font-bold text-rose-700">
                     {importFeedback}
                   </div>
                 )}
 
-                {/* Summary Modal / Section if parsed */}
+                {scheduleSyncFeedback && (
+                  <div
+                    className={`p-3 rounded-xl border text-[11px] space-y-2 ${
+                      scheduleSyncFeedback.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-amber-50 border-amber-300 text-amber-900'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {scheduleSyncFeedback.ok ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <p className="font-black leading-snug">{scheduleSyncFeedback.title}</p>
+                        <p className="font-medium opacity-90 mt-0.5">{scheduleSyncFeedback.detail}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterDatePreset('ALL');
+                          setFilterKind('ALL');
+                          setFilterPic('ALL');
+                          setSearchQuery('');
+                          setActiveTab('table');
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-black text-white text-[10px] font-black transition cursor-pointer"
+                      >
+                        Lihat di Tabel Agenda
+                      </button>
+                      {(!scheduleSyncFeedback.ok || scheduleSyncFeedback.queuedOffline) && (
+                        <button
+                          type="button"
+                          disabled={isRetryingScheduleSync}
+                          onClick={handleRetryPendingScheduleSync}
+                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black transition cursor-pointer disabled:opacity-50"
+                        >
+                          {isRetryingScheduleSync ? 'Menyinkronkan...' : 'Coba Sinkronkan Ulang'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pending offline queue warning if existing before new action */}
+                {!scheduleSyncFeedback && getPendingSchedulesQueue() && (
+                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 space-y-1.5">
+                    <p className="font-black flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Ada jadwal menunggu sinkronisasi ke Cloud</span>
+                    </p>
+                    <button
+                      type="button"
+                      disabled={isRetryingScheduleSync}
+                      onClick={handleRetryPendingScheduleSync}
+                      className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black transition cursor-pointer"
+                    >
+                      {isRetryingScheduleSync ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Summary Section if parsed */}
                 {excelSummary && (
                   <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
                     <p className="text-xs font-black text-emerald-900">
                       File Siap Diimpor: {excelSummary.agendas.length} Agenda
                     </p>
+                    {excelFile && (
+                      <p className="text-[10px] font-bold text-emerald-700 truncate">
+                        {excelFile.name} • {excelSummary.sheetName}
+                      </p>
+                    )}
                     <div className="text-[11px] text-emerald-800 space-y-0.5">
                       <p>• {excelSummary.stats.visitCount} Visit Toko Resmi</p>
                       <p>• {excelSummary.stats.nonStoreAgendaCount} Agenda Non-Visit</p>
-                      <p>• {excelSummary.stats.cutiCount + excelSummary.stats.offCount} Cuti & Off</p>
+                      <p>• {excelSummary.stats.cutiCount + excelSummary.stats.offCount} Cuti &amp; Off</p>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-1">
-                      <label className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                    <div className="flex items-center gap-3 pt-1">
+                      <label className="text-[11px] font-bold text-emerald-950 flex items-center gap-1 cursor-pointer">
                         <input
                           type="radio"
                           name="importMode"
                           checked={importMode === 'merge'}
+                          disabled={isExecutingImport}
                           onChange={() => setImportMode('merge')}
                         />
                         Gabung
                       </label>
-                      <label className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                      <label className="text-[11px] font-bold text-emerald-950 flex items-center gap-1 cursor-pointer">
                         <input
                           type="radio"
                           name="importMode"
                           checked={importMode === 'replace'}
+                          disabled={isExecutingImport}
                           onChange={() => setImportMode('replace')}
                         />
                         Timpa Semua
@@ -2835,49 +3226,310 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
                     <button
                       type="button"
+                      disabled={isExecutingImport}
                       onClick={handleExecuteImport}
-                      className="w-full py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-black hover:bg-emerald-800 transition cursor-pointer"
+                      className="w-full py-2 rounded-lg bg-emerald-700 text-white text-xs font-black hover:bg-emerald-800 transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                     >
-                      Eksekusi Impor Sekarang
+                      {isExecutingImport ? (
+                        <>
+                          <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Menyimpan &amp; Sinkronisasi Cloud...</span>
+                        </>
+                      ) : (
+                        <span>Eksekusi Impor &amp; Sync Cloud</span>
+                      )}
                     </button>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Box 2: Master Store 610 Toko */}
+            {/* Box 2: Master Toko (Durable IndexedDB + Excel Update + Cloud Sync) */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-black">
-                  <Store className="w-4 h-4" />
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-black shrink-0">
+                    <Store className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase text-slate-800">
+                      2. Master Toko ({masterStores.length} Cabang)
+                    </h3>
+                    <p className="text-[11px] font-medium text-slate-500">
+                      Database Koordinat &amp; Info Toko
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-xs font-black uppercase text-slate-800">
-                    2. Master Toko (610 Cabang)
-                  </h3>
-                  <p className="text-[11px] font-medium text-slate-500">
-                    Database Koordinat & Info Toko
-                  </p>
+
+                {/* Cloud Sync Status Badge */}
+                {masterStoreMeta?.cloudSynced ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black shrink-0">
+                    <Cloud className="w-3 h-3" />
+                    <span>Cloud OK</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold shrink-0">
+                    <Database className="w-3 h-3" />
+                    <span>Lokal</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Metadata Badge */}
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-600">Total Database</span>
+                  <span className="font-black text-slate-900">
+                    {masterStores.length} Toko {masterStoreMeta?.version ? `• v${masterStoreMeta.version}` : ''}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span>Terakhir diperbarui</span>
+                  <span className="font-bold text-slate-700">
+                    {masterStoreMeta?.updatedAt
+                      ? new Date(masterStoreMeta.updatedAt).toLocaleString('id-ID', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : 'Seed Bawaan'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span>Diperbarui oleh</span>
+                  <span className="font-bold text-slate-700 truncate max-w-[160px]">
+                    {masterStoreMeta?.updatedBy || 'Sistem Awal'}
+                  </span>
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-600">Total Database</span>
-                  <span className="text-xs font-black text-slate-900">{masterStores.length} Toko</span>
-                </div>
+              <div className="space-y-2 pt-1">
+                <input
+                  ref={masterFileInputRef}
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={handleMasterExcelFileSelect}
+                  className="hidden"
+                />
 
+                {/* Primary Update Master Toko via Excel Button */}
                 <button
                   type="button"
-                  onClick={handleDownloadMasterStores}
-                  className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                  disabled={isParsingMasterExcel || isExecutingMasterUpdate}
+                  onClick={() => masterFileInputRef.current?.click()}
+                  className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-xs disabled:opacity-50"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download Master Toko (.xlsx)</span>
+                  {isParsingMasterExcel ? (
+                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {isParsingMasterExcel ? 'Membaca Excel Toko...' : 'Update Master Toko via Excel'}
+                  </span>
                 </button>
 
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadMasterTemplate}
+                    className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                    <span>Template (.xlsx)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadMasterStores}
+                    className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 shrink-0" />
+                    <span>Export (.xlsx)</span>
+                  </button>
+                </div>
+
+                {/* Master Store Feedback Banner */}
+                {masterFeedback && (
+                  <div
+                    className={`p-3 rounded-xl border text-[11px] space-y-1.5 ${
+                      masterFeedback.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-amber-50 border-amber-300 text-amber-900'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {masterFeedback.ok ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <p className="font-black leading-snug">{masterFeedback.title}</p>
+                        <p className="font-medium opacity-90 mt-0.5">{masterFeedback.detail}</p>
+                      </div>
+                    </div>
+
+                    {!masterFeedback.cloudSynced && (
+                      <button
+                        type="button"
+                        disabled={isSyncingMasterCloud}
+                        onClick={handleRetryMasterCloudSync}
+                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black transition cursor-pointer disabled:opacity-50"
+                      >
+                        {isSyncingMasterCloud ? 'Menyinkronkan...' : 'Sinkronkan Ulang ke Cloud'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Parsed Preview & Mode Selector */}
+                {masterParseResult && masterLivePreview && (
+                  <div className="p-3 rounded-xl bg-teal-50/70 border border-teal-200 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-black text-teal-950 truncate">
+                        {masterExcelFile?.name || 'Preview Excel Toko'}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={isExecutingMasterUpdate}
+                        onClick={() => {
+                          setMasterExcelFile(null);
+                          setMasterParseResult(null);
+                        }}
+                        className="text-[10px] font-bold text-slate-500 hover:text-rose-600 cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                    </div>
+
+                    {/* Multi-sheet selector */}
+                    {masterParseResult.availableSheets.length > 1 && (
+                      <div className="flex flex-wrap gap-1">
+                        {masterParseResult.availableSheets.map((sh) => (
+                          <button
+                            key={sh}
+                            type="button"
+                            onClick={() => handleMasterSheetChange(sh)}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer ${
+                              masterSelectedSheet === sh
+                                ? 'bg-teal-700 text-white'
+                                : 'bg-white text-slate-600 border border-slate-200'
+                            }`}
+                          >
+                            {sh}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Preview Stats Grid */}
+                    <div className="grid grid-cols-3 gap-1.5 text-center">
+                      <div className="p-1.5 rounded-lg bg-white border border-emerald-200">
+                        <span className="text-[9px] font-bold text-emerald-700 block uppercase">Baru</span>
+                        <span className="text-sm font-black text-emerald-900">
+                          +{masterLivePreview.addedCount}
+                        </span>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-white border border-blue-200">
+                        <span className="text-[9px] font-bold text-blue-700 block uppercase">Diperbarui</span>
+                        <span className="text-sm font-black text-blue-900">
+                          ~{masterLivePreview.updatedCount}
+                        </span>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-white border border-slate-200">
+                        <span className="text-[9px] font-bold text-slate-600 block uppercase">Total Akhir</span>
+                        <span className="text-sm font-black text-slate-900">
+                          {masterLivePreview.stores.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {masterLivePreview.invalidCount > 0 && (
+                      <p className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2 py-1 rounded-lg">
+                        ⚠️ {masterLivePreview.invalidCount} baris dilewati (kode/nama kosong atau koordinat tidak valid)
+                      </p>
+                    )}
+
+                    {/* Mini Preview Table (first 5 incoming rows) */}
+                    {masterParseResult.incomingStores.length > 0 && (
+                      <div className="max-h-32 overflow-y-auto rounded-lg border border-teal-200 bg-white">
+                        <table className="w-full text-left text-[10px] border-collapse">
+                          <thead className="bg-slate-100 text-slate-600 font-black uppercase sticky top-0">
+                            <tr>
+                              <th className="py-1 px-2">Kode</th>
+                              <th className="py-1 px-2">Nama Toko</th>
+                              <th className="py-1 px-2">Kota</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {masterParseResult.incomingStores.slice(0, 6).map((st, idx) => (
+                              <tr key={`${st.code || idx}-${idx}`}>
+                                <td className="py-1 px-2 font-black text-slate-800 whitespace-nowrap">
+                                  {st.code || '-'}
+                                </td>
+                                <td className="py-1 px-2 font-semibold text-slate-700 truncate max-w-[120px]">
+                                  {st.name || '-'}
+                                </td>
+                                <td className="py-1 px-2 text-slate-500 truncate max-w-[80px]">
+                                  {st.city || '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Mode Selector: Merge vs Replace */}
+                    <div className="flex items-center gap-3 pt-0.5">
+                      <label className="text-[11px] font-bold text-teal-950 flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="masterImportMode"
+                          checked={masterImportMode === 'merge'}
+                          disabled={isExecutingMasterUpdate}
+                          onChange={() => setMasterImportMode('merge')}
+                        />
+                        Merge / Update
+                      </label>
+                      <label className="text-[11px] font-bold text-rose-900 flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="masterImportMode"
+                          checked={masterImportMode === 'replace'}
+                          disabled={isExecutingMasterUpdate}
+                          onChange={() => setMasterImportMode('replace')}
+                        />
+                        Replace Semua
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isExecutingMasterUpdate || masterLivePreview.stores.length === 0}
+                      onClick={handleExecuteMasterStoreUpdate}
+                      className="w-full py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-black transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {isExecutingMasterUpdate ? (
+                        <>
+                          <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Menyimpan &amp; Sinkronisasi Cloud...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Eksekusi Update ({masterLivePreview.stores.length} Toko)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-slate-500">
-                  Data master toko memuat koordinat GPS presisi (Latitude, Longitude), Area Manager, dan Regional Manager.
+                  Pembaruan tersimpan permanen di IndexedDB + Cloudflare D1 + GAS Vault sehingga otomatis diterima seluruh perangkat tim.
                 </p>
               </div>
             </div>
@@ -3003,6 +3655,34 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         />
       )}
 
+      {/* ============================================================
+          MODAL: UPLOAD SCHEDULE EXCEL (MULTI-SHEET PREVIEW)
+          ============================================================ */}
+      {showScheduleUploadModal && (
+        <ExcelScheduleUploadModal
+          existingUsers={users}
+          currentAgendasCount={agendas.length}
+          onClose={() => setShowScheduleUploadModal(false)}
+          onImportSuccess={async (updatedUsers, newAgendas, mode) => {
+            const res = await onImportExcel(updatedUsers, newAgendas, mode);
+            if (res && typeof res === 'object' && 'ok' in res) {
+              setScheduleSyncFeedback({
+                ok: res.ok && !res.queuedOffline,
+                queuedOffline: res.queuedOffline,
+                title:
+                  res.ok && !res.queuedOffline
+                    ? `Berhasil menyimpan & sinkronisasi ${newAgendas.length} agenda ke Cloud!`
+                    : `Tersimpan lokal (${newAgendas.length} agenda), sinkronisasi Cloud tertunda`,
+                detail: `D1: ${res.d1Synced ? 'OK' : 'Tertunda'} • GAS: ${res.gasSynced ? 'OK' : 'Tertunda'}${
+                  res.error ? ` — ${res.error}` : ''
+                }`,
+              });
+            }
+            return res;
+          }}
+        />
+      )}
+
       {/* Footer */}
       <DeveloperFooter />
     </div>
@@ -3032,7 +3712,7 @@ const AgendaFormModal: React.FC<AgendaFormModalProps> = ({
   onSave,
 }) => {
   const [title, setTitle] = useState(editingAgenda?.title || '');
-  const [date, setDate] = useState(editingAgenda?.date || defaultDate || new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(editingAgenda?.date || defaultDate || formatLocalYmd());
   const [time, setTime] = useState(editingAgenda?.time || '08:00');
   const [endTime, setEndTime] = useState(editingAgenda?.endTime || '17:00');
   const [category, setCategory] = useState<ScheduleCategory>(editingAgenda?.category || 'VISIT');

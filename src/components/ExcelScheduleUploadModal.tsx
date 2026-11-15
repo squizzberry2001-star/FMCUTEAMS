@@ -23,6 +23,7 @@ import {
   ExcelWorkbookParseResult,
   parseScheduleExcelFile,
 } from '../services/scheduleExcelService';
+import type { CloudSyncResult } from '../services/cloudScheduleSyncService';
 
 interface ExcelScheduleUploadModalProps {
   existingUsers: User[];
@@ -33,7 +34,7 @@ interface ExcelScheduleUploadModalProps {
     newAgendas: ScheduleAgenda[],
     mode: 'merge' | 'replace',
     summaryMessage: string
-  ) => void;
+  ) => Promise<CloudSyncResult | boolean | void> | CloudSyncResult | boolean | void;
 }
 
 export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> = ({
@@ -44,12 +45,19 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isParsing, setIsParsing] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [parseResult, setParseResult] = useState<ExcelWorkbookParseResult | null>(null);
   const [selectedSheetMode, setSelectedSheetMode] = useState<string>('ALL');
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [previewFilter, setPreviewFilter] = useState<'all' | 'visit' | 'nso' | 'non-store' | 'off'>('all');
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<{
+    ok: boolean;
+    queuedOffline?: boolean;
+    title: string;
+    detail: string;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -57,6 +65,7 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
     setSelectedFile(file);
     setIsParsing(true);
     setErrorMessage(null);
+    setSaveFeedback(null);
 
     try {
       const res = await parseScheduleExcelFile(file, existingUsers, sheetChoice);
@@ -73,6 +82,7 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isSaving) return;
     const file = e.target.files?.[0];
     if (file) {
       handleProcessFile(file, selectedSheetMode);
@@ -83,6 +93,7 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isSaving) return;
     const file = e.dataTransfer.files?.[0];
     if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
       handleProcessFile(file, selectedSheetMode);
@@ -92,20 +103,61 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
   };
 
   const handleSheetChange = (sheetName: string) => {
+    if (isSaving) return;
     setSelectedSheetMode(sheetName);
     if (selectedFile) {
       handleProcessFile(selectedFile, sheetName);
     }
   };
 
-  const handleConfirmImport = () => {
-    if (!parseResult || parseResult.summary.agendas.length === 0) return;
+  const handleConfirmImport = async () => {
+    if (!parseResult || parseResult.summary.agendas.length === 0 || isSaving) return;
 
     const { summary } = parseResult;
     const msg = `Berhasil mengimpor ${summary.agendas.length} agenda dari Excel (${summary.sheetName})!`;
-    onImportSuccess(summary.updatedUsers, summary.agendas, importMode, msg);
-    confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 } });
-    onClose();
+
+    setIsSaving(true);
+    setErrorMessage(null);
+    setSaveFeedback(null);
+
+    try {
+      const res = await onImportSuccess(summary.updatedUsers, summary.agendas, importMode, msg);
+
+      if (res && typeof res === 'object' && 'ok' in res) {
+        const d1Label = res.d1Synced ? 'Cloudflare D1: OK' : 'Cloudflare D1: Gagal/Tertunda';
+        const gasLabel = res.gasSynced ? 'GAS Vault: OK' : 'GAS Vault: Gagal/Tertunda';
+
+        if (res.ok && !res.queuedOffline) {
+          confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 } });
+          setSaveFeedback({
+            ok: true,
+            title: `Berhasil menyimpan & sinkronisasi ${summary.agendas.length} jadwal ke Cloud!`,
+            detail: `${d1Label} • ${gasLabel}`,
+          });
+          setTimeout(() => {
+            onClose();
+          }, 1100);
+        } else {
+          // Saved locally + retry queue active; do NOT auto-close with fake success
+          setSaveFeedback({
+            ok: false,
+            queuedOffline: Boolean(res.queuedOffline),
+            title: 'Tersimpan di Perangkat Ini — Sinkronisasi Cloud Belum Selesai',
+            detail: `${d1Label} • ${gasLabel}${res.error ? ` (${res.error})` : ''}. Jadwal sudah aktif di tampilan & masuk antrean sinkronisasi otomatis.`,
+          });
+        }
+      } else if (res === false) {
+        setErrorMessage('Gagal menyimpan jadwal ke sistem. Silakan coba lagi.');
+      } else {
+        confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 } });
+        onClose();
+      }
+    } catch (err: any) {
+      console.error('Excel Save Error:', err);
+      setErrorMessage(err?.message || 'Terjadi kesalahan saat menyimpan jadwal ke Cloud.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Filter agendas for preview table
@@ -159,8 +211,9 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
 
           <button
             type="button"
+            disabled={isSaving}
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-200/70 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0"
+            className="w-9 h-9 rounded-full bg-slate-200/70 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
             title="Tutup Modal"
           >
             <X className="w-5 h-5" />
@@ -176,8 +229,10 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
               e.stopPropagation();
             }}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-3xl p-6 sm:p-8 text-center transition-all cursor-pointer group ${
+            onClick={() => !isSaving && fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-3xl p-6 sm:p-8 text-center transition-all group ${
+              isSaving ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+            } ${
               selectedFile
                 ? 'border-teal-500 bg-teal-50/30'
                 : 'border-slate-300 hover:border-teal-400 bg-slate-50/60 hover:bg-teal-50/20'
@@ -230,6 +285,27 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
             <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2.5 animate-in fade-in">
               <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
               <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Save & Cloud Sync Feedback */}
+          {saveFeedback && (
+            <div
+              className={`p-3.5 rounded-2xl border text-xs flex items-start gap-2.5 animate-in fade-in ${
+                saveFeedback.ok
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-amber-50 border-amber-300 text-amber-900'
+              }`}
+            >
+              {saveFeedback.ok ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+              )}
+              <div className="space-y-0.5">
+                <p className="font-black">{saveFeedback.title}</p>
+                <p className="font-medium opacity-90">{saveFeedback.detail}</p>
+              </div>
             </div>
           )}
 
@@ -511,20 +587,30 @@ export const ExcelScheduleUploadModal: React.FC<ExcelScheduleUploadModalProps> =
         <footer className="px-5 sm:px-6 py-3.5 border-t border-slate-100 flex items-center justify-between bg-slate-50/90 shrink-0">
           <button
             type="button"
+            disabled={isSaving}
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition cursor-pointer"
+            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Batal
+            {saveFeedback && !saveFeedback.ok ? 'Tutup' : 'Batal'}
           </button>
 
           <button
             type="button"
-            disabled={!parseResult || parseResult.summary.agendas.length === 0}
+            disabled={!parseResult || parseResult.summary.agendas.length === 0 || isSaving || isParsing}
             onClick={handleConfirmImport}
             className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs sm:text-sm font-black shadow-lg shadow-teal-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 transition active:scale-95 cursor-pointer"
           >
-            <Check className="w-4 h-4 stroke-[3]" />
-            <span>Terapkan {parseResult?.summary.agendas.length || 0} Jadwal ke Web</span>
+            {isSaving ? (
+              <>
+                <RotateCw className="w-4 h-4 animate-spin" />
+                <span>Menyimpan &amp; Sinkronisasi ke Cloud...</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Terapkan {parseResult?.summary.agendas.length || 0} Jadwal ke Web</span>
+              </>
+            )}
           </button>
         </footer>
       </div>
