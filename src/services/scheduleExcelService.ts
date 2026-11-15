@@ -1499,11 +1499,16 @@ function buildMasterStoreMergePreview(
       const lat = normalizeLat(inc.lat ?? inc.latitude, prev?.lat ?? 0);
       const lng = normalizeLng(inc.lng ?? inc.longitude, prev?.lng ?? 0);
 
+      const incRegion = String((inc as any).region ?? '').trim();
+      const prevRegion = String((prev as any)?.region ?? '').trim();
+      const nextRegion = incRegion && incRegion !== '-' ? incRegion : prevRegion;
+
       const nextStore: MasterStore = {
         code,
         name,
         type: pickStr(inc.type, prev?.type || 'CVS'),
         city: pickStr(inc.city, prev?.city || ''),
+        ...(nextRegion ? ({ region: nextRegion } as Partial<MasterStore>) : {}),
         address: pickStr(inc.address, prev?.address || ''),
         lat,
         lng,
@@ -1556,11 +1561,13 @@ function buildMasterStoreMergePreview(
       }
       const lat = normalizeLat(inc.lat ?? inc.latitude, 0);
       const lng = normalizeLng(inc.lng ?? inc.longitude, 0);
+      const incRegion = String((inc as any).region ?? '').trim();
       mergedMap.set(code, {
         code,
         name,
         type: pickStr(inc.type, 'CVS'),
         city: pickStr(inc.city, ''),
+        ...(incRegion && incRegion !== '-' ? ({ region: incRegion } as Partial<MasterStore>) : {}),
         address: pickStr(inc.address, ''),
         lat,
         lng,
@@ -1578,11 +1585,15 @@ function buildMasterStoreMergePreview(
     } else {
       const nextLat = normalizeLat(inc.lat ?? inc.latitude, prev.lat);
       const nextLng = normalizeLng(inc.lng ?? inc.longitude, prev.lng);
+      const incRegion = String((inc as any).region ?? '').trim();
+      const prevRegion = String((prev as any).region ?? '').trim();
+      const nextRegion = incRegion && incRegion !== '-' ? incRegion : prevRegion;
       const updated: MasterStore = {
         code,
         name: pickStr(inc.name, prev.name),
         type: pickStr(inc.type, prev.type),
         city: pickStr(inc.city, prev.city),
+        ...(nextRegion ? ({ region: nextRegion } as Partial<MasterStore>) : {}),
         address: pickStr(inc.address, prev.address),
         lat: nextLat,
         lng: nextLng,
@@ -1597,9 +1608,10 @@ function buildMasterStoreMergePreview(
         regionalManagerEmail: pickStr(inc.regionalManagerEmail, prev.regionalManagerEmail),
       };
 
-      const changed = (
-        ['name', 'type', 'city', 'address', 'lat', 'lng', 'email', 'storePhone', 'storeHead', 'areaManager', 'areaManagerEmail', 'regionalManager', 'regionalManagerEmail'] as (keyof MasterStore)[]
-      ).some((k) => updated[k] !== prev[k]);
+      const changed =
+        (
+          ['name', 'type', 'city', 'address', 'lat', 'lng', 'email', 'storePhone', 'storeHead', 'areaManager', 'areaManagerEmail', 'regionalManager', 'regionalManagerEmail'] as (keyof MasterStore)[]
+        ).some((k) => updated[k] !== prev[k]) || nextRegion !== prevRegion;
 
       if (changed) {
         mergedMap.set(code, updated);
@@ -1877,7 +1889,7 @@ export function downloadMasterStoreTemplateExcel(): void {
 // ============================================================================
 // EXPORT MASTER DATA TOKO & TOKO KEPEMILIKAN BESTIE TO EXCEL
 // ============================================================================
-export function exportMasterStoresToExcel(storesOverride?: MasterStore[]): void {
+export function exportMasterStoresToExcel(storesOverride?: MasterStore[] | unknown): void {
   const masterStores =
     Array.isArray(storesOverride) && storesOverride.length > 0 ? storesOverride : getMasterStores();
   const ownerships = getBestieInChargeAssignments();

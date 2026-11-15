@@ -1303,7 +1303,7 @@ export async function pushMasterStoresToCloud(
   for (let i = 0; i < cleanStores.length; i += MASTER_STORES_CHUNK_SIZE) {
     const chunkIndex = chunks.length;
     chunks.push({
-      id: `chunk_${String(chunkIndex).padStart(3, '0')}`,
+      id: `chunk_v${version}_${String(chunkIndex).padStart(3, '0')}`,
       _isChunk: true,
       chunkIndex,
       totalChunks: Math.ceil(cleanStores.length / MASTER_STORES_CHUNK_SIZE),
