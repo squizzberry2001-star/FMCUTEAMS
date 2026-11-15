@@ -8,6 +8,7 @@ export interface MasterStore {
   name: string;
   type: string; // 'CVS' | 'FamiSuper' | 'Housing' | etc.
   city: string;
+  region?: string;
   address: string;
   lat: number;
   lng: number;
@@ -20,6 +21,26 @@ export interface MasterStore {
   areaManagerEmail: string;
   regionalManager: string;
   regionalManagerEmail: string;
+}
+
+export interface MasterStoreMetadata {
+  version: number;          // monotonic ms or integer version
+  updatedAt: string;        // ISO timestamp
+  updatedBy: string;        // e.g. 'Admin FMCU'
+  sourceFilename?: string;
+  totalStores: number;
+  addedCount: number;
+  updatedCount: number;
+  cloudSynced?: boolean;
+}
+
+export interface MasterStoreMergeResult {
+  stores: MasterStore[];
+  addedCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  invalidCount: number;
+  errors: string[];
 }
 
 export interface BestieStoreOwnership {
@@ -38,7 +59,18 @@ export interface StoreWithOwnership extends MasterStore {
 }
 
 const STORAGE_KEY_MASTER_STORES = 'fmcu_master_stores_v1';
+const STORAGE_KEY_MASTER_STORES_META = 'fmcu_master_stores_meta_v1';
 const STORAGE_KEY_BESTIE_OWNERSHIP = 'fmcu_bestie_in_charge_v1';
+
+const MASTER_STORES_IDB_NAME = 'fmcu_master_stores_db_v1';
+const MASTER_STORES_IDB_VERSION = 1;
+const MASTER_STORES_IDB_STORE = 'master_data';
+const IDB_KEY_STORES = 'stores_list';
+const IDB_KEY_META = 'stores_meta';
+const IDB_KEY_BESTIE = 'bestie_ownership';
+
+export const MASTER_STORES_BROADCAST_CHANNEL = 'fmcu_master_stores_sync';
+export const MASTER_STORES_UPDATED_EVENT = 'fmcu:master-stores:updated';
 
 export const BESTIE_IN_CHARGE_SHEET_CSV_URL =
   'https://docs.google.com/spreadsheets/d/1XAAfV0Pa6bU3CVH3umJBBSbNObOHorLcWl8UzLPtFp4/gviz/tq?tqx=out:csv&gid=1813325087';
@@ -15809,11 +15841,237 @@ export const INITIAL_BESTIE_OWNERSHIP: BestieStoreOwnership[] = [
 ];
 
 // ============================================================================
-// HELPER FUNCTIONS FOR MASTER STORES & BESTIE IN CHARGE (KEPEMILIKAN TOKO)
+// DURABLE STORAGE (INDEXEDDB + LOCALSTORAGE CACHE + BROADCASTCHANNEL)
 // ============================================================================
 
-export function getMasterStores(): MasterStore[] {
-  if (typeof window === 'undefined') return INITIAL_MASTER_STORES;
+type MasterStoresUpdateListener = (
+  stores: MasterStore[],
+  meta: MasterStoreMetadata | null
+) => void;
+
+let cachedMasterStores: MasterStore[] | null = null;
+let cachedMasterStoresMeta: MasterStoreMetadata | null = null;
+let cachedBestieOwnership: BestieStoreOwnership[] | null = null;
+
+const masterStoresListeners = new Set<MasterStoresUpdateListener>();
+let masterStoresBroadcastChannel: BroadcastChannel | null = null;
+let crossTabListenersAttached = false;
+
+export function normalizeStoreCode(code?: string | number | null): string {
+  const cleaned = String(code ?? '').trim().toUpperCase();
+  if (!cleaned) return '';
+  if (/^\d{1,3}$/.test(cleaned)) {
+    return cleaned.padStart(4, '0');
+  }
+  return cleaned;
+}
+
+function normalizeStoreNumber(val: unknown, fallback = 0): number {
+  if (typeof val === 'number' && Number.isFinite(val)) return val;
+  if (typeof val === 'string') {
+    const trimmed = val.trim().replace(',', '.');
+    if (trimmed) {
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return fallback;
+}
+
+function normalizeMasterStoreRecord(raw: Partial<MasterStore>): MasterStore {
+  const code = normalizeStoreCode(raw.code);
+  const lat = normalizeStoreNumber(raw.lat ?? raw.latitude, 0);
+  const lng = normalizeStoreNumber(raw.lng ?? raw.longitude, 0);
+  const normalized: MasterStore = {
+    code,
+    name: String(raw.name ?? '').trim(),
+    type: String(raw.type ?? '').trim(),
+    city: String(raw.city ?? '').trim(),
+    address: String(raw.address ?? '').trim(),
+    lat,
+    lng,
+    latitude: lat,
+    longitude: lng,
+    email: String(raw.email ?? '').trim(),
+    storePhone: String(raw.storePhone ?? '').trim(),
+    storeHead: String(raw.storeHead ?? '').trim(),
+    areaManager: String(raw.areaManager ?? '').trim(),
+    areaManagerEmail: String(raw.areaManagerEmail ?? '').trim(),
+    regionalManager: String(raw.regionalManager ?? '').trim(),
+    regionalManagerEmail: String(raw.regionalManagerEmail ?? '').trim(),
+  };
+  if (raw.region !== undefined && String(raw.region).trim() !== '') {
+    normalized.region = String(raw.region).trim();
+  }
+  return normalized;
+}
+
+function openMasterStoresIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      return reject(new Error('IndexedDB not supported'));
+    }
+    try {
+      const req = indexedDB.open(MASTER_STORES_IDB_NAME, MASTER_STORES_IDB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(MASTER_STORES_IDB_STORE)) {
+          db.createObjectStore(MASTER_STORES_IDB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('IndexedDB open error'));
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function readMasterStoresKeysFromIdb(): Promise<{
+  stores: MasterStore[] | null;
+  meta: MasterStoreMetadata | null;
+  bestie: BestieStoreOwnership[] | null;
+}> {
+  let db: IDBDatabase | null = null;
+  try {
+    db = await openMasterStoresIdb();
+    const database = db;
+    return await new Promise((resolve) => {
+      try {
+        const tx = database.transaction(MASTER_STORES_IDB_STORE, 'readonly');
+        const store = tx.objectStore(MASTER_STORES_IDB_STORE);
+        const storesReq = store.get(IDB_KEY_STORES);
+        const metaReq = store.get(IDB_KEY_META);
+        const bestieReq = store.get(IDB_KEY_BESTIE);
+
+        let stores: MasterStore[] | null = null;
+        let meta: MasterStoreMetadata | null = null;
+        let bestie: BestieStoreOwnership[] | null = null;
+
+        storesReq.onsuccess = () => {
+          if (Array.isArray(storesReq.result) && storesReq.result.length > 0) {
+            stores = storesReq.result;
+          }
+        };
+        metaReq.onsuccess = () => {
+          if (metaReq.result && typeof metaReq.result === 'object') {
+            meta = metaReq.result as MasterStoreMetadata;
+          }
+        };
+        bestieReq.onsuccess = () => {
+          if (Array.isArray(bestieReq.result) && bestieReq.result.length > 0) {
+            bestie = bestieReq.result;
+          }
+        };
+
+        tx.oncomplete = () => {
+          database.close();
+          resolve({ stores, meta, bestie });
+        };
+        tx.onerror = () => {
+          database.close();
+          resolve({ stores: null, meta: null, bestie: null });
+        };
+        tx.onabort = () => {
+          database.close();
+          resolve({ stores: null, meta: null, bestie: null });
+        };
+      } catch {
+        database.close();
+        resolve({ stores: null, meta: null, bestie: null });
+      }
+    });
+  } catch {
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+    }
+    return { stores: null, meta: null, bestie: null };
+  }
+}
+
+async function writeMasterStoresKeysToIdb(entries: Record<string, unknown>): Promise<boolean> {
+  let db: IDBDatabase | null = null;
+  try {
+    db = await openMasterStoresIdb();
+    const database = db;
+    return await new Promise((resolve) => {
+      try {
+        const tx = database.transaction(MASTER_STORES_IDB_STORE, 'readwrite');
+        const store = tx.objectStore(MASTER_STORES_IDB_STORE);
+        for (const [key, value] of Object.entries(entries)) {
+          store.put(value, key);
+        }
+        tx.oncomplete = () => {
+          database.close();
+          resolve(true);
+        };
+        tx.onerror = () => {
+          database.close();
+          resolve(false);
+        };
+        tx.onabort = () => {
+          database.close();
+          resolve(false);
+        };
+      } catch {
+        database.close();
+        resolve(false);
+      }
+    });
+  } catch {
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+    }
+    return false;
+  }
+}
+
+async function removeMasterStoresKeysFromIdb(keys: string[]): Promise<void> {
+  let db: IDBDatabase | null = null;
+  try {
+    db = await openMasterStoresIdb();
+    const database = db;
+    await new Promise<void>((resolve) => {
+      try {
+        const tx = database.transaction(MASTER_STORES_IDB_STORE, 'readwrite');
+        const store = tx.objectStore(MASTER_STORES_IDB_STORE);
+        for (const key of keys) {
+          store.delete(key);
+        }
+        tx.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          database.close();
+          resolve();
+        };
+      } catch {
+        database.close();
+        resolve();
+      }
+    });
+  } catch {
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+function readLocalStorageStores(): MasterStore[] | null {
+  if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_MASTER_STORES);
     if (raw) {
@@ -15825,32 +16083,562 @@ export function getMasterStores(): MasterStore[] {
   } catch (e) {
     console.warn('Failed reading master stores from localStorage:', e);
   }
+  return null;
+}
+
+function readLocalStorageMeta(): MasterStoreMetadata | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MASTER_STORES_META);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && typeof parsed.version === 'number') {
+        return parsed as MasterStoreMetadata;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed reading master stores metadata from localStorage:', e);
+  }
+  return null;
+}
+
+function writeLocalStorageMirror(stores: MasterStore[], meta: MasterStoreMetadata | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_MASTER_STORES, JSON.stringify(stores));
+  } catch (e) {
+    console.warn('Master stores localStorage cache skipped (persisted in IndexedDB):', e);
+  }
+  if (meta) {
+    try {
+      localStorage.setItem(STORAGE_KEY_MASTER_STORES_META, JSON.stringify(meta));
+    } catch (e) {
+      console.warn('Master stores metadata localStorage cache skipped:', e);
+    }
+  }
+}
+
+function getBroadcastChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === 'undefined') return null;
+  if (!masterStoresBroadcastChannel) {
+    try {
+      masterStoresBroadcastChannel = new BroadcastChannel(MASTER_STORES_BROADCAST_CHANNEL);
+    } catch {
+      masterStoresBroadcastChannel = null;
+    }
+  }
+  return masterStoresBroadcastChannel;
+}
+
+function emitMasterStoresListeners(stores: MasterStore[], meta: MasterStoreMetadata | null): void {
+  masterStoresListeners.forEach((cb) => {
+    try {
+      cb(stores, meta);
+    } catch (err) {
+      console.warn('Master stores subscriber callback error:', err);
+    }
+  });
+  if (typeof window !== 'undefined' && typeof CustomEvent !== 'undefined') {
+    try {
+      window.dispatchEvent(
+        new CustomEvent(MASTER_STORES_UPDATED_EVENT, {
+          detail: { stores, meta },
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function broadcastMasterStoresUpdated(meta?: MasterStoreMetadata | null): void {
+  const ch = getBroadcastChannel();
+  if (!ch) return;
+  try {
+    ch.postMessage({
+      type: 'MASTER_STORES_UPDATED',
+      meta: meta ?? getMasterStoreMetadata(),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+function ensureCrossTabListeners(): void {
+  if (crossTabListenersAttached || typeof window === 'undefined') return;
+  crossTabListenersAttached = true;
+
+  const ch = getBroadcastChannel();
+  if (ch) {
+    ch.addEventListener('message', (evt: MessageEvent) => {
+      if (evt.data && evt.data.type === 'MASTER_STORES_UPDATED') {
+        void hydrateMasterStoresFromIdbInternal(false).then(({ stores, meta }) => {
+          emitMasterStoresListeners(stores, meta);
+        });
+      }
+    });
+  }
+
+  window.addEventListener('storage', (evt: StorageEvent) => {
+    if (evt.key === STORAGE_KEY_MASTER_STORES || evt.key === STORAGE_KEY_MASTER_STORES_META) {
+      const lsStores = readLocalStorageStores() || INITIAL_MASTER_STORES;
+      const lsMeta = readLocalStorageMeta();
+      cachedMasterStores = lsStores;
+      cachedMasterStoresMeta = lsMeta;
+      emitMasterStoresListeners(lsStores, lsMeta);
+    }
+  });
+}
+
+function buildNextMasterStoreMetadata(
+  storesCount: number,
+  prevMeta: MasterStoreMetadata | null,
+  partialMeta?: Partial<MasterStoreMetadata>
+): MasterStoreMetadata {
+  const nowIso = new Date().toISOString();
+  const explicitVersion =
+    typeof partialMeta?.version === 'number' &&
+    Number.isFinite(partialMeta.version) &&
+    partialMeta.version > 0
+      ? partialMeta.version
+      : null;
+
+  const version =
+    explicitVersion !== null
+      ? explicitVersion
+      : Math.max(Date.now(), (prevMeta?.version || 0) + 1);
+
+  return {
+    version,
+    updatedAt: partialMeta?.updatedAt || nowIso,
+    updatedBy: partialMeta?.updatedBy || prevMeta?.updatedBy || 'Admin FMCU',
+    sourceFilename: partialMeta?.sourceFilename ?? prevMeta?.sourceFilename,
+    totalStores: partialMeta?.totalStores ?? storesCount,
+    addedCount: partialMeta?.addedCount ?? 0,
+    updatedCount: partialMeta?.updatedCount ?? 0,
+    cloudSynced: partialMeta?.cloudSynced,
+  };
+}
+
+// ============================================================================
+// HELPER FUNCTIONS FOR MASTER STORES & BESTIE IN CHARGE (KEPEMILIKAN TOKO)
+// ============================================================================
+
+export function getMasterStores(): MasterStore[] {
+  if (typeof window === 'undefined') return INITIAL_MASTER_STORES;
+  if (cachedMasterStores && cachedMasterStores.length > 0) {
+    return cachedMasterStores;
+  }
+  const lsStores = readLocalStorageStores();
+  if (lsStores) {
+    cachedMasterStores = lsStores;
+    return lsStores;
+  }
   return INITIAL_MASTER_STORES;
+}
+
+export function getMasterStoreMetadata(): MasterStoreMetadata | null {
+  if (typeof window === 'undefined') return null;
+  if (cachedMasterStoresMeta) return cachedMasterStoresMeta;
+  const lsMeta = readLocalStorageMeta();
+  if (lsMeta) {
+    cachedMasterStoresMeta = lsMeta;
+  }
+  return lsMeta;
 }
 
 export function saveMasterStores(storesList: MasterStore[]): void {
   if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_MASTER_STORES, JSON.stringify(storesList));
-  } catch (e) {
-    console.warn('Failed saving master stores to localStorage:', e);
+  const normalized = (storesList || []).map(normalizeMasterStoreRecord);
+  const prevMeta = getMasterStoreMetadata();
+  const nextMeta = buildNextMasterStoreMetadata(normalized.length, prevMeta, {
+    totalStores: normalized.length,
+  });
+
+  cachedMasterStores = normalized;
+  cachedMasterStoresMeta = nextMeta;
+
+  writeLocalStorageMirror(normalized, nextMeta);
+  void writeMasterStoresKeysToIdb({
+    [IDB_KEY_STORES]: normalized,
+    [IDB_KEY_META]: nextMeta,
+  });
+
+  ensureCrossTabListeners();
+  emitMasterStoresListeners(normalized, nextMeta);
+  broadcastMasterStoresUpdated(nextMeta);
+}
+
+export async function saveMasterStoresDurable(
+  storesList: MasterStore[],
+  meta?: Partial<MasterStoreMetadata>
+): Promise<MasterStoreMetadata> {
+  const normalized = (storesList || []).map(normalizeMasterStoreRecord);
+  const prevMeta = getMasterStoreMetadata();
+  const nextMeta = buildNextMasterStoreMetadata(normalized.length, prevMeta, meta);
+
+  cachedMasterStores = normalized;
+  cachedMasterStoresMeta = nextMeta;
+
+  if (typeof window !== 'undefined') {
+    await writeMasterStoresKeysToIdb({
+      [IDB_KEY_STORES]: normalized,
+      [IDB_KEY_META]: nextMeta,
+    });
+    writeLocalStorageMirror(normalized, nextMeta);
+    ensureCrossTabListeners();
+    emitMasterStoresListeners(normalized, nextMeta);
+    broadcastMasterStoresUpdated(nextMeta);
   }
+
+  return nextMeta;
+}
+
+async function hydrateMasterStoresFromIdbInternal(notifyOnChange: boolean): Promise<{
+  stores: MasterStore[];
+  meta: MasterStoreMetadata | null;
+}> {
+  if (typeof window === 'undefined') {
+    return { stores: INITIAL_MASTER_STORES, meta: null };
+  }
+
+  const prevVersion = cachedMasterStoresMeta?.version ?? 0;
+  const prevCount = cachedMasterStores?.length ?? 0;
+
+  const [idbData, lsStores, lsMeta] = await Promise.all([
+    readMasterStoresKeysFromIdb(),
+    Promise.resolve(readLocalStorageStores()),
+    Promise.resolve(readLocalStorageMeta()),
+  ]);
+
+  if (idbData.bestie && idbData.bestie.length > 0) {
+    cachedBestieOwnership = idbData.bestie;
+  }
+
+  const idbVersion = idbData.meta?.version ?? 0;
+  const lsVersion = lsMeta?.version ?? 0;
+
+  let chosenStores: MasterStore[] = INITIAL_MASTER_STORES;
+  let chosenMeta: MasterStoreMetadata | null = null;
+
+  if (idbData.stores && idbData.stores.length > 0 && (idbVersion >= lsVersion || !lsStores)) {
+    chosenStores = idbData.stores;
+    chosenMeta = idbData.meta ?? lsMeta;
+    writeLocalStorageMirror(chosenStores, chosenMeta);
+  } else if (lsStores && lsStores.length > 0) {
+    chosenStores = lsStores;
+    chosenMeta = lsMeta;
+    await writeMasterStoresKeysToIdb({
+      [IDB_KEY_STORES]: chosenStores,
+      ...(chosenMeta ? { [IDB_KEY_META]: chosenMeta } : {}),
+    });
+  } else {
+    chosenStores = INITIAL_MASTER_STORES;
+    chosenMeta = idbData.meta ?? lsMeta ?? null;
+  }
+
+  cachedMasterStores = chosenStores;
+  cachedMasterStoresMeta = chosenMeta;
+
+  const newVersion = chosenMeta?.version ?? 0;
+  const changed =
+    newVersion !== prevVersion ||
+    chosenStores.length !== prevCount;
+
+  if (notifyOnChange && changed) {
+    emitMasterStoresListeners(chosenStores, chosenMeta);
+  }
+
+  return { stores: chosenStores, meta: chosenMeta };
+}
+
+export async function hydrateMasterStoresFromIdb(): Promise<{
+  stores: MasterStore[];
+  meta: MasterStoreMetadata | null;
+}> {
+  ensureCrossTabListeners();
+  return hydrateMasterStoresFromIdbInternal(true);
+}
+
+export function subscribeMasterStoresUpdate(
+  callback: (stores: MasterStore[], meta: MasterStoreMetadata | null) => void
+): () => void {
+  ensureCrossTabListeners();
+  masterStoresListeners.add(callback);
+  return () => {
+    masterStoresListeners.delete(callback);
+  };
 }
 
 export function resetMasterStoresToDefault(): MasterStore[] {
+  cachedMasterStores = INITIAL_MASTER_STORES;
+  cachedMasterStoresMeta = null;
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(STORAGE_KEY_MASTER_STORES);
+    try {
+      localStorage.removeItem(STORAGE_KEY_MASTER_STORES);
+      localStorage.removeItem(STORAGE_KEY_MASTER_STORES_META);
+    } catch {
+      // ignore
+    }
+    void removeMasterStoresKeysFromIdb([IDB_KEY_STORES, IDB_KEY_META]);
+    ensureCrossTabListeners();
+    emitMasterStoresListeners(INITIAL_MASTER_STORES, null);
+    broadcastMasterStoresUpdated(null);
   }
   return INITIAL_MASTER_STORES;
 }
 
+function parseCoordinateInput(
+  raw: unknown,
+  min: number,
+  max: number,
+  label: string
+): { provided: boolean; valid: boolean; value: number | null; reason?: string } {
+  if (raw === undefined || raw === null) {
+    return { provided: false, valid: true, value: null };
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === '-' || trimmed.toUpperCase() === 'N/A') {
+      return { provided: false, valid: true, value: null };
+    }
+    const num = Number(trimmed.replace(',', '.'));
+    if (!Number.isFinite(num)) {
+      return {
+        provided: true,
+        valid: false,
+        value: null,
+        reason: `${label} bukan angka valid ("${trimmed}")`,
+      };
+    }
+    if (num < min || num > max) {
+      return {
+        provided: true,
+        valid: false,
+        value: null,
+        reason: `${label} di luar rentang [${min}, ${max}]: ${num}`,
+      };
+    }
+    return { provided: true, valid: true, value: num };
+  }
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw)) {
+      return {
+        provided: true,
+        valid: false,
+        value: null,
+        reason: `${label} bernilai NaN/Infinity`,
+      };
+    }
+    if (raw < min || raw > max) {
+      return {
+        provided: true,
+        valid: false,
+        value: null,
+        reason: `${label} di luar rentang [${min}, ${max}]: ${raw}`,
+      };
+    }
+    return { provided: true, valid: true, value: raw };
+  }
+  return {
+    provided: true,
+    valid: false,
+    value: null,
+    reason: `${label} memiliki tipe data tidak valid`,
+  };
+}
+
+function pickMergedStringField(incomingVal: unknown, existingVal?: string): string {
+  if (incomingVal !== undefined && incomingVal !== null) {
+    const trimmed = String(incomingVal).trim();
+    if (trimmed !== '') return trimmed;
+  }
+  return existingVal !== undefined && existingVal !== null ? String(existingVal).trim() : '';
+}
+
+function areMasterStoresEqual(a: MasterStore, b: MasterStore): boolean {
+  return (
+    normalizeStoreCode(a.code) === normalizeStoreCode(b.code) &&
+    a.name === b.name &&
+    a.type === b.type &&
+    a.city === b.city &&
+    (a.region || '') === (b.region || '') &&
+    a.address === b.address &&
+    a.lat === b.lat &&
+    a.lng === b.lng &&
+    a.email === b.email &&
+    a.storePhone === b.storePhone &&
+    a.storeHead === b.storeHead &&
+    a.areaManager === b.areaManager &&
+    a.areaManagerEmail === b.areaManagerEmail &&
+    a.regionalManager === b.regionalManager &&
+    a.regionalManagerEmail === b.regionalManagerEmail
+  );
+}
+
+/**
+ * Merge or replace MasterStore list with incoming rows.
+ * Preserves existing coordinates and non-empty fields when incoming cells are blank,
+ * validates store code/name and numeric lat/lng bounds, and reports detailed counts.
+ */
+export function mergeMasterStores(
+  existing: MasterStore[],
+  incoming: Partial<MasterStore>[],
+  mode: 'merge' | 'replace' = 'merge'
+): MasterStoreMergeResult {
+  const existingByCode = new Map<string, MasterStore>();
+  for (const item of existing || []) {
+    if (!item) continue;
+    const norm = normalizeMasterStoreRecord(item);
+    if (norm.code) {
+      existingByCode.set(norm.code, norm);
+    }
+  }
+
+  const resultMap = new Map<string, MasterStore>();
+  if (mode === 'merge') {
+    for (const [code, store] of existingByCode.entries()) {
+      resultMap.set(code, { ...store });
+    }
+  }
+
+  const outcomeByCode = new Map<string, 'added' | 'updated' | 'unchanged'>();
+  const errors: string[] = [];
+  let invalidCount = 0;
+
+  (incoming || []).forEach((rawItem, idx) => {
+    const rowLabel = `Baris ${idx + 1}`;
+    if (!rawItem || typeof rawItem !== 'object') {
+      invalidCount++;
+      errors.push(`${rowLabel}: Data baris kosong atau tidak valid.`);
+      return;
+    }
+
+    const code = normalizeStoreCode(rawItem.code);
+    if (!code) {
+      invalidCount++;
+      errors.push(`${rowLabel}: Kode toko wajib diisi.`);
+      return;
+    }
+
+    const baseStore = resultMap.get(code) ?? existingByCode.get(code) ?? null;
+    const rawName = rawItem.name !== undefined && rawItem.name !== null ? String(rawItem.name).trim() : '';
+    if (!rawName && !baseStore) {
+      invalidCount++;
+      errors.push(`${rowLabel} (${code}): Nama toko wajib diisi untuk toko baru.`);
+      return;
+    }
+
+    const rawLat =
+      rawItem.lat !== undefined && rawItem.lat !== null && String(rawItem.lat).trim() !== ''
+        ? rawItem.lat
+        : rawItem.latitude;
+    const rawLng =
+      rawItem.lng !== undefined && rawItem.lng !== null && String(rawItem.lng).trim() !== ''
+        ? rawItem.lng
+        : rawItem.longitude;
+
+    const latCheck = parseCoordinateInput(rawLat, -90, 90, 'Latitude');
+    if (!latCheck.valid) {
+      invalidCount++;
+      errors.push(`${rowLabel} (${code}): ${latCheck.reason}`);
+      return;
+    }
+
+    const lngCheck = parseCoordinateInput(rawLng, -180, 180, 'Longitude');
+    if (!lngCheck.valid) {
+      invalidCount++;
+      errors.push(`${rowLabel} (${code}): ${lngCheck.reason}`);
+      return;
+    }
+
+    const resolvedLat =
+      latCheck.provided && latCheck.value !== null
+        ? latCheck.value === 0 && baseStore && baseStore.lat !== 0
+          ? baseStore.lat
+          : latCheck.value
+        : baseStore
+          ? baseStore.lat
+          : 0;
+
+    const resolvedLng =
+      lngCheck.provided && lngCheck.value !== null
+        ? lngCheck.value === 0 && baseStore && baseStore.lng !== 0
+          ? baseStore.lng
+          : lngCheck.value
+        : baseStore
+          ? baseStore.lng
+          : 0;
+
+    const merged: MasterStore = {
+      code,
+      name: pickMergedStringField(rawItem.name, baseStore?.name),
+      type: pickMergedStringField(rawItem.type, baseStore?.type),
+      city: pickMergedStringField(rawItem.city, baseStore?.city),
+      address: pickMergedStringField(rawItem.address, baseStore?.address),
+      lat: resolvedLat,
+      lng: resolvedLng,
+      latitude: resolvedLat,
+      longitude: resolvedLng,
+      email: pickMergedStringField(rawItem.email, baseStore?.email),
+      storePhone: pickMergedStringField(rawItem.storePhone, baseStore?.storePhone),
+      storeHead: pickMergedStringField(rawItem.storeHead, baseStore?.storeHead),
+      areaManager: pickMergedStringField(rawItem.areaManager, baseStore?.areaManager),
+      areaManagerEmail: pickMergedStringField(rawItem.areaManagerEmail, baseStore?.areaManagerEmail),
+      regionalManager: pickMergedStringField(rawItem.regionalManager, baseStore?.regionalManager),
+      regionalManagerEmail: pickMergedStringField(
+        rawItem.regionalManagerEmail,
+        baseStore?.regionalManagerEmail
+      ),
+    };
+
+    const mergedRegion = pickMergedStringField(rawItem.region, baseStore?.region);
+    if (mergedRegion) {
+      merged.region = mergedRegion;
+    }
+
+    const origExisting = existingByCode.get(code);
+    if (!origExisting) {
+      outcomeByCode.set(code, 'added');
+    } else if (areMasterStoresEqual(origExisting, merged)) {
+      outcomeByCode.set(code, 'unchanged');
+    } else {
+      outcomeByCode.set(code, 'updated');
+    }
+
+    resultMap.set(code, merged);
+  });
+
+  let addedCount = 0;
+  let updatedCount = 0;
+  let unchangedCount = 0;
+  for (const status of outcomeByCode.values()) {
+    if (status === 'added') addedCount++;
+    else if (status === 'updated') updatedCount++;
+    else unchangedCount++;
+  }
+
+  return {
+    stores: Array.from(resultMap.values()),
+    addedCount,
+    updatedCount,
+    unchangedCount,
+    invalidCount,
+    errors,
+  };
+}
+
 export function getBestieInChargeAssignments(): BestieStoreOwnership[] {
   if (typeof window === 'undefined') return INITIAL_BESTIE_OWNERSHIP;
+  if (cachedBestieOwnership && cachedBestieOwnership.length > 0) {
+    return cachedBestieOwnership;
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY_BESTIE_OWNERSHIP);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        cachedBestieOwnership = parsed;
         return parsed;
       }
     }
@@ -15862,19 +16650,29 @@ export function getBestieInChargeAssignments(): BestieStoreOwnership[] {
 
 export function saveBestieInChargeAssignments(assignments: BestieStoreOwnership[]): void {
   if (typeof window === 'undefined') return;
+  cachedBestieOwnership = assignments;
   try {
     localStorage.setItem(STORAGE_KEY_BESTIE_OWNERSHIP, JSON.stringify(assignments));
   } catch (e) {
     console.warn('Failed saving bestie ownership to localStorage:', e);
   }
+  void writeMasterStoresKeysToIdb({ [IDB_KEY_BESTIE]: assignments });
 }
 
 export function normalizePersonName(name?: string | null): string {
   return String(name || '')
+    .replace(/\([^)]*\)/g, ' ')
     .toLowerCase()
     .replace(/[.,]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function isTokenInitialOrAbbrevMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length <= 4 && b.startsWith(a)) return true;
+  if (b.length <= 4 && a.startsWith(b)) return true;
+  return false;
 }
 
 export function isSamePersonName(nameA?: string | null, nameB?: string | null): boolean {
@@ -15884,8 +16682,11 @@ export function isSamePersonName(nameA?: string | null, nameB?: string | null): 
   if (normA === normB) return true;
   if (normA.includes(normB) || normB.includes(normA)) return true;
 
-  const tokensA = normA.split(' ').filter((t) => t.length >= 3);
-  const tokensB = normB.split(' ').filter((t) => t.length >= 3);
+  const allTokensA = normA.split(' ').filter(Boolean);
+  const allTokensB = normB.split(' ').filter(Boolean);
+
+  const tokensA = allTokensA.filter((t) => t.length >= 3);
+  const tokensB = allTokensB.filter((t) => t.length >= 3);
   if (tokensA.length >= 2 && tokensB.length >= 2) {
     if (tokensA[0] === tokensB[0] && tokensA[1] === tokensB[1]) return true;
     // Token overlap: if first name matches and at least 2 tokens match total
@@ -15897,6 +16698,27 @@ export function isSamePersonName(nameA?: string | null, nameB?: string | null): 
       if (matches >= 2) return true;
     }
   }
+
+  // Handle abbreviated/initial names such as "M Ghifary" vs "Muhammad Ghifary" or "Ahmad F" vs "Ahmad Fauzi"
+  if (allTokensA.length >= 2 && allTokensB.length >= 2) {
+    const firstMatch = isTokenInitialOrAbbrevMatch(allTokensA[0], allTokensB[0]);
+    if (firstMatch) {
+      const restA = allTokensA.slice(1);
+      const restB = allTokensB.slice(1);
+      const hasStrongRestMatch = restA.some((ta) =>
+        restB.some((tb) => ta === tb && ta.length >= 4)
+      );
+      if (hasStrongRestMatch) return true;
+
+      if (allTokensA[0] === allTokensB[0] && allTokensA[0].length >= 4) {
+        const hasInitialSecond = restA.some((ta) =>
+          restB.some((tb) => isTokenInitialOrAbbrevMatch(ta, tb))
+        );
+        if (hasInitialSecond) return true;
+      }
+    }
+  }
+
   return false;
 }
 
