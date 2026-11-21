@@ -7,6 +7,7 @@ interface AdminMobileSheetProps {
   onClose: () => void;
   onReset?: () => void;
   hasActiveFilters?: boolean;
+  primaryLabel?: string;
   children: React.ReactNode;
 }
 
@@ -20,6 +21,7 @@ export const AdminMobileSheet: React.FC<AdminMobileSheetProps> = ({
   onClose,
   onReset,
   hasActiveFilters,
+  primaryLabel = 'Terapkan',
   children,
 }) => {
   if (!isOpen) return null;
@@ -63,7 +65,7 @@ export const AdminMobileSheet: React.FC<AdminMobileSheetProps> = ({
             onClick={onClose}
             className="w-full py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer active:scale-[0.99] transition"
           >
-            Terapkan
+            {primaryLabel}
           </button>
         </div>
       </div>

@@ -65,6 +65,7 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showMobileFilter, setShowMobileFilter] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
+  const [inspectingStore, setInspectingStore] = useState<MasterStore | null>(null);
 
   const activeFilterCount = (typeFilter !== 'ALL' ? 1 : 0) + (cityFilter !== 'ALL' ? 1 : 0);
 
@@ -653,81 +654,160 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
                 </tbody>
               </table>
 
-              {/* Mobile Compact Flat List */}
+              {/* Mobile Ultra-Clean 2-Line Minimalist List (Tap Row for Full Store Details) */}
               <div className="md:hidden divide-y divide-slate-100">
                 {paged.map((st) => (
-                  <div key={st.code} className="px-3.5 py-3 bg-white">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-[11px] font-bold text-emerald-700">
+                  <button
+                    key={st.code}
+                    type="button"
+                    onClick={() => setInspectingStore(st)}
+                    className="w-full text-left px-3.5 py-2.5 bg-white active:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1">
+                      {/* Line 1: Store Name + #Code on left, clean Type pill on right */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-baseline gap-1.5 min-w-0">
+                          <span className="text-[13px] font-semibold text-slate-900 truncate">
+                            {st.name}
+                          </span>
+                          <span className="font-mono text-[10.5px] font-semibold text-emerald-700 shrink-0">
                             #{st.code}
                           </span>
-                          <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                            {st.type || 'CVS'}
-                          </span>
-                          <span className="text-[11px] text-slate-400 truncate">{st.city}</span>
                         </div>
-                        <div className="text-[13px] font-semibold text-slate-900 mt-0.5 truncate">
-                          {st.name}
-                        </div>
-                        <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                          SH: {st.storeHead || '-'} • AM: {st.areaManager || '-'}
-                        </div>
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium shrink-0">
+                          {st.type || 'CVS'}
+                        </span>
                       </div>
-                      {st.lat !== 0 && st.lng !== 0 && (
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${st.lat},${st.lng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 shrink-0"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
+
+                      {/* Line 2: Quiet City & Store Head */}
+                      <div className="mt-0.5 text-[11.5px] text-slate-500 truncate">
+                        <span>{st.city || '-'}</span>
+                        {st.storeHead && (
+                          <>
+                            <span className="mx-1.5 text-slate-300">·</span>
+                            <span>{st.storeHead}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                  </button>
                 ))}
               </div>
             </>
           )}
         </div>
 
-        {/* Pagination Footer */}
-        <div className="px-3.5 py-2 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+        {/* Clean Crisp Pagination Footer (100% visible above Bottom Nav) */}
+        <div className="px-3.5 py-2 border-t border-slate-200 bg-white md:bg-slate-50/70 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
           <span className="tabular-nums">
-            Menampilkan{' '}
+            <span className="hidden sm:inline">Menampilkan </span>
             <strong className="text-slate-800">
               {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
               {Math.min(page * PAGE_SIZE, filtered.length)}
             </strong>{' '}
-            dari <strong className="text-slate-800">{filtered.length}</strong> toko
+            <span className="text-slate-400">/</span>{' '}
+            <strong className="text-slate-800">{filtered.length}</strong>
+            <span className="hidden sm:inline"> toko</span>
           </span>
           {totalPages > 1 && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                aria-label="Halaman sebelumnya"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="w-4 h-4 text-slate-700" />
               </button>
-              <span className="px-2 font-mono font-semibold text-slate-700">
-                {page}/{totalPages}
+              <span className="px-1.5 font-mono text-[11.5px] font-semibold text-slate-700 tabular-nums">
+                {page} / {totalPages}
               </span>
               <button
                 type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                aria-label="Halaman berikutnya"
               >
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-4 h-4 text-slate-700" />
               </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Mobile Full Store Detail Sheet */}
+      <AdminMobileSheet
+        isOpen={Boolean(inspectingStore)}
+        title={inspectingStore ? `${inspectingStore.name} (#${inspectingStore.code})` : 'Detail Toko'}
+        primaryLabel="Tutup"
+        onClose={() => setInspectingStore(null)}
+      >
+        {inspectingStore && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs bg-white">
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Tipe / Kota</span>
+                <span className="font-semibold text-slate-800 text-right">
+                  {inspectingStore.type || 'CVS'} · {inspectingStore.city || '-'}
+                </span>
+              </div>
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Store Head</span>
+                <span className="font-medium text-slate-800 text-right">
+                  {inspectingStore.storeHead || '-'}
+                </span>
+              </div>
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Telp / Email</span>
+                <span className="font-mono text-[11px] text-slate-700 text-right break-all">
+                  {inspectingStore.storePhone || inspectingStore.email || '-'}
+                </span>
+              </div>
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Area Manager</span>
+                <span className="text-slate-800 text-right">
+                  {inspectingStore.areaManager || '-'}
+                </span>
+              </div>
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Regional Manager</span>
+                <span className="text-slate-800 text-right">
+                  {inspectingStore.regionalManager || '-'}
+                </span>
+              </div>
+              {inspectingStore.address && (
+                <div className="px-3 py-2 text-slate-600">
+                  <div className="text-[10.5px] text-slate-400 mb-0.5">Alamat</div>
+                  <div>{inspectingStore.address}</div>
+                </div>
+              )}
+              {inspectingStore.lat !== 0 && inspectingStore.lng !== 0 && (
+                <div className="px-3 py-2 flex justify-between gap-3">
+                  <span className="text-slate-400">Koordinat GPS</span>
+                  <span className="font-mono text-[11px] text-slate-700 tabular-nums">
+                    {inspectingStore.lat.toFixed(5)}, {inspectingStore.lng.toFixed(5)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {inspectingStore.lat !== 0 && inspectingStore.lng !== 0 && (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${inspectingStore.lat},${inspectingStore.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Buka Lokasi di Google Maps</span>
+              </a>
+            )}
+          </div>
+        )}
+      </AdminMobileSheet>
 
       {/* ================================================================
           SLIDE-OVER DRAWER: UPLOAD MASTER STORE BY PDF (OR EXCEL)

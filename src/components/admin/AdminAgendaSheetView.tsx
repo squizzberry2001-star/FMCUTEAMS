@@ -82,6 +82,7 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showMobileFilter, setShowMobileFilter] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
+  const [inspectingItem, setInspectingItem] = useState<ClassifiedAgenda | null>(null);
 
   const exportRef = useRef<HTMLDivElement>(null);
 
@@ -815,84 +816,76 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
                 </tbody>
               </table>
 
-              {/* Mobile Flat Scannable List (Zero Stacked Cards — Crisp 1px Dividers) */}
+              {/* Mobile Ultra-Clean 2-Line Minimalist List (Tap Row for Full Detail & Actions) */}
               <div className="md:hidden divide-y divide-slate-100">
                 {pagedRows.map((item) => {
                   const ag = item.agenda;
                   const actualIn = ag.actualIn || item.report?.actualIn;
                   const actualOut = ag.actualOut || item.report?.actualOut;
+                  const isTodayRow = ag.date === todayYmd;
+                  const primaryHeading =
+                    ag.storeName && item.kind !== 'OFF' && item.kind !== 'LEAVE'
+                      ? ag.storeName
+                      : ag.title;
+                  const dateCompact = formatDisplayDateShort(ag.date).replace(/\s+\d{4}$/, '');
 
                   return (
-                    <div key={ag.id} className="px-3.5 py-3 bg-white active:bg-slate-50">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
-                            >
-                              {item.badge.shortLabel}
-                            </span>
-                            <span className="text-[11px] font-mono text-slate-500 tabular-nums">
-                              {formatDisplayDateShort(ag.date)} • {ag.time || '08:30'}
-                            </span>
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-semibold ${item.status.color}`}
-                            >
-                              <span className={`w-1.5 h-1.5 rounded-full ${item.status.dot}`} />
-                              {item.status.label}
-                            </span>
+                    <button
+                      key={ag.id}
+                      type="button"
+                      onClick={() => setInspectingItem(item)}
+                      className={`w-full text-left px-3.5 py-2.5 flex items-center gap-3 active:bg-slate-50 transition cursor-pointer ${
+                        isTodayRow ? 'bg-emerald-50/20' : 'bg-white'
+                      }`}
+                    >
+                      {/* Slim 3px vertical category accent */}
+                      <span className={`w-[3px] self-stretch rounded-full shrink-0 ${item.badge.dot}`} />
+
+                      <div className="min-w-0 flex-1">
+                        {/* Line 1: Clean Title/Store + Right-aligned Date/Time */}
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="text-[13px] font-semibold text-slate-900 truncate">
+                            {primaryHeading}
                           </div>
-                          <div className="text-[13px] font-semibold text-slate-900 mt-1 truncate">
-                            {ag.title}
-                          </div>
-                          <div className="text-[11.5px] text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
-                            <span className="font-medium text-slate-700">{ag.pic}</span>
-                            <span>•</span>
-                            <span className="truncate">
-                              {ag.storeCode ? `#${ag.storeCode} ` : ''}
-                              {ag.storeName || ag.location || '-'}
-                            </span>
-                          </div>
-                          {(actualIn || actualOut || ag.kendala) && (
-                            <div className="mt-1 flex items-center gap-2 text-[10.5px] font-mono">
-                              {actualIn && <span className="text-emerald-700">IN {actualIn}</span>}
-                              {actualOut && <span className="text-slate-500">OUT {actualOut}</span>}
-                              {ag.kendala && (
-                                <span className="text-rose-600 font-sans font-semibold">
-                                  • Kendala: {ag.kendala}
-                                </span>
-                              )}
-                            </div>
-                          )}
+                          <span className="text-[11px] font-mono text-slate-400 shrink-0 tabular-nums">
+                            {dateCompact} · {ag.time || '08:30'}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          {item.report && (
-                            <button
-                              type="button"
-                              onClick={() => onPreviewReport(item.report!)}
-                              className="p-2 rounded-lg text-emerald-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => onOpenEdit(ag)}
-                            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 cursor-pointer"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteAgenda(ag)}
-                            className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        {/* Line 2: Quiet Non-Redundant Metadata */}
+                        <div className="mt-0.5 flex items-center justify-between gap-2 text-[11.5px] text-slate-500">
+                          <div className="flex items-center gap-1.5 min-w-0 truncate">
+                            <span className="font-medium text-slate-700 truncate">{ag.pic}</span>
+                            <span className="text-slate-300">·</span>
+                            <span className={`font-medium shrink-0 ${item.badge.color}`}>
+                              {item.badge.shortLabel}
+                            </span>
+                            {ag.storeCode && (
+                              <span className="font-mono text-[10.5px] text-slate-400 shrink-0">
+                                #{ag.storeCode}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {actualIn && (
+                              <span className="font-mono text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                                {actualIn}
+                                {actualOut ? `–${actualOut}` : ''}
+                              </span>
+                            )}
+                            {ag.kendala && (
+                              <span className="w-2 h-2 rounded-full bg-rose-500" title="Ada kendala" />
+                            )}
+                            {item.report && (
+                              <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
+
+                      <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                    </button>
                   );
                 })}
               </div>
@@ -900,41 +893,175 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
           )}
         </div>
 
-        {/* Clean Spreadsheet Pagination Footer */}
-        <div className="px-3.5 py-2 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+        {/* Clean Crisp Pagination Footer (100% visible above Bottom Nav) */}
+        <div className="px-3.5 py-2 border-t border-slate-200 bg-white md:bg-slate-50/70 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
           <span className="tabular-nums">
-            Menampilkan{' '}
+            <span className="hidden sm:inline">Menampilkan </span>
             <strong className="text-slate-800">
               {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
               {Math.min(page * PAGE_SIZE, filtered.length)}
             </strong>{' '}
-            dari <strong className="text-slate-800">{filtered.length}</strong> agenda
+            <span className="text-slate-400">/</span>{' '}
+            <strong className="text-slate-800">{filtered.length}</strong>
+            <span className="hidden sm:inline"> agenda</span>
           </span>
           {totalPages > 1 && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                aria-label="Halaman sebelumnya"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="w-4 h-4 text-slate-700" />
               </button>
-              <span className="px-2 font-mono font-semibold text-slate-700">
-                {page}/{totalPages}
+              <span className="px-1.5 font-mono text-[11.5px] font-semibold text-slate-700 tabular-nums">
+                {page} / {totalPages}
               </span>
               <button
                 type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                aria-label="Halaman berikutnya"
               >
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-4 h-4 text-slate-700" />
               </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Mobile Detail & Actions Bottom Sheet (Complete Info on Tap) */}
+      <AdminMobileSheet
+        isOpen={Boolean(inspectingItem)}
+        title={inspectingItem?.agenda.storeName || inspectingItem?.agenda.title || 'Detail Agenda'}
+        primaryLabel="Tutup"
+        onClose={() => setInspectingItem(null)}
+      >
+        {inspectingItem && (
+          <div className="space-y-3.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${inspectingItem.badge.bg} ${inspectingItem.badge.color} ${inspectingItem.badge.border}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${inspectingItem.badge.dot}`} />
+                {inspectingItem.badge.label}
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${inspectingItem.status.bg} ${inspectingItem.status.color} ${inspectingItem.status.border}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${inspectingItem.status.dot}`} />
+                {inspectingItem.status.label}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs bg-white">
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Agenda</span>
+                <span className="font-semibold text-slate-900 text-right">
+                  {inspectingItem.agenda.title}
+                </span>
+              </div>
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Personil (PIC)</span>
+                <span className="font-semibold text-slate-800 text-right">
+                  {inspectingItem.agenda.pic}
+                </span>
+              </div>
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Tanggal & Jam</span>
+                <span className="font-mono text-slate-800 text-right tabular-nums">
+                  {formatDisplayDateShort(inspectingItem.agenda.date)} ·{' '}
+                  {inspectingItem.agenda.time || '08:30'}–{inspectingItem.agenda.endTime || '17:00'}
+                </span>
+              </div>
+              <div className="px-3 py-2 flex justify-between gap-3">
+                <span className="text-slate-400">Lokasi / Toko</span>
+                <span className="text-slate-800 text-right">
+                  {inspectingItem.agenda.storeCode ? `#${inspectingItem.agenda.storeCode} ` : ''}
+                  {inspectingItem.agenda.storeName || inspectingItem.agenda.location || '-'}
+                </span>
+              </div>
+              {(inspectingItem.agenda.actualIn || inspectingItem.report?.actualIn) && (
+                <div className="px-3 py-2 flex justify-between gap-3">
+                  <span className="text-slate-400">Actual IN / OUT</span>
+                  <span className="font-mono text-emerald-700 font-semibold text-right">
+                    IN {inspectingItem.agenda.actualIn || inspectingItem.report?.actualIn || '-'} · OUT{' '}
+                    {inspectingItem.agenda.actualOut || inspectingItem.report?.actualOut || '-'}
+                  </span>
+                </div>
+              )}
+              {inspectingItem.agenda.kendala && (
+                <div className="px-3 py-2 bg-rose-50/70 text-rose-700">
+                  <div className="text-[10.5px] font-bold uppercase">Kendala Lapangan</div>
+                  <div className="mt-0.5">{inspectingItem.agenda.kendala}</div>
+                </div>
+              )}
+              {inspectingItem.agenda.description && (
+                <div className="px-3 py-2 text-slate-600">
+                  <div className="text-[10.5px] text-slate-400 mb-0.5">Catatan</div>
+                  <div>{inspectingItem.agenda.description}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {inspectingItem.report && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rep = inspectingItem.report!;
+                    setInspectingItem(null);
+                    onPreviewReport(rep);
+                  }}
+                  className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Lihat Laporan Visit di Web</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  const ag = inspectingItem.agenda;
+                  setInspectingItem(null);
+                  onOpenEdit(ag);
+                }}
+                className="py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ag = inspectingItem.agenda;
+                  setInspectingItem(null);
+                  onDuplicateAgenda(ag);
+                }}
+                className="py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Duplikat</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ag = inspectingItem.agenda;
+                  setInspectingItem(null);
+                  onDeleteAgenda(ag);
+                }}
+                className="col-span-2 py-2 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-600 text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Hapus Jadwal</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </AdminMobileSheet>
 
       {/* Mobile Bottom Sheet: Filter Jadwal */}
       <AdminMobileSheet

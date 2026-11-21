@@ -638,8 +638,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </header>
 
-        {/* Active View Workspace Canvas (edge-to-edge on mobile to maximize data viewport) */}
-        <main className="flex-1 min-h-0 overflow-hidden p-0 md:p-4 pb-[58px] lg:pb-4">
+        {/* Active View Workspace Canvas (flex-1 above non-overlapping bottom nav) */}
+        <main className="flex-1 min-h-0 overflow-hidden p-0 md:p-4">
           {activeTab === 'agenda' && (
             <AdminAgendaSheetView
               classifiedAgendas={classifiedAgendas}
@@ -718,36 +718,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             />
           )}
         </main>
-      </div>
 
-      {/* ====================================================================
-          MOBILE FIXED BOTTOM NAVIGATION BAR (5 ERGONOMIC TABS)
-          ==================================================================== */}
-      <nav className="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1.5 pt-1 pb-[max(6px,env(safe-area-inset-bottom))] grid grid-cols-5 gap-0.5">
-        {mobileBottomNavIds.map((id) => {
-          const item = NAV_ITEMS.find((n) => n.id === id)!;
-          const Icon = item.icon;
-          const active = activeTab === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActiveTab(id)}
-              className={`relative flex flex-col items-center justify-center py-1.5 rounded-xl transition cursor-pointer ${
-                active ? 'text-slate-900 bg-slate-100/90 font-semibold' : 'text-slate-400'
-              }`}
-            >
-              <div className="relative">
-                <Icon className={`w-4 h-4 ${active ? 'text-slate-900' : 'text-slate-400'}`} />
-                {id === 'monitoring' && activeRadarCount > 0 && (
-                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
-                )}
-              </div>
-              <span className="text-[10px] mt-0.5 leading-none">{item.mobileLabel}</span>
-            </button>
-          );
-        })}
-      </nav>
+        {/* ====================================================================
+            MOBILE BOTTOM NAVIGATION BAR (IN-FLOW FLEX FOOTER — NEVER OVERLAPS LIST)
+            ==================================================================== */}
+        <nav className="lg:hidden shrink-0 z-30 bg-white border-t border-slate-200 px-1.5 pt-1.5 pb-[max(8px,env(safe-area-inset-bottom))] grid grid-cols-5 gap-0.5">
+          {mobileBottomNavIds.map((id) => {
+            const item = NAV_ITEMS.find((n) => n.id === id)!;
+            const Icon = item.icon;
+            const active = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={`relative flex flex-col items-center justify-center py-1.5 rounded-xl transition cursor-pointer ${
+                  active ? 'text-slate-900 bg-slate-100/90 font-semibold' : 'text-slate-400'
+                }`}
+              >
+                <div className="relative">
+                  <Icon className={`w-4 h-4 ${active ? 'text-slate-900' : 'text-slate-400'}`} />
+                  {id === 'monitoring' && activeRadarCount > 0 && (
+                    <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+                  )}
+                </div>
+                <span className="text-[10px] mt-0.5 leading-none">{item.mobileLabel}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
       {/* ====================================================================
           MOBILE SECONDARY MENU DRAWER (Analitik, Holding Time, Staff View, Logout)

@@ -471,80 +471,102 @@ export const AdminReportsSheetView: React.FC<AdminReportsSheetViewProps> = ({
                 </tbody>
               </table>
 
-              {/* Mobile Compact Flat List */}
+              {/* Mobile Ultra-Clean 2-Line Minimalist List (Tap Anywhere on Row to Preview) */}
               <div className="md:hidden divide-y divide-slate-100">
-                {paged.map((r) => (
-                  <div key={r.id} className="px-3.5 py-3 bg-white flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-[10.5px]">
-                        <span
-                          className={`px-1.5 py-0.5 rounded font-semibold border ${
-                            r.category === 'NSO'
-                              ? 'bg-amber-50 text-amber-800 border-amber-200'
-                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          }`}
-                        >
-                          {r.category}
-                        </span>
-                        <span className="font-mono text-slate-500 tabular-nums">
-                          {formatDisplayDateShort(r.visitDate)}
-                        </span>
-                        <span className="text-slate-400">• {r.source === 'CLOUD' ? 'Cloud' : r.format}</span>
-                      </div>
-                      <div className="text-[13px] font-semibold text-slate-900 truncate mt-1">
-                        {r.storeCode && r.storeCode !== '-' ? `#${r.storeCode} ` : ''}
-                        {r.storeName}
-                      </div>
-                      <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                        {r.visitorName} • {r.fileName}
-                      </div>
-                    </div>
-
+                {paged.map((r) => {
+                  const dateCompact = formatDisplayDateShort(r.visitDate).replace(/\s+\d{4}$/, '');
+                  return (
                     <button
+                      key={r.id}
                       type="button"
                       onClick={() => onPreviewWebReport(r)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-semibold shrink-0 cursor-pointer inline-flex items-center gap-1"
+                      className="w-full text-left px-3.5 py-2.5 bg-white active:bg-slate-50 flex items-center gap-3 transition cursor-pointer"
                     >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Lihat</span>
+                      <span
+                        className={`w-[3px] self-stretch rounded-full shrink-0 ${
+                          r.category === 'NSO' ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="flex items-baseline gap-1.5 min-w-0">
+                            <span className="text-[13px] font-semibold text-slate-900 truncate">
+                              {r.storeName}
+                            </span>
+                            {r.storeCode && r.storeCode !== '-' && (
+                              <span className="font-mono text-[10.5px] font-semibold text-slate-400 shrink-0">
+                                #{r.storeCode}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] font-mono text-slate-400 shrink-0 tabular-nums">
+                            {dateCompact}
+                          </span>
+                        </div>
+
+                        <div className="mt-0.5 flex items-center justify-between gap-2 text-[11.5px] text-slate-500">
+                          <div className="flex items-center gap-1.5 min-w-0 truncate">
+                            <span className="font-medium text-slate-700 truncate">
+                              {r.visitorName}
+                            </span>
+                            <span className="text-slate-300">·</span>
+                            <span
+                              className={`font-medium shrink-0 ${
+                                r.category === 'NSO' ? 'text-amber-700' : 'text-emerald-700'
+                              }`}
+                            >
+                              {r.category}
+                            </span>
+                            <span className="text-slate-300">·</span>
+                            <span className="text-slate-400 shrink-0">
+                              {r.source === 'CLOUD' ? 'Cloud' : r.format}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
                     </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-3.5 py-2 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+        {/* Clean Crisp Pagination Footer (100% visible above Bottom Nav) */}
+        <div className="px-3.5 py-2 border-t border-slate-200 bg-white md:bg-slate-50/70 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
           <span className="tabular-nums">
-            Menampilkan{' '}
+            <span className="hidden sm:inline">Menampilkan </span>
             <strong className="text-slate-800">
               {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
               {Math.min(page * PAGE_SIZE, filtered.length)}
             </strong>{' '}
-            dari <strong className="text-slate-800">{filtered.length}</strong> dokumen laporan
+            <span className="text-slate-400">/</span>{' '}
+            <strong className="text-slate-800">{filtered.length}</strong>
+            <span className="hidden sm:inline"> laporan</span>
           </span>
           {totalPages > 1 && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                aria-label="Halaman sebelumnya"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="w-4 h-4 text-slate-700" />
               </button>
-              <span className="px-2 font-mono font-semibold text-slate-700">
-                {page}/{totalPages}
+              <span className="px-1.5 font-mono text-[11.5px] font-semibold text-slate-700 tabular-nums">
+                {page} / {totalPages}
               </span>
               <button
                 type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="p-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                aria-label="Halaman berikutnya"
               >
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-4 h-4 text-slate-700" />
               </button>
             </div>
           )}
