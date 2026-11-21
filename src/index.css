@@ -591,3 +591,72 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .animate-flowing-shimmer {
   animation: flowingShimmerBar 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
+
+/* Minimalist SaaS Admin Motion & Spreadsheet Polish */
+@keyframes adminViewEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes adminDrawerRight {
+  0% {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes adminSheetUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.admin-view-enter {
+  animation: adminViewEnter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.admin-drawer-right {
+  animation: adminDrawerRight 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.admin-sheet-up {
+  animation: adminSheetUp 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.admin-sheet-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.admin-sheet-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.admin-sheet-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-sheet-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.admin-sheet-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

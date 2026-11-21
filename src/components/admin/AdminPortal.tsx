@@ -1,62 +1,22 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
+  Table2,
   Calendar as CalendarIcon,
-  Upload,
-  FileSpreadsheet,
-  Users,
-  Plus,
-  Search,
-  Trash2,
-  Edit3,
-  CheckCircle2,
-  Download,
+  FileText,
+  Radio,
+  Store,
+  BarChart3,
+  MapPin,
   LogOut,
   Eye,
-  Clock,
-  Store,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  Info,
-  ShieldCheck,
-  Building2,
-  BarChart3,
-  TrendingUp,
-  FileDown,
-  Briefcase,
-  Coffee,
-  Check,
-  AlertTriangle,
-  FolderDown,
-  Sparkles,
-  ExternalLink,
-  Award,
   BookOpen,
-  PieChart,
-  SlidersHorizontal,
-  Compass,
-  MapPin,
-  Radio,
-  ArrowUpRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
   X,
-  Filter,
-  ArrowUpDown,
-  FileText,
-  UserCheck,
-  CalendarDays,
-  Layers,
-  ChevronDown,
-  CheckCircle,
-  HelpCircle,
-  LayoutGrid,
-  List,
-  Cloud,
-  Database,
-  RotateCw,
+  Trash2,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { ScheduleAgenda, ScheduleCategory, User, VisitReportData } from '../../types';
-import { DeveloperFooter } from '../DeveloperFooter';
+import { ScheduleAgenda, User, VisitReportData } from '../../types';
 import { HoldingTimeR23Modal } from '../visit/HoldingTimeR23Modal';
 import { ExecutiveReportPreviewModal } from '../executive/ExecutiveReportPreviewModal';
 import { ExcelScheduleUploadModal } from '../ExcelScheduleUploadModal';
@@ -65,9 +25,7 @@ import {
   UserLivePresence,
   fetchLiveUserPresencesFromCloud,
   subscribeToLivePresences,
-  getUserPresenceDetailedStatus,
-  formatTimeWibStr,
-  formatRelativeTimeStr,
+  filterActiveRadarUsers,
 } from '../../services/userLivePresenceService';
 import {
   MasterStore,
@@ -76,44 +34,36 @@ import {
   getMasterStoreMetadata,
   hydrateMasterStoresFromIdb,
   saveMasterStoresDurable,
-  mergeMasterStores,
   subscribeMasterStoresUpdate,
-  findMasterStoreByCodeOrName,
 } from '../../data/masterStoresData';
+import { GDRIVE_VERIFIED_REPORTS } from '../../data/gdriveVerifiedReportsData';
 import {
-  HoldingTimeStandards,
-  getActiveHoldingTimeStandards,
-  saveHoldingTimeStandards,
-  INITIAL_HOLDING_TIME_R23,
-} from '../../data/holdingTimeR23';
-import {
-  parseScheduleExcelFile,
-  exportScheduleToTemplateExcel,
-  exportMasterStoresToExcel,
-  downloadMasterStoreTemplateExcel,
-  parseMasterStoreExcelFile,
-  ParsedExcelScheduleSummary,
-  ParsedMasterStoreExcelResult,
-} from '../../services/scheduleExcelService';
-import {
-  pushMasterStoresToCloud,
   fetchMasterStoresFromCloud,
   flushPendingSchedulesQueue,
   getPendingSchedulesQueue,
   type CloudSyncResult,
 } from '../../services/cloudScheduleSyncService';
+import {
+  AdminNavTab,
+  ActivityKind,
+  ClassifiedAgenda,
+  UnifiedWebReport,
+  classifyAgendaItem,
+  buildUnifiedWebReports,
+  formatLocalYmd,
+  formatDisplayDateShort,
+} from './adminTypes';
+import { AdminAgendaSheetView } from './AdminAgendaSheetView';
+import { AdminCalendarView } from './AdminCalendarView';
+import { AdminReportsSheetView } from './AdminReportsSheetView';
+import { AdminLiveMonitorView } from './AdminLiveMonitorView';
+import { AdminMasterStoreView } from './AdminMasterStoreView';
+import { AdminAnalyticsView } from './AdminAnalyticsView';
+import { AdminScheduleDrawer } from './AdminScheduleDrawer';
 
-/** Format tanggal lokal (WIB / browser local time) ke YYYY-MM-DD tanpa pergeseran UTC */
-function formatLocalYmd(d: Date = new Date()): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
+export { classifyAgendaItem };
+export type { ActivityKind, ClassifiedAgenda };
 
-// ============================================================================
-// PROPS INTERFACE
-// ============================================================================
 interface AdminPortalProps {
   adminUser: User;
   agendas: ScheduleAgenda[];
@@ -134,598 +84,150 @@ interface AdminPortalProps {
   onOpenLiveMaps?: () => void;
 }
 
-// ============================================================================
-// DOMAIN-ACCURATE ACTIVITY CLASSIFICATION
-// ATURAN PENTING FMCU:
-// "Tidak semua adalah kegiatan visit misal terdapat nama toko tapi agenda
-// bukan tertulis visit maka BUKAN visit. Filter dan analisa dengan cermat."
-// ============================================================================
-export type ActivityKind =
-  | 'VISIT'        // Hanya jika agenda secara eksplisit tertulis "VISIT" atau "KUNJUNGAN"
-  | 'MEETING'      // Meeting, Rapat, Koordinasi, Briefing, Evaluasi
-  | 'TRAINING'     // Training, Coaching, Pelatihan, Shadowing
-  | 'NSO'          // New Store Opening (Setup Toko Baru)
-  | 'AUDIT'        // Audit Investigasi / Khusus
-  | 'OPERATION'    // Maintenance, Waste, Thawing, Stock Opname, Pendampingan Kasir/Barista
-  | 'LEAVE'        // Cuti, Izin, Sakit
-  | 'OFF'          // Hari Libur / Off
-  | 'OTHER';       // Tugas Admin / Kantor / Lainnya
+const NAV_ITEMS: Array<{
+  id: AdminNavTab;
+  label: string;
+  mobileLabel: string;
+  subtitle: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  {
+    id: 'agenda',
+    label: 'Agenda & Jadwal',
+    mobileLabel: 'Agenda',
+    subtitle: 'Lembar jadwal terintegrasi, buat jadwal & import Excel',
+    icon: Table2,
+  },
+  {
+    id: 'calendar',
+    label: 'Kalender',
+    mobileLabel: 'Kalender',
+    subtitle: 'Matriks jadwal bulanan & penjadwalan per tanggal',
+    icon: CalendarIcon,
+  },
+  {
+    id: 'reports',
+    label: 'Laporan',
+    mobileLabel: 'Laporan',
+    subtitle: 'Semua laporan Visit & NSO langsung di web & export Excel',
+    icon: FileText,
+  },
+  {
+    id: 'monitoring',
+    label: 'Tim & Live',
+    mobileLabel: 'Live',
+    subtitle: 'Pantau aktivitas user, GPS realtime & kelola akun tim',
+    icon: Radio,
+  },
+  {
+    id: 'stores',
+    label: 'Master Store',
+    mobileLabel: 'Toko',
+    subtitle: 'Database toko FamilyMart & update via PDF atau Excel',
+    icon: Store,
+  },
+  {
+    id: 'analytics',
+    label: 'Analitik',
+    mobileLabel: 'Analitik',
+    subtitle: 'Ringkasan performa kunjungan, kepatuhan & sebaran toko',
+    icon: BarChart3,
+  },
+];
 
-export interface ClassifiedAgenda {
-  agenda: ScheduleAgenda;
-  kind: ActivityKind;
-  isExplicitVisit: boolean;
-  requiresReport: boolean;
-  requiresCheckIn: boolean;
-  badge: {
-    label: string;
-    iconName: string;
-    color: string;
-    bg: string;
-    border: string;
-  };
-  status: {
-    code: 'COMPLETED' | 'IN_PROGRESS' | 'SCHEDULED' | 'LEAVE' | 'OFF';
-    label: string;
-    color: string;
-    bg: string;
-    border: string;
-    dot: string;
-  };
-  report?: VisitReportData;
-}
-
-/**
- * Logika Klasifikasi Akurat:
- * Membedakan secara tegas apakah suatu agenda adalah Kunjungan Visit Toko
- * atau kegiatan lainnya meskipun lokasi menyebutkan nama toko.
- */
-export function classifyAgendaItem(
-  agenda: ScheduleAgenda,
-  reportMap: Map<string, VisitReportData>
-): ClassifiedAgenda {
-  const titleLower = (agenda.title || '').toLowerCase().trim();
-  const catUpper = (agenda.category || '').toUpperCase();
-  const locLower = (agenda.location || '').toLowerCase();
-  const descLower = (agenda.description || '').toLowerCase();
-
-  // Terkait Laporan Visit
-  const report =
-    reportMap.get(agenda.id) ||
-    (agenda.storeCode && agenda.date ? reportMap.get(`${agenda.storeCode}_${agenda.date}`) : undefined);
-
-  // 1. Cuti / Izin / Sakit
-  if (
-    catUpper === 'CUTI' ||
-    titleLower.includes('cuti') ||
-    titleLower.includes('izin') ||
-    titleLower.includes('sakit')
-  ) {
-    return {
-      agenda,
-      kind: 'LEAVE',
-      isExplicitVisit: false,
-      requiresReport: false,
-      requiresCheckIn: false,
-      badge: {
-        label: 'Cuti / Izin',
-        iconName: 'Coffee',
-        color: 'text-rose-700',
-        bg: 'bg-rose-50',
-        border: 'border-rose-200',
-      },
-      status: {
-        code: 'LEAVE',
-        label: 'Cuti / Izin Resmi',
-        color: 'text-rose-700',
-        bg: 'bg-rose-50',
-        border: 'border-rose-200',
-        dot: 'bg-rose-500',
-      },
-      report: undefined,
-    };
-  }
-
-  // 2. Off / Hari Libur
-  if (
-    catUpper === 'OFF' ||
-    titleLower === 'off' ||
-    titleLower.startsWith('off ') ||
-    titleLower.includes('libur')
-  ) {
-    return {
-      agenda,
-      kind: 'OFF',
-      isExplicitVisit: false,
-      requiresReport: false,
-      requiresCheckIn: false,
-      badge: {
-        label: 'Off / Libur',
-        iconName: 'Coffee',
-        color: 'text-slate-600',
-        bg: 'bg-slate-100',
-        border: 'border-slate-200',
-      },
-      status: {
-        code: 'OFF',
-        label: 'Hari Libur / Off',
-        color: 'text-slate-600',
-        bg: 'bg-slate-100',
-        border: 'border-slate-200',
-        dot: 'bg-slate-400',
-      },
-      report: undefined,
-    };
-  }
-
-  // 3. Training / Coaching / Shadowing / Pelatihan
-  if (
-    catUpper === 'TRAINING' ||
-    titleLower.includes('training') ||
-    titleLower.includes('coaching') ||
-    titleLower.includes('shadowing') ||
-    titleLower.includes('pelatihan')
-  ) {
-    const isDone = Boolean(agenda.completed);
-    return {
-      agenda,
-      kind: 'TRAINING',
-      isExplicitVisit: false,
-      requiresReport: false,
-      requiresCheckIn: false,
-      badge: {
-        label: 'Training / Coaching',
-        iconName: 'BookOpen',
-        color: 'text-cyan-800',
-        bg: 'bg-cyan-50',
-        border: 'border-cyan-200',
-      },
-      status: {
-        code: isDone ? 'COMPLETED' : 'SCHEDULED',
-        label: isDone ? 'Selesai Dilaksanakan' : 'Terjadwal',
-        color: isDone ? 'text-emerald-700' : 'text-blue-700',
-        bg: isDone ? 'bg-emerald-50' : 'bg-blue-50',
-        border: isDone ? 'border-emerald-200' : 'border-blue-200',
-        dot: isDone ? 'bg-emerald-500' : 'bg-blue-500',
-      },
-      report: undefined,
-    };
-  }
-
-  // 4. Meeting / Koordinasi / Rapat
-  if (
-    catUpper === 'MEETING' ||
-    titleLower.includes('meeting') ||
-    titleLower.includes('rapat') ||
-    titleLower.includes('koordinasi') ||
-    titleLower.includes('briefing') ||
-    titleLower.includes('evaluasi')
-  ) {
-    const isDone = Boolean(agenda.completed);
-    return {
-      agenda,
-      kind: 'MEETING',
-      isExplicitVisit: false,
-      requiresReport: false,
-      requiresCheckIn: false,
-      badge: {
-        label: 'Meeting / Koordinasi',
-        iconName: 'Building2',
-        color: 'text-blue-800',
-        bg: 'bg-blue-50',
-        border: 'border-blue-200',
-      },
-      status: {
-        code: isDone ? 'COMPLETED' : 'SCHEDULED',
-        label: isDone ? 'Selesai Rapat' : 'Terjadwal',
-        color: isDone ? 'text-emerald-700' : 'text-blue-700',
-        bg: isDone ? 'bg-emerald-50' : 'bg-blue-50',
-        border: isDone ? 'border-emerald-200' : 'border-blue-200',
-        dot: isDone ? 'bg-emerald-500' : 'bg-blue-500',
-      },
-      report: undefined,
-    };
-  }
-
-  // 5. NSO (New Store Opening)
-  if (
-    catUpper === 'NSO' ||
-    titleLower.includes('nso') ||
-    titleLower.includes('opening') ||
-    titleLower.includes('buka toko')
-  ) {
-    const isDone = Boolean(agenda.completed);
-    return {
-      agenda,
-      kind: 'NSO',
-      isExplicitVisit: false,
-      requiresReport: false,
-      requiresCheckIn: false,
-      badge: {
-        label: 'NSO Toko Baru',
-        iconName: 'Sparkles',
-        color: 'text-amber-800',
-        bg: 'bg-amber-50',
-        border: 'border-amber-200',
-      },
-      status: {
-        code: isDone ? 'COMPLETED' : 'SCHEDULED',
-        label: isDone ? 'Selesai Setup NSO' : 'Terjadwal',
-        color: isDone ? 'text-emerald-700' : 'text-amber-700',
-        bg: isDone ? 'bg-emerald-50' : 'bg-amber-50',
-        border: isDone ? 'border-emerald-200' : 'border-amber-200',
-        dot: isDone ? 'bg-emerald-500' : 'bg-amber-500',
-      },
-      report: undefined,
-    };
-  }
-
-  // 6. Audit Khusus / Investigasi
-  if (
-    catUpper === 'AUDIT' ||
-    titleLower.includes('audit') ||
-    titleLower.includes('investigasi')
-  ) {
-    const isDone = Boolean(agenda.completed);
-    return {
-      agenda,
-      kind: 'AUDIT',
-      isExplicitVisit: false,
-      requiresReport: false,
-      requiresCheckIn: false,
-      badge: {
-        label: 'Audit Khusus',
-        iconName: 'ShieldCheck',
-        color: 'text-purple-800',
-        bg: 'bg-purple-50',
-        border: 'border-purple-200',
-      },
-      status: {
-        code: isDone ? 'COMPLETED' : 'SCHEDULED',
-        label: isDone ? 'Selesai Audit' : 'Terjadwal',
-        color: isDone ? 'text-emerald-700' : 'text-purple-700',
-        bg: isDone ? 'bg-emerald-50' : 'bg-purple-50',
-        border: isDone ? 'border-emerald-200' : 'border-purple-200',
-        dot: isDone ? 'bg-emerald-500' : 'bg-purple-500',
-      },
-      report: undefined,
-    };
-  }
-
-  // 7. Operasional Lapangan (Maintenance, Thawing, Waste, Stock Opname, Pendampingan Toko)
-  if (
-    catUpper === 'OPERATION' ||
-    titleLower.includes('maintenance') ||
-    titleLower.includes('opname') ||
-    titleLower.includes('thawing') ||
-    titleLower.includes('waste') ||
-    titleLower.includes('holding time') ||
-    titleLower.includes('support') ||
-    titleLower.includes('pendampingan') ||
-    titleLower.includes('bantuan')
-  ) {
-    const isDone = Boolean(agenda.completed);
-    return {
-      agenda,
-      kind: 'OPERATION',
-      isExplicitVisit: false,
-      requiresReport: false,
-      requiresCheckIn: false,
-      badge: {
-        label: 'Operasional Lapangan',
-        iconName: 'Briefcase',
-        color: 'text-teal-800',
-        bg: 'bg-teal-50',
-        border: 'border-teal-200',
-      },
-      status: {
-        code: isDone ? 'COMPLETED' : 'SCHEDULED',
-        label: isDone ? 'Selesai Penugasan' : 'Terjadwal',
-        color: isDone ? 'text-emerald-700' : 'text-teal-700',
-        bg: isDone ? 'bg-emerald-50' : 'bg-teal-50',
-        border: isDone ? 'border-emerald-200' : 'border-teal-200',
-        dot: isDone ? 'bg-emerald-500' : 'bg-teal-500',
-      },
-      report: undefined,
-    };
-  }
-
-  // 8. Work Plan / Tugas Admin / Kantor
-  if (
-    catUpper === 'WORK_PLAN' ||
-    titleLower.includes('work plan') ||
-    titleLower.includes('admin') ||
-    titleLower.includes('laporan') ||
-    titleLower.includes('rekap')
-  ) {
-    const isDone = Boolean(agenda.completed);
-    return {
-      agenda,
-      kind: 'OTHER',
-      isExplicitVisit: false,
-      requiresReport: false,
-      requiresCheckIn: false,
-      badge: {
-        label: 'Tugas Admin / Kantor',
-        iconName: 'FileText',
-        color: 'text-indigo-800',
-        bg: 'bg-indigo-50',
-        border: 'border-indigo-200',
-      },
-      status: {
-        code: isDone ? 'COMPLETED' : 'SCHEDULED',
-        label: isDone ? 'Selesai Tugas' : 'Terjadwal',
-        color: isDone ? 'text-emerald-700' : 'text-indigo-700',
-        bg: isDone ? 'bg-emerald-50' : 'bg-indigo-50',
-        border: isDone ? 'border-emerald-200' : 'border-indigo-200',
-        dot: isDone ? 'bg-emerald-500' : 'bg-indigo-500',
-      },
-      report: undefined,
-    };
-  }
-
-  // 9. EXPLICIT VISIT:
-  // HANYA dianggap VISIT jika:
-  // - Category secara eksplisit 'VISIT'
-  // - ATAU title secara eksplisit mengandung kata 'visit' atau 'kunjungan'
-  const isExplicitVisit =
-    catUpper === 'VISIT' ||
-    titleLower.includes('visit') ||
-    titleLower.includes('kunjungan');
-
-  if (isExplicitVisit) {
-    const actualIn = agenda.actualIn || report?.actualIn;
-    const actualOut = agenda.actualOut || report?.actualOut;
-    const isSubmitted = report?.status === 'SUBMITTED' || agenda.completed;
-
-    if (isSubmitted || (actualIn && actualOut)) {
-      return {
-        agenda,
-        kind: 'VISIT',
-        isExplicitVisit: true,
-        requiresReport: true,
-        requiresCheckIn: true,
-        badge: {
-          label: 'Visit Toko Resmi',
-          iconName: 'Store',
-          color: 'text-emerald-800 font-bold',
-          bg: 'bg-emerald-50',
-          border: 'border-emerald-300',
-        },
-        status: {
-          code: 'COMPLETED',
-          label: 'Selesai Kunjungan',
-          color: 'text-emerald-800',
-          bg: 'bg-emerald-50',
-          border: 'border-emerald-200',
-          dot: 'bg-emerald-500',
-        },
-        report,
-      };
-    }
-
-    if (actualIn && !actualOut) {
-      return {
-        agenda,
-        kind: 'VISIT',
-        isExplicitVisit: true,
-        requiresReport: true,
-        requiresCheckIn: true,
-        badge: {
-          label: 'Visit Toko Resmi',
-          iconName: 'Store',
-          color: 'text-emerald-800 font-bold',
-          bg: 'bg-emerald-50',
-          border: 'border-emerald-300',
-        },
-        status: {
-          code: 'IN_PROGRESS',
-          label: 'Di Toko (In-Progress)',
-          color: 'text-amber-800',
-          bg: 'bg-amber-50',
-          border: 'border-amber-300',
-          dot: 'bg-amber-500 animate-pulse',
-        },
-        report,
-      };
-    }
-
-    return {
-      agenda,
-      kind: 'VISIT',
-      isExplicitVisit: true,
-      requiresReport: true,
-      requiresCheckIn: true,
-      badge: {
-        label: 'Visit Toko Resmi',
-        iconName: 'Store',
-        color: 'text-emerald-800 font-bold',
-        bg: 'bg-emerald-50',
-        border: 'border-emerald-300',
-      },
-      status: {
-        code: 'SCHEDULED',
-        label: 'Belum Check-In',
-        color: 'text-slate-600',
-        bg: 'bg-slate-100',
-        border: 'border-slate-200',
-        dot: 'bg-slate-400',
-      },
-      report,
-    };
-  }
-
-  // 10. Fallback: Agenda Umum Non-Visit
-  const isDone = Boolean(agenda.completed);
-  return {
-    agenda,
-    kind: 'OTHER',
-    isExplicitVisit: false,
-    requiresReport: false,
-    requiresCheckIn: false,
-    badge: {
-      label: 'Agenda Non-Visit',
-      iconName: 'Briefcase',
-      color: 'text-slate-700',
-      bg: 'bg-slate-100',
-      border: 'border-slate-200',
-    },
-    status: {
-      code: isDone ? 'COMPLETED' : 'SCHEDULED',
-      label: isDone ? 'Selesai' : 'Terjadwal',
-      color: isDone ? 'text-emerald-700' : 'text-slate-700',
-      bg: isDone ? 'bg-emerald-50' : 'bg-slate-100',
-      border: isDone ? 'border-emerald-200' : 'border-slate-200',
-      dot: isDone ? 'bg-emerald-500' : 'bg-slate-400',
-    },
-    report: undefined,
-  };
-}
-
-// ============================================================================
-// MAIN ADMIN PORTAL COMPONENT
-// ============================================================================
 export const AdminPortal: React.FC<AdminPortalProps> = ({
   adminUser,
-  agendas = [],
-  users = [],
+  agendas,
+  users,
   onAddAgenda,
   onUpdateAgenda,
   onDeleteAgenda,
   onImportExcel,
   onSwitchToUserView,
   onLogout,
+  onAddUser,
+  onResetUserPassword,
   onOpenLiveMaps,
 }) => {
-  // Navigation Tabs:
-  // 1. 'table' -> Data Agenda Lengkap (Spreadsheet View)
-  // 2. 'calendar' -> Kalender Interaktif
-  // 3. 'analytics' -> Rekap Produktivitas & Grafik
-  // 4. 'monitoring' -> Audit Presensi Kunjungan & Laporan QSC
-  // 5. 'datahub' -> Pusat Sinkronisasi Excel & Master Toko
-  const [activeTab, setActiveTab] = useState<'table' | 'calendar' | 'analytics' | 'monitoring' | 'datahub'>('table');
+  const [activeTab, setActiveTab] = useState<AdminNavTab>('agenda');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
-  // View Mode: 'table' (Spreadsheet View) vs 'cards' (Kartu Ramping Terpadu)
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
-
-  // Search & Filter State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterKind, setFilterKind] = useState<string>('ALL');
-  const [filterPic, setFilterPic] = useState<string>('ALL');
-  const [filterDatePreset, setFilterDatePreset] = useState<'TODAY' | 'TOMORROW' | 'WEEK' | 'MONTH' | 'ALL' | 'CUSTOM'>('ALL');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-
-  // Calendar State
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => formatLocalYmd());
-
-  // Cloud Reports State
-  const [cloudReports, setCloudReports] = useState<VisitReportData[]>([]);
-  const [isLoadingReports, setIsLoadingReports] = useState(false);
-  const [previewingReport, setPreviewingReport] = useState<VisitReportData | null>(null);
-
-  // Holding Time Standards (R23)
-  const [holdingStandards, setHoldingStandards] = useState<HoldingTimeStandards>(() => getActiveHoldingTimeStandards());
-  const [showHoldingTimeModal, setShowHoldingTimeModal] = useState(false);
-
-  // Agenda Form Modal
-  const [isAgendaModalOpen, setIsAgendaModalOpen] = useState(false);
-  const [editingAgenda, setEditingAgenda] = useState<ScheduleAgenda | null>(null);
-  const [defaultDateForModal, setDefaultDateForModal] = useState<string | undefined>(undefined);
-
-  // Delete Confirmation Modal
-  const [deletingAgenda, setDeletingAgenda] = useState<ScheduleAgenda | null>(null);
-
-  // Raw Data Export Modal
-  const [showExportModal, setShowExportModal] = useState(false);
-
-  // Master Store Data + Durable IDB/Cloud Sync State
+  // Integrated Data States
   const [masterStores, setMasterStores] = useState<MasterStore[]>(() => getMasterStores());
   const [masterStoreMeta, setMasterStoreMeta] = useState<MasterStoreMetadata | null>(() =>
     getMasterStoreMetadata()
   );
-  const [masterExcelFile, setMasterExcelFile] = useState<File | null>(null);
-  const [masterParseResult, setMasterParseResult] = useState<ParsedMasterStoreExcelResult | null>(null);
-  const [masterSelectedSheet, setMasterSelectedSheet] = useState<string>('');
-  const [masterImportMode, setMasterImportMode] = useState<'merge' | 'replace'>('merge');
-  const [isParsingMasterExcel, setIsParsingMasterExcel] = useState(false);
-  const [isExecutingMasterUpdate, setIsExecutingMasterUpdate] = useState(false);
-  const [isSyncingMasterCloud, setIsSyncingMasterCloud] = useState(false);
-  const [masterFeedback, setMasterFeedback] = useState<{
+  const [cloudReports, setCloudReports] = useState<(VisitReportData & { updatedAtMs?: number })[]>(
+    []
+  );
+  const [livePresences, setLivePresences] = useState<UserLivePresence[]>([]);
+  const [isRefreshingReports, setIsRefreshingReports] = useState(false);
+  const [isRefreshingLive, setIsRefreshingLive] = useState(false);
+
+  // Schedule Sync Queue & Feedback
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(
+    () => getPendingSchedulesQueue()?.agendas?.length || 0
+  );
+  const [isRetryingSync, setIsRetryingSync] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<{
     ok: boolean;
-    cloudSynced?: boolean;
     title: string;
     detail: string;
   } | null>(null);
-  const masterFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Excel Schedule Import
-  const [excelFile, setExcelFile] = useState<File | null>(null);
-  const [excelSummary, setExcelSummary] = useState<ParsedExcelScheduleSummary | null>(null);
-  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
-  const [isParsingExcel, setIsParsingExcel] = useState(false);
-  const [isExecutingImport, setIsExecutingImport] = useState(false);
-  const [isRetryingScheduleSync, setIsRetryingScheduleSync] = useState(false);
+  // Modals & Drawers
+  const [isScheduleDrawerOpen, setIsScheduleDrawerOpen] = useState(false);
+  const [editingAgenda, setEditingAgenda] = useState<ScheduleAgenda | null>(null);
+  const [drawerDefaultDate, setDrawerDefaultDate] = useState<string>(() => formatLocalYmd());
+  const [deletingAgenda, setDeletingAgenda] = useState<ScheduleAgenda | null>(null);
   const [showScheduleUploadModal, setShowScheduleUploadModal] = useState(false);
-  const [importFeedback, setImportFeedback] = useState<string | null>(null);
-  const [scheduleSyncFeedback, setScheduleSyncFeedback] = useState<{
-    ok: boolean;
-    queuedOffline?: boolean;
-    title: string;
-    detail: string;
+  const [showHoldingTimeModal, setShowHoldingTimeModal] = useState(false);
+  const [previewModalState, setPreviewModalState] = useState<{
+    reportData: VisitReportData;
+    gdrivePdfUrl?: string;
+    gdriveEmbedUrl?: string;
+    storeFolderName?: string;
+    pdfFileName?: string;
+    gdriveSavedDate?: string;
   } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Today Date (Local WIB)
-  const todayIso = useMemo(() => formatLocalYmd(), []);
+  const todayYmd = useMemo(() => formatLocalYmd(), []);
 
-  // Fetch Cloud Reports
-  const loadReports = async () => {
-    setIsLoadingReports(true);
-    try {
-      const reps = await fetchAllVisitReportsFromCloud(true);
-      if (Array.isArray(reps)) {
-        setCloudReports(reps);
-      }
-    } catch (e) {
-      console.warn('Failed to load cloud reports in admin:', e);
-    } finally {
-      setIsLoadingReports(false);
-    }
-  };
-
-  useEffect(() => {
-    loadReports();
-  }, []);
-
-  // Hydrate Master Toko from IndexedDB + Cloud & subscribe to cross-tab updates
+  // 1. Hydrate Master Stores (IndexedDB + Cloud D1 + Cross-tab Broadcast)
   useEffect(() => {
     let active = true;
-    const unsub = subscribeMasterStoresUpdate((stores, meta) => {
+    hydrateMasterStoresFromIdb().then((res) => {
       if (!active) return;
-      setMasterStores(stores);
-      setMasterStoreMeta(meta);
+      if (res.stores.length > 0) setMasterStores(res.stores);
+      if (res.meta) setMasterStoreMeta(res.meta);
     });
 
-    hydrateMasterStoresFromIdb()
-      .then(async ({ stores, meta }) => {
-        if (!active) return;
-        setMasterStores(stores);
-        setMasterStoreMeta(meta);
-        const remote = await fetchMasterStoresFromCloud().catch(() => null);
-        if (!active || !remote || !Array.isArray(remote.stores) || remote.stores.length === 0) return;
-        const remoteVer = Number(remote.meta?.version || 0);
-        const localVer = Number(meta?.version || 0);
-        if (remoteVer > localVer || (!meta && remote.meta)) {
-          await saveMasterStoresDurable(remote.stores, {
+    fetchMasterStoresFromCloud()
+      .then(async (remote) => {
+        if (!active || !remote || remote.stores.length === 0) return;
+        const localMeta = getMasterStoreMetadata();
+        const remoteVer = remote.meta?.version || 0;
+        const localVer = localMeta?.version || 0;
+        if (remoteVer > localVer || (!localMeta && remote.meta)) {
+          const saved = await saveMasterStoresDurable(remote.stores, {
             ...(remote.meta || {}),
             totalStores: remote.stores.length,
             cloudSynced: true,
           });
+          if (active) {
+            setMasterStores(remote.stores);
+            setMasterStoreMeta(saved);
+          }
         }
       })
-      .catch((err) => console.warn('Master stores hydrate warning:', err));
+      .catch(() => {});
+
+    const unsub = subscribeMasterStoresUpdate((stores, meta) => {
+      if (!active) return;
+      if (stores.length > 0) setMasterStores(stores);
+      if (meta) setMasterStoreMeta(meta);
+    });
 
     return () => {
       active = false;
@@ -733,2889 +235,669 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     };
   }, []);
 
-  // Live Presences (Heartbeat from mobile staff)
-  const [livePresences, setLivePresences] = useState<UserLivePresence[]>([]);
-  const [radarPersonnelFilter, setRadarPersonnelFilter] = useState<'ACTIVE' | 'ALL'>('ACTIVE');
-
-  useEffect(() => {
-    fetchLiveUserPresencesFromCloud().then((res) => {
-      if (Array.isArray(res)) setLivePresences(res);
-    });
-
-    const unsubscribe = subscribeToLivePresences((updated) => {
-      setLivePresences(updated);
-    });
-
-    const pollInterval = setInterval(() => {
-      if (!document.hidden) {
-        fetchLiveUserPresencesFromCloud().then((res) => {
-          if (Array.isArray(res)) setLivePresences(res);
-        });
-      }
-    }, 20000);
-
-    return () => {
-      unsubscribe();
-      clearInterval(pollInterval);
-    };
+  // 2. Load Cloud Visit Reports (D1 + GAS)
+  const refreshCloudReports = useCallback(async () => {
+    setIsRefreshingReports(true);
+    try {
+      const data = await fetchAllVisitReportsFromCloud();
+      if (Array.isArray(data)) setCloudReports(data);
+    } catch {
+      // keep existing
+    } finally {
+      setIsRefreshingReports(false);
+    }
   }, []);
 
-  const now = Date.now();
-  const nonAdminUsers = useMemo(() => users.filter((u) => !u.isAdmin), [users]);
+  useEffect(() => {
+    refreshCloudReports();
+    const timer = setInterval(refreshCloudReports, 45_000);
+    return () => clearInterval(timer);
+  }, [refreshCloudReports]);
 
-  const activeRadarUsers = useMemo(() => {
-    return livePresences.filter(
-      (p) => p.isWebActive && p.isGpsActive && now - p.lastSeenMs < 3 * 60 * 1000
-    );
-  }, [livePresences, now]);
+  // 3. Realtime User Live GPS Presence (15s poll + BroadcastChannel)
+  const refreshLivePresences = useCallback(async () => {
+    setIsRefreshingLive(true);
+    try {
+      const list = await fetchLiveUserPresencesFromCloud();
+      if (Array.isArray(list)) setLivePresences(list);
+    } catch {
+      // keep existing
+    } finally {
+      setIsRefreshingLive(false);
+    }
+  }, []);
 
-  const presenceMap = useMemo(() => {
-    const map = new Map<string, UserLivePresence>();
-    livePresences.forEach((p) => {
-      map.set(p.userName.toLowerCase().trim(), p);
+  useEffect(() => {
+    refreshLivePresences();
+    const unsub = subscribeToLivePresences((updated) => {
+      setLivePresences(updated);
     });
-    return map;
-  }, [livePresences]);
+    const timer = setInterval(refreshLivePresences, 15_000);
+    return () => {
+      unsub();
+      clearInterval(timer);
+    };
+  }, [refreshLivePresences]);
 
-  /**
-   * Render Card Radar Peta Real-time (Sama persis dengan Executive Dashboard & diperkaya status buka/keluar)
-   */
-  const renderLiveGpsRadarCard = () => {
-    return (
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-5 text-white flex flex-col justify-between relative overflow-hidden shadow-md h-full">
-        {/* Ambient Background Circles */}
-        <div className="absolute -right-8 -bottom-8 w-44 h-44 rounded-full border border-teal-500/20 pointer-events-none" />
-        <div className="absolute -right-16 -bottom-16 w-60 h-60 rounded-full border border-teal-500/10 pointer-events-none" />
+  // 4. Pending schedule sync tracker
+  useEffect(() => {
+    const syncQueueCheck = () => {
+      const q = getPendingSchedulesQueue();
+      setPendingSyncCount(q?.d1Pending ? q.agendas.length : 0);
+    };
+    syncQueueCheck();
+    const timer = setInterval(syncQueueCheck, 5_000);
+    return () => clearInterval(timer);
+  }, [agendas.length]);
 
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-300 text-[10px] font-black uppercase tracking-wider">
-              <Radio className="w-3 h-3 text-teal-400 animate-pulse" />
-              Live GPS Radar
-            </span>
-            <span className="text-[10px] text-slate-400 font-bold">WIB (UTC+7)</span>
-          </div>
-
-          <h4 className="text-sm sm:text-base font-black text-white">
-            {activeRadarUsers.length > 0
-              ? `${activeRadarUsers.length} Personel Sedang di Lapangan`
-              : 'Seluruh Personel Standby / Menunggu Sesi'}
-          </h4>
-          <p className="text-[11px] text-slate-300 font-medium mt-1 leading-relaxed">
-            Pemantauan radar mendeteksi staf yang aktif membuka aplikasi web dengan modul GPS
-            terverifikasi.
-          </p>
-
-          {/* Toggle Tab: Aktif di Lapangan vs Semua Personel */}
-          <div className="flex items-center gap-1 mt-3 bg-white/10 p-1 rounded-xl border border-white/10 text-[10px] font-black">
-            <button
-              type="button"
-              onClick={() => setRadarPersonnelFilter('ACTIVE')}
-              className={`flex-1 py-1 rounded-lg transition cursor-pointer ${
-                radarPersonnelFilter === 'ACTIVE'
-                  ? 'bg-teal-500 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Aktif Lapangan ({activeRadarUsers.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setRadarPersonnelFilter('ALL')}
-              className={`flex-1 py-1 rounded-lg transition cursor-pointer ${
-                radarPersonnelFilter === 'ALL'
-                  ? 'bg-teal-500 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Semua Tim ({nonAdminUsers.length})
-            </button>
-          </div>
-        </div>
-
-        {/* Radar Personnel List with Last Opened / Last Left info */}
-        <div className="my-3 space-y-1.5 max-h-44 overflow-y-auto no-scrollbar pr-1">
-          {radarPersonnelFilter === 'ACTIVE' ? (
-            activeRadarUsers.length > 0 ? (
-              activeRadarUsers.map((p, idx) => {
-                const st = getUserPresenceDetailedStatus(p, now);
-                return (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between bg-white/10 hover:bg-white/15 px-3 py-2 rounded-xl border border-white/10 text-xs transition"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                      <div className="min-w-0">
-                        <span className="font-bold text-white truncate text-[11px] block">{p.userName}</span>
-                        <span className="text-[9px] text-teal-200/90 font-semibold truncate block">
-                          {st.timeDetail}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end shrink-0 ml-2">
-                      <span className="text-[9.5px] font-extrabold text-teal-300 tabular-nums">
-                        {p.lat.toFixed(3)}°, {p.lng.toFixed(3)}°
-                      </span>
-                      <span className="text-[8.5px] font-black text-emerald-300">
-                        Online
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="p-3 bg-white/5 rounded-xl border border-white/10 text-center text-xs text-slate-400">
-                Belum ada staf online saat ini
-              </div>
-            )
-          ) : (
-            nonAdminUsers.map((u, idx) => {
-              const p = presenceMap.get(u.name.toLowerCase().trim());
-              const st = getUserPresenceDetailedStatus(p, now);
-              return (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between bg-white/10 hover:bg-white/15 px-3 py-2 rounded-xl border border-white/10 text-xs transition"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`w-2 h-2 rounded-full ${st.dotColor} ${
-                        st.isOnline ? 'animate-ping' : ''
-                      } shrink-0`}
-                    />
-                    <div className="min-w-0">
-                      <span className="font-bold text-white truncate text-[11px] block">{u.name}</span>
-                      <span
-                        className={`text-[9px] font-semibold truncate block ${
-                          st.isOnline
-                            ? 'text-emerald-300'
-                            : st.statusBadge === 'LEFT'
-                            ? 'text-amber-200/90'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        {st.timeDetail}
-                      </span>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 ml-2 border ${
-                      st.isOnline
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
-                        : st.statusBadge === 'LEFT'
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-400/30'
-                        : 'bg-white/5 text-slate-400 border-white/10'
-                    }`}
-                  >
-                    {st.badgeLabel}
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {onOpenLiveMaps && (
-          <button
-            type="button"
-            onClick={onOpenLiveMaps}
-            className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-[#10B981] to-[#0D9488] hover:brightness-110 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition active:scale-95 cursor-pointer mt-1"
-          >
-            <Compass className="w-4 h-4" />
-            <span>Buka Radar &amp; Jalur Toko Lengkap</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-    );
-  };
-
-  // Map of Reports by AgendaId and StoreCode_Date
+  // Report lookup map for Agenda classification
   const reportMap = useMemo(() => {
     const map = new Map<string, VisitReportData>();
-    cloudReports.forEach((r) => {
+    for (const r of cloudReports) {
       if (r.agendaId) map.set(r.agendaId, r);
       if (r.storeCode && r.visitDate) {
-        map.set(`${r.storeCode}_${r.visitDate}`, r);
+        map.set(`${String(r.storeCode).toUpperCase()}_${r.visitDate}`, r);
       }
-    });
+    }
     return map;
   }, [cloudReports]);
 
-  // Classified Agendas List
-  const allClassifiedAgendas = useMemo(() => {
-    return agendas.map((ag) => classifyAgendaItem(ag, reportMap));
-  }, [agendas, reportMap]);
+  const classifiedAgendas = useMemo(
+    () => agendas.map((ag) => classifyAgendaItem(ag, reportMap)),
+    [agendas, reportMap]
+  );
 
-  // Date Filter Bounds
-  const dateRangeBounds = useMemo(() => {
-    const today = new Date();
-    const startOfWeek = new Date(today);
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-    startOfWeek.setDate(diff);
+  const todayClassifiedAgendas = useMemo(
+    () => classifiedAgendas.filter((c) => c.agenda.date === todayYmd),
+    [classifiedAgendas, todayYmd]
+  );
 
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
+  const unifiedReports = useMemo(
+    () => buildUnifiedWebReports(cloudReports, GDRIVE_VERIFIED_REPORTS),
+    [cloudReports]
+  );
 
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const activeRadarCount = useMemo(
+    () => filterActiveRadarUsers(livePresences).length,
+    [livePresences]
+  );
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-
-    const toIso = (d: Date) => formatLocalYmd(d);
-
-    return {
-      today: toIso(today),
-      tomorrow: toIso(tomorrow),
-      weekStart: toIso(startOfWeek),
-      weekEnd: toIso(endOfWeek),
-      monthStart: toIso(startOfMonth),
-      monthEnd: toIso(endOfMonth),
-    };
-  }, []);
-
-  // Filtered Agendas
-  const filteredClassifiedAgendas = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-
-    return allClassifiedAgendas.filter((item) => {
-      const ag = item.agenda;
-
-      // 1. Date Filter
-      if (filterDatePreset === 'TODAY' && ag.date !== dateRangeBounds.today) return false;
-      if (filterDatePreset === 'TOMORROW' && ag.date !== dateRangeBounds.tomorrow) return false;
-      if (filterDatePreset === 'WEEK') {
-        if (ag.date < dateRangeBounds.weekStart || ag.date > dateRangeBounds.weekEnd) return false;
-      }
-      if (filterDatePreset === 'MONTH') {
-        if (ag.date < dateRangeBounds.monthStart || ag.date > dateRangeBounds.monthEnd) return false;
-      }
-      if (filterDatePreset === 'CUSTOM') {
-        if (customStartDate && ag.date < customStartDate) return false;
-        if (customEndDate && ag.date > customEndDate) return false;
-      }
-
-      // 2. Kind Filter (Visit vs Meeting vs Training vs Cuti dll)
-      if (filterKind !== 'ALL') {
-        if (filterKind === 'VISIT' && !item.isExplicitVisit) return false;
-        if (filterKind === 'NON_VISIT' && item.isExplicitVisit) return false;
-        if (filterKind !== 'VISIT' && filterKind !== 'NON_VISIT' && item.kind !== filterKind) return false;
-      }
-
-      // 3. PIC Filter
-      if (filterPic !== 'ALL') {
-        if (!ag.pic || !ag.pic.toLowerCase().includes(filterPic.toLowerCase())) {
-          return false;
-        }
-      }
-
-      // 4. Query Search
-      if (q) {
-        const matchTitle = ag.title?.toLowerCase().includes(q);
-        const matchLocation = ag.location?.toLowerCase().includes(q);
-        const matchPic = ag.pic?.toLowerCase().includes(q);
-        const matchStoreCode = ag.storeCode?.toLowerCase().includes(q);
-        const matchStoreName = ag.storeName?.toLowerCase().includes(q);
-        const matchDesc = ag.description?.toLowerCase().includes(q);
-        if (!matchTitle && !matchLocation && !matchPic && !matchStoreCode && !matchStoreName && !matchDesc) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [
-    allClassifiedAgendas,
-    filterDatePreset,
-    dateRangeBounds,
-    customStartDate,
-    customEndDate,
-    filterKind,
-    filterPic,
-    searchQuery,
-  ]);
-
-  // Quick Executive Metrics
-  const metrics = useMemo(() => {
-    const total = allClassifiedAgendas.length;
-    const visits = allClassifiedAgendas.filter((i) => i.isExplicitVisit);
-    const nonVisits = allClassifiedAgendas.filter((i) => !i.isExplicitVisit && i.kind !== 'LEAVE' && i.kind !== 'OFF');
-    const leaves = allClassifiedAgendas.filter((i) => i.kind === 'LEAVE' || i.kind === 'OFF');
-
-    const visitDone = visits.filter((i) => i.status.code === 'COMPLETED').length;
-    const visitInProgress = visits.filter((i) => i.status.code === 'IN_PROGRESS').length;
-    const visitPending = visits.filter((i) => i.status.code === 'SCHEDULED').length;
-
-    const meetings = allClassifiedAgendas.filter((i) => i.kind === 'MEETING').length;
-    const trainings = allClassifiedAgendas.filter((i) => i.kind === 'TRAINING').length;
-    const ops = allClassifiedAgendas.filter((i) => i.kind === 'OPERATION' || i.kind === 'NSO' || i.kind === 'AUDIT').length;
-
-    return {
-      total,
-      visitsCount: visits.length,
-      visitDone,
-      visitInProgress,
-      visitPending,
-      visitPercentage: visits.length > 0 ? Math.round((visitDone / visits.length) * 100) : 0,
-      nonVisitsCount: nonVisits.length,
-      meetings,
-      trainings,
-      ops,
-      leavesCount: leaves.length,
-    };
-  }, [allClassifiedAgendas]);
-
-  // Unique PICs list with tasks count
-  const picList = useMemo(() => {
-    const map = new Map<string, number>();
-    agendas.forEach((a) => {
-      const p = a.pic ? a.pic.trim() : 'Unassigned';
-      map.set(p, (map.get(p) || 0) + 1);
-    });
-    return Array.from(map.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [agendas]);
-
-  // Calendar Matrix Computation
-  const calendarMatrix = useMemo(() => {
-    const year = calendarMonth.getFullYear();
-    const month = calendarMonth.getMonth();
-
-    const firstDayOfMonth = new Date(year, month, 1);
-    const lastDayOfMonth = new Date(year, month + 1, 0);
-
-    // Monday-based (1 = Monday, 7 = Sunday)
-    let startDay = firstDayOfMonth.getDay();
-    startDay = startDay === 0 ? 7 : startDay;
-
-    const daysInMonth = lastDayOfMonth.getDate();
-    const matrix: Array<{ dateStr: string; dayNum: number; isCurrentMonth: boolean }> = [];
-
-    // Prev month padding
-    const prevMonthLastDay = new Date(year, month, 0).getDate();
-    for (let i = startDay - 1; i > 0; i--) {
-      const d = prevMonthLastDay - i + 1;
-      const prevDate = new Date(year, month - 1, d);
-      matrix.push({
-        dateStr: formatLocalYmd(prevDate),
-        dayNum: d,
-        isCurrentMonth: false,
-      });
-    }
-
-    // Current month days
-    for (let d = 1; d <= daysInMonth; d++) {
-      const currDate = new Date(year, month, d);
-      matrix.push({
-        dateStr: formatLocalYmd(currDate),
-        dayNum: d,
-        isCurrentMonth: true,
-      });
-    }
-
-    // Next month padding (total cells divisible by 7)
-    const remaining = 7 - (matrix.length % 7);
-    if (remaining < 7) {
-      for (let d = 1; d <= remaining; d++) {
-        const nextDate = new Date(year, month + 1, d);
-        matrix.push({
-          dateStr: formatLocalYmd(nextDate),
-          dayNum: d,
-          isCurrentMonth: false,
-        });
-      }
-    }
-
-    return matrix;
-  }, [calendarMonth]);
-
-  // Calendar Agendas Map by Date
-  const calendarAgendasMap = useMemo(() => {
-    const map = new Map<string, ClassifiedAgenda[]>();
-    allClassifiedAgendas.forEach((item) => {
-      const d = item.agenda.date;
-      if (!map.has(d)) map.set(d, []);
-      map.get(d)!.push(item);
-    });
-    return map;
-  }, [allClassifiedAgendas]);
-
-  // Agendas for Selected Calendar Date
-  const selectedCalendarAgendas = useMemo(() => {
-    return calendarAgendasMap.get(selectedCalendarDate) || [];
-  }, [calendarAgendasMap, selectedCalendarDate]);
-
-  // Leaderboard / Rekap Tim
-  const teamLeaderboard = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        total: number;
-        visits: number;
-        visitDone: number;
-        meetings: number;
-        trainings: number;
-        ops: number;
-        leaves: number;
-      }
-    >();
-
-    allClassifiedAgendas.forEach((item) => {
-      const p = item.agenda.pic ? item.agenda.pic.trim() : 'Unassigned';
-      if (!map.has(p)) {
-        map.set(p, { total: 0, visits: 0, visitDone: 0, meetings: 0, trainings: 0, ops: 0, leaves: 0 });
-      }
-      const data = map.get(p)!;
-      data.total += 1;
-      if (item.isExplicitVisit) {
-        data.visits += 1;
-        if (item.status.code === 'COMPLETED') data.visitDone += 1;
-      } else if (item.kind === 'MEETING') {
-        data.meetings += 1;
-      } else if (item.kind === 'TRAINING') {
-        data.trainings += 1;
-      } else if (item.kind === 'OPERATION' || item.kind === 'NSO' || item.kind === 'AUDIT') {
-        data.ops += 1;
-      } else if (item.kind === 'LEAVE' || item.kind === 'OFF') {
-        data.leaves += 1;
-      }
-    });
-
-    return Array.from(map.entries())
-      .map(([name, stats]) => ({
-        name,
-        ...stats,
-        completionRate: stats.visits > 0 ? Math.round((stats.visitDone / stats.visits) * 100) : 100,
-      }))
-      .sort((a, b) => b.total - a.total);
-  }, [allClassifiedAgendas]);
-
-  // Excel Schedule File Selection
-  const handleExcelFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setExcelFile(file);
-    setIsParsingExcel(true);
-    setImportFeedback(null);
-    setScheduleSyncFeedback(null);
-
-    try {
-      const parseRes = await parseScheduleExcelFile(file, users);
-      setExcelSummary(parseRes.summary);
-    } catch (err: any) {
-      setImportFeedback(`Gagal membaca Excel: ${err?.message || 'Format tidak valid'}`);
-    } finally {
-      setIsParsingExcel(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+  // Handlers
+  const handleOpenCreateSchedule = (defaultDate?: string) => {
+    setEditingAgenda(null);
+    setDrawerDefaultDate(defaultDate || todayYmd);
+    setIsScheduleDrawerOpen(true);
   };
 
-  // Execute Excel Schedule Import (Awaits Cloud D1 + GAS Sync)
-  const handleExecuteImport = async () => {
-    if (!excelSummary || isExecutingImport) return;
-    const count = excelSummary.agendas.length;
-    setIsExecutingImport(true);
-    setImportFeedback(null);
-    setScheduleSyncFeedback(null);
-
-    try {
-      const res = await onImportExcel(excelSummary.updatedUsers, excelSummary.agendas, importMode);
-      if (res && typeof res === 'object' && 'ok' in res) {
-        const d1Label = res.d1Synced ? 'D1: OK' : 'D1: Tertunda';
-        const gasLabel = res.gasSynced ? 'GAS: OK' : 'GAS: Tertunda';
-
-        if (res.ok && !res.queuedOffline) {
-          setScheduleSyncFeedback({
-            ok: true,
-            title: `Berhasil menyimpan & sinkronisasi ${count} agenda ke Cloud!`,
-            detail: `${importMode === 'replace' ? 'Mode Timpa Semua' : 'Mode Gabung'} • ${d1Label} • ${gasLabel}`,
-          });
-        } else {
-          setScheduleSyncFeedback({
-            ok: false,
-            queuedOffline: Boolean(res.queuedOffline),
-            title: `Tersimpan lokal (${count} agenda), sinkronisasi Cloud tertunda`,
-            detail: `${d1Label} • ${gasLabel}${res.error ? ` — ${res.error}` : ''}. Masuk antrean retry otomatis.`,
-          });
-        }
-      } else {
-        setScheduleSyncFeedback({
-          ok: true,
-          title: `Berhasil menerapkan ${count} agenda`,
-          detail: importMode === 'replace' ? 'Mode Timpa Penuh' : 'Mode Gabung',
-        });
-      }
-
-      setExcelFile(null);
-      setExcelSummary(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      setImportFeedback(`Gagal menyimpan data impor: ${err?.message || 'Error tidak diketahui'}`);
-    } finally {
-      setIsExecutingImport(false);
-    }
+  const handleOpenEditSchedule = (agenda: ScheduleAgenda) => {
+    setEditingAgenda(agenda);
+    setDrawerDefaultDate(agenda.date || todayYmd);
+    setIsScheduleDrawerOpen(true);
   };
 
-  // Manual Retry for Pending Schedule Queue
-  const handleRetryPendingScheduleSync = async () => {
-    if (isRetryingScheduleSync) return;
-    setIsRetryingScheduleSync(true);
+  const handleDuplicateAgenda = (agenda: ScheduleAgenda) => {
+    const copy: ScheduleAgenda = {
+      ...agenda,
+      id: `ag_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      completed: false,
+      actualIn: undefined,
+      actualOut: undefined,
+      actualInIso: undefined,
+      actualOutIso: undefined,
+      silentAudit: undefined,
+      kendala: undefined,
+    };
+    onAddAgenda(copy);
+    setSyncFeedback({
+      ok: true,
+      title: `Jadwal "${agenda.title}" diduplikasi`,
+      detail: `Tersimpan untuk ${agenda.pic} (${agenda.date})`,
+    });
+  };
+
+  const handleSaveSingleSchedule = (saved: ScheduleAgenda, isEdit: boolean) => {
+    if (isEdit) {
+      onUpdateAgenda(saved);
+    } else {
+      onAddAgenda(saved);
+    }
+    setIsScheduleDrawerOpen(false);
+    setEditingAgenda(null);
+    setSyncFeedback({
+      ok: true,
+      title: isEdit ? 'Jadwal diperbarui' : 'Jadwal baru ditambahkan',
+      detail: `${saved.title} • ${saved.pic} (${saved.date})`,
+    });
+  };
+
+  const handleSaveBatchSchedule = async (batch: ScheduleAgenda[]) => {
+    setIsScheduleDrawerOpen(false);
+    setEditingAgenda(null);
+    const res = await onImportExcel(users, batch, 'merge');
+    const ok = !res || (typeof res === 'object' && res.ok);
+    setSyncFeedback({
+      ok,
+      title: `${batch.length} jadwal berhasil dibuat sekaligus`,
+      detail: ok
+        ? 'Tersinkronisasi otomatis ke Cloudflare D1.'
+        : 'Tersimpan lokal, antrean cloud berjalan otomatis.',
+    });
+  };
+
+  const handleRetryScheduleSync = async () => {
+    if (isRetryingSync) return;
+    setIsRetryingSync(true);
     try {
       const res = await flushPendingSchedulesQueue();
       if (res && res.ok && !res.queuedOffline) {
-        setScheduleSyncFeedback({
+        setPendingSyncCount(0);
+        setSyncFeedback({
           ok: true,
-          title: `Antrean berhasil disinkronkan (${res.syncedCount} agenda)!`,
-          detail: `D1: ${res.d1Synced ? 'OK' : 'Gagal'} • GAS: ${res.gasSynced ? 'OK' : 'Gagal'}`,
-        });
-      } else {
-        setScheduleSyncFeedback({
-          ok: false,
-          queuedOffline: true,
-          title: 'Sinkronisasi ulang masih tertunda',
-          detail: res?.error || 'Koneksi ke server cloud belum tersedia.',
+          title: `Antrean tersinkronisasi (${res.syncedCount} agenda)`,
+          detail: `D1: ${res.d1Synced ? 'OK' : 'Pending'} • GAS: ${res.gasSynced ? 'OK' : 'Latar'}`,
         });
       }
     } finally {
-      setIsRetryingScheduleSync(false);
+      setIsRetryingSync(false);
     }
   };
 
-  // Download Official Schedule Template
-  const handleDownloadScheduleTemplate = () => {
-    exportScheduleToTemplateExcel(agendas, users);
-  };
-
-  // Master Toko Live Merge Preview (updates immediately if mode changes)
-  const masterLivePreview = useMemo(() => {
-    if (!masterParseResult) return null;
-    return mergeMasterStores(masterStores, masterParseResult.incomingStores, masterImportMode);
-  }, [masterParseResult, masterStores, masterImportMode]);
-
-  // Master Toko Excel Upload & Parse
-  const handleMasterExcelFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setMasterExcelFile(file);
-    setMasterSelectedSheet('');
-    setIsParsingMasterExcel(true);
-    setMasterFeedback(null);
-
-    try {
-      const parsed = await parseMasterStoreExcelFile(file, masterStores, masterImportMode);
-      setMasterParseResult(parsed);
-      setMasterSelectedSheet(parsed.sheetName);
-    } catch (err: any) {
-      setMasterParseResult(null);
-      setMasterFeedback({
-        ok: false,
-        title: 'Gagal membaca file Excel Master Toko',
-        detail: err?.message || 'Pastikan terdapat kolom Kode Toko dan Nama Toko yang valid.',
-      });
-    } finally {
-      setIsParsingMasterExcel(false);
-      if (masterFileInputRef.current) masterFileInputRef.current.value = '';
-    }
-  };
-
-  const handleMasterSheetChange = async (sheetName: string) => {
-    if (!masterExcelFile) return;
-    setMasterSelectedSheet(sheetName);
-    setIsParsingMasterExcel(true);
-    try {
-      const parsed = await parseMasterStoreExcelFile(masterExcelFile, masterStores, masterImportMode, sheetName);
-      setMasterParseResult(parsed);
-    } catch (err: any) {
-      setMasterFeedback({
-        ok: false,
-        title: `Gagal membaca sheet "${sheetName}"`,
-        detail: err?.message || 'Format kolom pada sheet ini tidak valid.',
-      });
-    } finally {
-      setIsParsingMasterExcel(false);
-    }
-  };
-
-  // Execute Master Toko Update (IndexedDB + localStorage + Cloudflare D1 + GAS Vault)
-  const handleExecuteMasterStoreUpdate = async () => {
-    if (!masterParseResult || !masterLivePreview || isExecutingMasterUpdate) return;
-    if (masterLivePreview.stores.length === 0) {
-      setMasterFeedback({
-        ok: false,
-        title: 'Tidak ada data toko valid untuk disimpan',
-        detail: 'Periksa kembali file Excel Anda.',
-      });
-      return;
-    }
-
-    setIsExecutingMasterUpdate(true);
-    setMasterFeedback(null);
-
-    try {
-      const nextStores = masterLivePreview.stores;
-      const savedMeta = await saveMasterStoresDurable(nextStores, {
-        updatedBy: adminUser?.name || 'Admin FMCU',
-        sourceFilename: masterExcelFile?.name,
-        totalStores: nextStores.length,
-        addedCount: masterLivePreview.addedCount,
-        updatedCount: masterLivePreview.updatedCount,
-        cloudSynced: false,
-      });
-
-      setMasterStores(nextStores);
-      setMasterStoreMeta(savedMeta);
-
-      const cloudRes = await pushMasterStoresToCloud(nextStores, savedMeta, { mode: masterImportMode });
-
-      if (cloudRes.ok) {
-        const syncedMeta = await saveMasterStoresDurable(nextStores, {
-          ...savedMeta,
-          version: savedMeta.version,
-          updatedAt: savedMeta.updatedAt,
-          cloudSynced: true,
-        });
-        setMasterStoreMeta(syncedMeta);
-        setMasterFeedback({
-          ok: true,
-          cloudSynced: true,
-          title: `Master Toko Diperbarui (${nextStores.length} Toko • v${syncedMeta.version})`,
-          detail: `+${masterLivePreview.addedCount} baru, ~${masterLivePreview.updatedCount} diperbarui. Tersimpan di IndexedDB + D1 (${cloudRes.d1Synced ? 'OK' : 'Pending'}) + GAS (${cloudRes.gasSynced ? 'OK' : 'Pending'}).`,
-        });
-        setMasterExcelFile(null);
-        setMasterParseResult(null);
-      } else {
-        setMasterFeedback({
-          ok: false,
-          cloudSynced: false,
-          title: `Tersimpan di Perangkat Ini (${nextStores.length} Toko), Sinkronisasi Cloud Gagal`,
-          detail: `${cloudRes.error || 'Koneksi ke D1/GAS gagal.'} Data lokal sudah aktif — klik "Sinkronkan Ulang ke Cloud" saat online.`,
-        });
-      }
-    } catch (err: any) {
-      setMasterFeedback({
-        ok: false,
-        cloudSynced: false,
-        title: 'Gagal menyimpan Master Toko',
-        detail: err?.message || 'Terjadi kesalahan sistem.',
-      });
-    } finally {
-      setIsExecutingMasterUpdate(false);
-    }
-  };
-
-  // Manual Cloud Push Retry for current Master Toko
-  const handleRetryMasterCloudSync = async () => {
-    if (isSyncingMasterCloud) return;
-    setIsSyncingMasterCloud(true);
-    try {
-      const meta: MasterStoreMetadata = masterStoreMeta || {
-        version: Date.now(),
-        updatedAt: new Date().toISOString(),
-        updatedBy: adminUser?.name || 'Admin FMCU',
-        totalStores: masterStores.length,
-        addedCount: 0,
-        updatedCount: 0,
-        cloudSynced: false,
-      };
-      const cloudRes = await pushMasterStoresToCloud(masterStores, meta, { mode: 'replace' });
-      if (cloudRes.ok) {
-        const syncedMeta = await saveMasterStoresDurable(masterStores, {
-          ...meta,
-          cloudSynced: true,
-        });
-        setMasterStoreMeta(syncedMeta);
-        setMasterFeedback({
-          ok: true,
-          cloudSynced: true,
-          title: `Master Toko Berhasil Disinkronkan ke Cloud (${masterStores.length} Toko)`,
-          detail: `D1: ${cloudRes.d1Synced ? 'OK' : 'Pending'} • GAS: ${cloudRes.gasSynced ? 'OK' : 'Pending'}`,
-        });
-      } else {
-        setMasterFeedback({
-          ok: false,
-          cloudSynced: false,
-          title: 'Sinkronisasi Cloud Gagal',
-          detail: cloudRes.error || 'Periksa koneksi internet Anda.',
-        });
-      }
-    } finally {
-      setIsSyncingMasterCloud(false);
-    }
-  };
-
-  // Download Master Store Template
-  const handleDownloadMasterTemplate = () => {
-    downloadMasterStoreTemplateExcel();
-  };
-
-  // Download Master Stores
-  const handleDownloadMasterStores = () => {
-    exportMasterStoresToExcel(masterStores);
-  };
-
-  // Export Filtered Agendas to Raw Excel
-  const handleExportRawAgendas = () => {
-    const rows = filteredClassifiedAgendas.map((item, idx) => {
-      const ag = item.agenda;
-      return {
-        'No': idx + 1,
-        'Tanggal': ag.date,
-        'Jam Mulai': ag.time || '08:00',
-        'Jam Selesai': ag.endTime || '17:00',
-        'PIC / Personil': ag.pic,
-        'Klasifikasi Kegiatan': item.badge.label,
-        'Apakah Visit Resmi': item.isExplicitVisit ? 'YA (VISIT TOKO)' : 'TIDAK (NON-VISIT)',
-        'Judul Agenda': ag.title,
-        'Kode Toko': ag.storeCode || '-',
-        'Nama Toko / Lokasi': ag.storeName || ag.location,
-        'Status Pelaksanaan': item.status.label,
-        'Actual IN': ag.actualIn || item.report?.actualIn || '-',
-        'Actual OUT': ag.actualOut || item.report?.actualOut || '-',
-        'Kendala Lapangan': ag.kendala || '-',
-        'Laporan QSC Submit': item.report?.status === 'SUBMITTED' ? 'SUDAH SUBMIT' : item.isExplicitVisit ? 'BELUM' : 'TIDAK PERLU',
-        'Deskripsi / Catatan': ag.description || '-',
-      };
+  const handlePreviewVisitReport = (report: VisitReportData) => {
+    setPreviewModalState({
+      reportData: report,
+      gdrivePdfUrl: (report as any).pdfUrl || (report as any).driveUrl || report.spreadsheetUrl,
+      gdriveEmbedUrl: (report as any).gdriveEmbedUrl,
     });
-
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Agenda FMCU');
-    XLSX.writeFile(workbook, `FMCU_Data_Agenda_${todayIso}.xlsx`);
   };
+
+  const handlePreviewUnifiedReport = (rep: UnifiedWebReport) => {
+    setPreviewModalState({
+      reportData: rep.reportData,
+      gdrivePdfUrl: rep.gdriveViewUrl,
+      gdriveEmbedUrl: rep.gdriveEmbedUrl,
+      storeFolderName: rep.folderName,
+      pdfFileName: rep.fileName,
+      gdriveSavedDate: rep.gdriveSavedDate,
+    });
+  };
+
+  const activeNavMeta = NAV_ITEMS.find((n) => n.id === activeTab) || NAV_ITEMS[0];
+
+  // Primary 5 mobile bottom nav items (Analytics accessible via Mobile Menu drawer cleanly)
+  const mobileBottomNavIds: AdminNavTab[] = ['agenda', 'calendar', 'reports', 'monitoring', 'stores'];
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] text-slate-800 flex flex-col font-sans select-none">
-      {/* ============================================================
-          TOP EXECUTIVE APP BAR (Apple Glass Style, Minimalist, Clean)
-          ============================================================ */}
-      <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-slate-200/80 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
-          {/* Left: Branding & Role */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-black shadow-sm ring-2 ring-emerald-500/20">
-              <Store className="w-5 h-5" />
+    <div className="h-[100dvh] w-full bg-[#F8FAFC] text-slate-800 flex overflow-hidden font-sans">
+      {/* ====================================================================
+          DESKTOP COLLAPSIBLE SAAS SIDEBAR
+          ==================================================================== */}
+      <aside
+        className={`hidden lg:flex flex-col bg-white border-r border-slate-200 shrink-0 transition-all duration-200 ease-out ${
+          sidebarCollapsed ? 'w-[64px]' : 'w-[228px]'
+        }`}
+      >
+        {/* Brand Header */}
+        <div className="h-[52px] px-3.5 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+              FM
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-none">
-                  FMCU Central Admin
+            {!sidebarCollapsed && (
+              <div className="min-w-0">
+                <div className="text-[13px] font-bold text-slate-900 leading-tight truncate">
+                  FMCU Admin
+                </div>
+                <div className="text-[10px] text-slate-400 leading-tight truncate">
+                  Workspace Operasional
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer shrink-0"
+            title={sidebarCollapsed ? 'Perluas Sidebar' : 'Kecilkan Sidebar'}
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen className="w-4 h-4" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto admin-sheet-scroll">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = activeTab === item.id;
+            const badgeCount =
+              item.id === 'monitoring' && activeRadarCount > 0
+                ? activeRadarCount
+                : item.id === 'agenda'
+                ? agendas.length
+                : item.id === 'reports'
+                ? unifiedReports.length
+                : item.id === 'stores'
+                ? masterStores.length
+                : null;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.id)}
+                title={sidebarCollapsed ? item.label : undefined}
+                className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  active
+                    ? 'bg-slate-900 text-white font-semibold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Icon
+                    className={`w-4 h-4 shrink-0 ${
+                      active
+                        ? 'text-emerald-400'
+                        : item.id === 'monitoring' && activeRadarCount > 0
+                        ? 'text-emerald-600'
+                        : 'text-slate-400'
+                    }`}
+                  />
+                  {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                </div>
+
+                {!sidebarCollapsed && badgeCount !== null && (
+                  <span
+                    className={`text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded-md tabular-nums ${
+                      item.id === 'monitoring' && activeRadarCount > 0
+                        ? active
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-emerald-50 text-emerald-700'
+                        : active
+                        ? 'bg-white/15 text-slate-200'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {badgeCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Bottom Utility Links (No Duplication) */}
+        <div className="p-2 border-t border-slate-200 space-y-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowHoldingTimeModal(true)}
+            title={sidebarCollapsed ? 'Standar Holding Time R23' : undefined}
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+          >
+            <BookOpen className="w-4 h-4 text-slate-400 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Holding Time R23</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={onSwitchToUserView}
+            title={sidebarCollapsed ? 'Tampilan Staff' : undefined}
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+          >
+            <Eye className="w-4 h-4 text-slate-400 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Tampilan Staff</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={onLogout}
+            title={sidebarCollapsed ? 'Keluar' : undefined}
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Keluar</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* ====================================================================
+          MAIN RIGHT COLUMN (TOP UTILITY BAR + EDGE-TO-EDGE WORKSPACE)
+          ==================================================================== */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+        {/* Minimalist 52px Top Utility Bar */}
+        <header className="h-[52px] bg-white border-b border-slate-200 px-3.5 sm:px-5 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="lg:hidden w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+              FM
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-bold text-slate-900 truncate leading-tight">
+                  {activeNavMeta.label}
                 </h1>
-                <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Master Data
+                <span className="hidden md:inline-block text-[11px] font-mono text-slate-400">
+                  • {formatDisplayDateShort(todayYmd)}
                 </span>
               </div>
-              <p className="text-[11px] font-bold text-slate-500 leading-none mt-1">
-                FamilyMart Operational & Activity Command Center
+              <p className="hidden sm:block text-[11px] text-slate-500 truncate leading-tight">
+                {activeNavMeta.subtitle}
               </p>
             </div>
           </div>
 
-          {/* Right: Quick Actions (Maps, Switch View, Logout) */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Single Clean Live Maps Trigger */}
             {onOpenLiveMaps && (
               <button
                 type="button"
                 onClick={onOpenLiveMaps}
-                title="Buka Peta Live Pinpoint Toko & Radar Personel"
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 text-xs font-bold transition active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold transition active:scale-[0.98] cursor-pointer"
+                title="Buka Peta Tracking User & Pinpoint Toko Live"
               >
-                <Radio className="w-3.5 h-3.5 text-teal-600 animate-pulse" />
-                <span className="hidden xs:inline sm:inline">Radar Peta</span>
-                {activeRadarUsers.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-teal-600 text-white text-[9.5px] font-black">
-                    {activeRadarUsers.length}
+                <span className="relative flex h-2 w-2">
+                  {activeRadarCount > 0 && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  )}
+                  <span
+                    className={`relative inline-flex rounded-full h-2 w-2 ${
+                      activeRadarCount > 0 ? 'bg-emerald-500' : 'bg-slate-400'
+                    }`}
+                  />
+                </span>
+                <MapPin className="w-3.5 h-3.5 text-slate-600" />
+                <span className="hidden xs:inline sm:inline">Live Maps</span>
+                {activeRadarCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-mono font-bold tabular-nums">
+                    {activeRadarCount}
                   </span>
                 )}
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={onSwitchToUserView}
-              title="Beralih ke Tampilan Staff Lapangan"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition active:scale-95 cursor-pointer border border-slate-200"
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Mode Staff</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onLogout}
-              title="Keluar dari Portal Admin"
-              className="w-8 h-8 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center transition active:scale-95 cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ============================================================
-          EXECUTIVE 4-PILLAR STATS BAR (High-Density & Clean Clarity)
-          ============================================================ */}
-      <section className="bg-white border-b border-slate-200/80 px-4 sm:px-6 py-3.5">
-        <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Card 1: Total Agenda */}
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-700 flex items-center justify-center shrink-0">
-              <CalendarDays className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[10px] font-black uppercase text-slate-500 leading-none">
-                Total Seluruh Agenda
-              </span>
-              <span className="block text-lg font-black text-slate-900 leading-tight mt-0.5">
-                {metrics.total}{' '}
-                <span className="text-xs font-bold text-slate-500">Kegiatan</span>
-              </span>
-              <span className="block text-[10px] font-bold text-slate-500 truncate mt-0.5">
-                Terdaftar di database
-              </span>
-            </div>
-          </div>
-
-          {/* Card 2: Visit Toko Resmi */}
-          <div className="p-3 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Store className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="block text-[10px] font-black uppercase text-emerald-800 leading-none">
-                  Visit Toko Resmi
-                </span>
-                <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-900">
-                  {metrics.visitPercentage}% Done
-                </span>
+            {/* Admin Chip (Desktop) */}
+            <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-200">
+              <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center">
+                {(adminUser?.name || 'AD').slice(0, 2).toUpperCase()}
               </div>
-              <span className="block text-lg font-black text-emerald-950 leading-tight mt-0.5">
-                {metrics.visitDone} / {metrics.visitsCount}{' '}
-                <span className="text-xs font-bold text-emerald-700">Toko</span>
-              </span>
-              <span className="block text-[10px] font-bold text-emerald-800 truncate mt-0.5">
-                {metrics.visitInProgress} Sedang di Toko • {metrics.visitPending} Belum
-              </span>
+              <div className="text-xs font-semibold text-slate-700 max-w-[120px] truncate">
+                {adminUser?.name || 'Admin'}
+              </div>
             </div>
-          </div>
 
-          {/* Card 3: Non-Visit Activities */}
-          <div className="p-3 rounded-2xl bg-cyan-50/60 border border-cyan-200 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[10px] font-black uppercase text-cyan-800 leading-none">
-                Agenda Non-Visit
-              </span>
-              <span className="block text-lg font-black text-cyan-950 leading-tight mt-0.5">
-                {metrics.nonVisitsCount}{' '}
-                <span className="text-xs font-bold text-cyan-700">Sesi</span>
-              </span>
-              <span className="block text-[10px] font-bold text-cyan-800 truncate mt-0.5">
-                {metrics.meetings} Meeting • {metrics.trainings} Training • {metrics.ops} Ops
-              </span>
-            </div>
-          </div>
-
-          {/* Card 4: Ketersediaan Personil */}
-          <div className="p-3 rounded-2xl bg-rose-50/60 border border-rose-200 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Coffee className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <span className="block text-[10px] font-black uppercase text-rose-800 leading-none">
-                Cuti & Hari Libur
-              </span>
-              <span className="block text-lg font-black text-rose-950 leading-tight mt-0.5">
-                {metrics.leavesCount}{' '}
-                <span className="text-xs font-bold text-rose-700">Personil</span>
-              </span>
-              <span className="block text-[10px] font-bold text-rose-800 truncate mt-0.5">
-                Status ketersediaan tim
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================
-          MAIN NAVIGATION TABS (5 Core Pillars)
-          ============================================================ */}
-      <nav className="bg-white border-b border-slate-200 sticky top-[57px] z-20 px-4 sm:px-6 shadow-2xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between overflow-x-auto no-scrollbar gap-2 py-2">
-          <div className="flex items-center gap-1.5 shrink-0">
-            {/* Tab 1: Data Table */}
+            {/* Mobile Menu Drawer Button */}
             <button
               type="button"
-              onClick={() => setActiveTab('table')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                activeTab === 'table'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+              onClick={() => setShowMobileMenu(true)}
+              className="lg:hidden p-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer"
+              aria-label="Menu Admin"
             >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Data Agenda (Excel)</span>
-              <span
-                className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
-                  activeTab === 'table' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-                }`}
-              >
-                {filteredClassifiedAgendas.length}
-              </span>
-            </button>
-
-            {/* Tab 2: Calendar */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('calendar')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                activeTab === 'calendar'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <CalendarIcon className="w-4 h-4" />
-              <span>Kalender Interaktif</span>
-            </button>
-
-            {/* Tab 3: Analytics */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('analytics')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                activeTab === 'analytics'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span>Analitik & Rekap Tim</span>
-            </button>
-
-            {/* Tab 4: Monitoring Visit & Laporan */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('monitoring')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                activeTab === 'monitoring'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Audit Kunjungan &amp; Radar</span>
-              {activeRadarUsers.length > 0 && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              )}
-              <span
-                className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
-                  activeTab === 'monitoring' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
-                }`}
-              >
-                {metrics.visitsCount}
-              </span>
-            </button>
-
-            {/* Tab 5: Data Hub & Sync */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('datahub')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                activeTab === 'datahub'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Upload className="w-4 h-4" />
-              <span>Pusat Data & Sinkronisasi Excel</span>
+              <Menu className="w-4 h-4" />
             </button>
           </div>
+        </header>
 
-          {/* Quick Add Agenda Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setEditingAgenda(null);
-              setDefaultDateForModal(todayIso);
-              setIsAgendaModalOpen(true);
-            }}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs transition active:scale-95 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span className="hidden sm:inline">Tambah Agenda Baru</span>
-          </button>
-        </div>
+        {/* Active View Workspace Canvas */}
+        <main className="flex-1 min-h-0 overflow-hidden p-2.5 sm:p-4 pb-[72px] lg:pb-4">
+          {activeTab === 'agenda' && (
+            <AdminAgendaSheetView
+              classifiedAgendas={classifiedAgendas}
+              agendas={agendas}
+              users={users}
+              todayYmd={todayYmd}
+              pendingSyncCount={pendingSyncCount}
+              isRetryingSync={isRetryingSync}
+              syncFeedback={syncFeedback}
+              onDismissFeedback={() => setSyncFeedback(null)}
+              onRetrySync={handleRetryScheduleSync}
+              onOpenCreate={handleOpenCreateSchedule}
+              onOpenEdit={handleOpenEditSchedule}
+              onDuplicateAgenda={handleDuplicateAgenda}
+              onDeleteAgenda={(ag) => setDeletingAgenda(ag)}
+              onOpenUploadExcel={() => setShowScheduleUploadModal(true)}
+              onPreviewReport={handlePreviewVisitReport}
+            />
+          )}
+
+          {activeTab === 'calendar' && (
+            <AdminCalendarView
+              classifiedAgendas={classifiedAgendas}
+              todayYmd={todayYmd}
+              onCreateOnDate={handleOpenCreateSchedule}
+              onEditAgenda={handleOpenEditSchedule}
+              onDeleteAgenda={(ag) => setDeletingAgenda(ag)}
+              onPreviewReport={handlePreviewVisitReport}
+            />
+          )}
+
+          {activeTab === 'reports' && (
+            <AdminReportsSheetView
+              reports={unifiedReports}
+              todayYmd={todayYmd}
+              isRefreshing={isRefreshingReports}
+              onRefresh={refreshCloudReports}
+              onPreviewWebReport={handlePreviewUnifiedReport}
+            />
+          )}
+
+          {activeTab === 'monitoring' && (
+            <AdminLiveMonitorView
+              users={users}
+              livePresences={livePresences}
+              todayClassifiedAgendas={todayClassifiedAgendas}
+              todayYmd={todayYmd}
+              isRefreshing={isRefreshingLive}
+              onRefresh={refreshLivePresences}
+              onOpenLiveMaps={onOpenLiveMaps}
+              onPreviewReport={handlePreviewVisitReport}
+              onAddUser={onAddUser}
+              onResetUserPassword={onResetUserPassword}
+            />
+          )}
+
+          {activeTab === 'stores' && (
+            <AdminMasterStoreView
+              masterStores={masterStores}
+              masterStoreMeta={masterStoreMeta}
+              adminName={adminUser?.name || 'Admin FMCU'}
+              onMasterStoresUpdated={(stores, meta) => {
+                setMasterStores(stores);
+                setMasterStoreMeta(meta);
+              }}
+            />
+          )}
+
+          {activeTab === 'analytics' && (
+            <AdminAnalyticsView
+              classifiedAgendas={classifiedAgendas}
+              unifiedReports={unifiedReports}
+              users={users}
+              masterStores={masterStores}
+              todayYmd={todayYmd}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* ====================================================================
+          MOBILE FIXED BOTTOM NAVIGATION BAR (5 ERGONOMIC TABS)
+          ==================================================================== */}
+      <nav className="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1.5 pt-1 pb-[max(6px,env(safe-area-inset-bottom))] grid grid-cols-5 gap-0.5">
+        {mobileBottomNavIds.map((id) => {
+          const item = NAV_ITEMS.find((n) => n.id === id)!;
+          const Icon = item.icon;
+          const active = activeTab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id)}
+              className={`relative flex flex-col items-center justify-center py-1.5 rounded-xl transition cursor-pointer ${
+                active ? 'text-slate-900 bg-slate-100/90 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <div className="relative">
+                <Icon className={`w-4 h-4 ${active ? 'text-slate-900' : 'text-slate-400'}`} />
+                {id === 'monitoring' && activeRadarCount > 0 && (
+                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+                )}
+              </div>
+              <span className="text-[10px] mt-0.5 leading-none">{item.mobileLabel}</span>
+            </button>
+          );
+        })}
       </nav>
 
-      {/* ============================================================
-          MAIN CONTENT CONTAINER
-          ============================================================ */}
-      <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-4">
-        {/* ============================================================
-            TAB 1: DATA AGENDA LENGKAP (Spreadsheet Table View)
-            "Kemudahan lihat data dibuat maksimal, spreadsheet-level"
-            ============================================================ */}
-        {activeTab === 'table' && (
-          <div className="space-y-4">
-            {/* Top Toolbar: Search, Filters, and Raw Export */}
-            <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 shadow-xs space-y-3">
-              {/* Row 1: Search & Date Presets */}
-              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                {/* Search Bar */}
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari nama toko, kode toko (misal: 3006), PIC, atau judul kegiatan..."
-                    className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 transition"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+      {/* ====================================================================
+          MOBILE SECONDARY MENU DRAWER (Analitik, Holding Time, Staff View, Logout)
+          ==================================================================== */}
+      {showMobileMenu && (
+        <div className="lg:hidden fixed inset-0 z-50 flex justify-end">
+          <div
+            className="fixed inset-0 bg-slate-900/35 backdrop-blur-[2px]"
+            onClick={() => setShowMobileMenu(false)}
+          />
+          <div className="relative z-10 w-[270px] max-w-[85vw] bg-white h-full border-l border-slate-200 flex flex-col shadow-2xl admin-drawer-right">
+            <div className="px-4 py-3.5 border-b border-slate-200 flex items-center justify-between">
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-slate-900 truncate">
+                  {adminUser?.name || 'Admin FMCU'}
                 </div>
-
-                {/* Date Filter Buttons */}
-                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
-                  <span className="text-[11px] font-black text-slate-400 uppercase mr-1">Tanggal:</span>
-                  {(
-                    [
-                      { id: 'ALL', label: 'Semua' },
-                      { id: 'TODAY', label: 'Hari Ini' },
-                      { id: 'TOMORROW', label: 'Besok' },
-                      { id: 'WEEK', label: 'Minggu Ini' },
-                      { id: 'MONTH', label: 'Bulan Ini' },
-                    ] as const
-                  ).map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => setFilterDatePreset(preset.id)}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                        filterDatePreset === preset.id
-                          ? 'bg-slate-800 text-white shadow-xs'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
+                <div className="text-[11px] text-slate-500 truncate">{adminUser?.email}</div>
               </div>
-
-              {/* Row 2: Category Chips & PIC Filter & Export */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-                {/* 1-Click Classification Chips */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-black text-slate-400 uppercase mr-1">Filter Jenis:</span>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterKind('ALL')}
-                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
-                      filterKind === 'ALL'
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                    }`}
-                  >
-                    Semua ({allClassifiedAgendas.length})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterKind('VISIT')}
-                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1 ${
-                      filterKind === 'VISIT'
-                        ? 'bg-emerald-700 text-white'
-                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
-                    }`}
-                  >
-                    <Store className="w-3 h-3" />
-                    <span>Hanya Visit Toko ({metrics.visitsCount})</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterKind('NON_VISIT')}
-                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1 ${
-                      filterKind === 'NON_VISIT'
-                        ? 'bg-cyan-700 text-white'
-                        : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200'
-                    }`}
-                  >
-                    <Building2 className="w-3 h-3" />
-                    <span>Semua Non-Visit ({metrics.nonVisitsCount})</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterKind('MEETING')}
-                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
-                      filterKind === 'MEETING'
-                        ? 'bg-blue-700 text-white'
-                        : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200'
-                    }`}
-                  >
-                    Meeting ({metrics.meetings})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterKind('TRAINING')}
-                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
-                      filterKind === 'TRAINING'
-                        ? 'bg-cyan-700 text-white'
-                        : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200'
-                    }`}
-                  >
-                    Training ({metrics.trainings})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterKind('LEAVE')}
-                    className={`px-2.5 py-1 rounded-full text-xs font-black transition cursor-pointer ${
-                      filterKind === 'LEAVE'
-                        ? 'bg-rose-700 text-white'
-                        : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200'
-                    }`}
-                  >
-                    Cuti / Off ({metrics.leavesCount})
-                  </button>
-                </div>
-
-                {/* Right: View Mode Toggle, PIC Dropdown & Download Button */}
-                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                  {/* Sakelar Toggle (Tabel ↔ Kartu) */}
-                  <div className="flex items-center p-0.5 rounded-xl bg-slate-100 border border-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('table')}
-                      title="Tampilan Tabel Spreadsheet"
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
-                        viewMode === 'table'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      <List className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Tabel</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('cards')}
-                      title="Tampilan Kartu Ringkasan (Card View)"
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
-                        viewMode === 'cards'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      <LayoutGrid className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Kartu</span>
-                    </button>
-                  </div>
-
-                  {/* PIC Dropdown */}
-                  <select
-                    value={filterPic}
-                    onChange={(e) => setFilterPic(e.target.value)}
-                    className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none"
-                  >
-                    <option value="ALL">Semua Personil ({picList.length})</option>
-                    {picList.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.name} ({p.count})
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* 1-Click Excel Export */}
-                  <button
-                    type="button"
-                    onClick={handleExportRawAgendas}
-                    title="Unduh data tabel saat ini ke spreadsheet Excel"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer shrink-0"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Tarik Excel (.xlsx)</span>
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowMobileMenu(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            {/* VIEW MODE: SPREADSHEET TABLE VIEW */}
-            {viewMode === 'table' && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-black tracking-wider">
-                        <th className="py-2.5 px-3 text-center w-10">No</th>
-                        <th className="py-2.5 px-3 w-28">Tanggal & Jam</th>
-                        <th className="py-2.5 px-3 w-36">Personil (PIC)</th>
-                        <th className="py-2.5 px-3 w-32">Jenis Kegiatan</th>
-                        <th className="py-2.5 px-4 min-w-[200px]">Judul Agenda & Deskripsi</th>
-                        <th className="py-2.5 px-3 min-w-[160px]">Lokasi / Toko</th>
-                        <th className="py-2.5 px-3 w-36">Status Pelaksanaan</th>
-                        <th className="py-2.5 px-3 w-28 text-center">Laporan QSC</th>
-                        <th className="py-2.5 px-3 w-20 text-center">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredClassifiedAgendas.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="py-12 text-center text-slate-400">
-                            <Info className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                            <p className="font-bold text-sm text-slate-600">Tidak ada agenda yang cocok dengan filter</p>
-                            <p className="text-xs text-slate-400 mt-0.5">
-                              Coba ubah tanggal preset, kata kunci pencarian, atau jenis kegiatan
-                            </p>
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredClassifiedAgendas.map((item, idx) => {
-                          const ag = item.agenda;
-                          const hasStore = Boolean(ag.storeCode || ag.storeName);
+            <div className="p-2.5 space-y-1 flex-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('analytics');
+                  setShowMobileMenu(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer ${
+                  activeTab === 'analytics'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span>Analitik & Performa Tim</span>
+              </button>
 
-                          return (
-                            <tr
-                              key={ag.id}
-                              className={`hover:bg-slate-50/80 transition-colors ${
-                                idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'
-                              }`}
-                            >
-                              {/* No */}
-                              <td className="py-2 px-3 text-center font-bold text-slate-400">
-                                {idx + 1}
-                              </td>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  setShowHoldingTimeModal(true);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <BookOpen className="w-4 h-4 text-slate-500" />
+                <span>Standar Holding Time R23</span>
+              </button>
 
-                              {/* Tanggal & Jam */}
-                              <td className="py-2 px-3 whitespace-nowrap">
-                                <span className="font-black text-slate-900 block leading-tight">
-                                  {ag.date}
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-500 block leading-tight mt-0.5">
-                                  {ag.time || '08:00'} - {ag.endTime || '17:00'} WIB
-                                </span>
-                              </td>
-
-                              {/* PIC */}
-                              <td className="py-2 px-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                                    {ag.pic ? ag.pic.charAt(0).toUpperCase() : '?'}
-                                  </div>
-                                  <span className="font-bold text-slate-800 truncate" title={ag.pic}>
-                                    {ag.pic || 'Unassigned'}
-                                  </span>
-                                </div>
-                              </td>
-
-                              {/* Jenis Kegiatan Badge */}
-                              <td className="py-2 px-3 whitespace-nowrap">
-                                <span
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
-                                >
-                                  {item.isExplicitVisit && <Store className="w-3 h-3 shrink-0" />}
-                                  {item.kind === 'MEETING' && <Building2 className="w-3 h-3 shrink-0" />}
-                                  {item.kind === 'TRAINING' && <BookOpen className="w-3 h-3 shrink-0" />}
-                                  {item.kind === 'LEAVE' && <Coffee className="w-3 h-3 shrink-0" />}
-                                  <span>{item.badge.label}</span>
-                                </span>
-                              </td>
-
-                              {/* Judul & Deskripsi */}
-                              <td className="py-2 px-4">
-                                <p className="font-black text-slate-900 leading-tight">
-                                  {ag.title}
-                                </p>
-                                {ag.description && (
-                                  <p className="text-[11px] font-medium text-slate-500 line-clamp-1 mt-0.5">
-                                    {ag.description}
-                                  </p>
-                                )}
-                                {ag.kendala && (
-                                  <div className="inline-flex items-center gap-1 text-[9.5px] font-black text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300 mt-1" title={ag.kendala}>
-                                    <span>⚠️ Kendala: {ag.kendala}</span>
-                                  </div>
-                                )}
-                              </td>
-
-                              {/* Lokasi / Toko */}
-                              <td className="py-2 px-3">
-                                {hasStore ? (
-                                  <div>
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      {ag.storeCode && (
-                                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">
-                                          {ag.storeCode}
-                                        </span>
-                                      )}
-                                      <span className="font-black text-slate-800 text-xs">
-                                        {ag.storeName || ag.location}
-                                      </span>
-                                    </div>
-                                    {!item.isExplicitVisit && (
-                                      <span className="text-[9.5px] font-bold text-slate-400 block mt-0.5">
-                                        (Lokasi Toko, Agenda Non-Visit)
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="font-medium text-slate-700">
-                                    {ag.location || 'Kantor / Daring'}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Status Pelaksanaan */}
-                              <td className="py-2 px-3 whitespace-nowrap">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`w-2 h-2 rounded-full ${item.status.dot} shrink-0`} />
-                                  <span
-                                    className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${item.status.bg} ${item.status.color} ${item.status.border}`}
-                                  >
-                                    {item.status.label}
-                                  </span>
-                                </div>
-                                {/* Actual In/Out info for visit */}
-                                {item.isExplicitVisit && (ag.actualIn || item.report?.actualIn) && (
-                                  <span className="text-[9.5px] font-bold text-slate-500 block mt-0.5">
-                                    IN: {ag.actualIn || item.report?.actualIn}{' '}
-                                    {ag.actualOut || item.report?.actualOut ? `• OUT: ${ag.actualOut || item.report?.actualOut}` : ''}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Laporan QSC */}
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                {item.isExplicitVisit ? (
-                                  item.report ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setPreviewingReport(item.report!)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition cursor-pointer shadow-xs active:scale-95"
-                                    >
-                                      <FileText className="w-3 h-3" />
-                                      <span>Lihat PDF</span>
-                                    </button>
-                                  ) : (
-                                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                      Menunggu
-                                    </span>
-                                  )
-                                ) : (
-                                  <span className="text-[11px] font-bold text-slate-300">—</span>
-                                )}
-                              </td>
-
-                              {/* Aksi */}
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                <div className="flex items-center justify-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingAgenda(ag);
-                                      setIsAgendaModalOpen(true);
-                                    }}
-                                    title="Edit Agenda"
-                                    className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeletingAgenda(ag)}
-                                    title="Hapus Agenda"
-                                    className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center transition active:scale-95 cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Table Footer: Summary Count */}
-                <div className="bg-slate-50 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between text-xs text-slate-500 font-bold">
-                  <span>
-                    Menampilkan <strong className="text-slate-800">{filteredClassifiedAgendas.length}</strong> dari{' '}
-                    <strong className="text-slate-800">{allClassifiedAgendas.length}</strong> total agenda
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    FamilyMart Operations Data Engine
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* VIEW MODE: KARTU RAMPING TERPADU (Card Grid View) */}
-            {viewMode === 'cards' && (
-              <div className="space-y-3">
-                {filteredClassifiedAgendas.length === 0 ? (
-                  <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-xs">
-                    <Info className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="font-bold text-sm text-slate-600">Tidak ada agenda yang cocok dengan filter</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Coba ubah tanggal preset, kata kunci pencarian, atau jenis kegiatan
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {filteredClassifiedAgendas.map((item) => {
-                      const ag = item.agenda;
-                      const hasStore = Boolean(ag.storeCode || ag.storeName);
-
-                      return (
-                        <div
-                          key={ag.id}
-                          className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow p-3.5 flex flex-col justify-between space-y-3"
-                        >
-                          {/* 1. Header Kartu: Tanggal, Jam & Badge Jenis Kegiatan */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <span className="text-xs font-black text-slate-900 block leading-tight">
-                                📅 {ag.date}
-                              </span>
-                              <span className="text-[11px] font-bold text-slate-500 block mt-0.5">
-                                ⏰ {ag.time || '08:00'} - {ag.endTime || '17:00'} WIB
-                              </span>
-                            </div>
-
-                            <span
-                              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
-                            >
-                              {item.isExplicitVisit && <Store className="w-3 h-3 shrink-0" />}
-                              {item.kind === 'MEETING' && <Building2 className="w-3 h-3 shrink-0" />}
-                              {item.kind === 'TRAINING' && <BookOpen className="w-3 h-3 shrink-0" />}
-                              {item.kind === 'LEAVE' && <Coffee className="w-3 h-3 shrink-0" />}
-                              <span>{item.badge.label}</span>
-                            </span>
-                          </div>
-
-                          {/* 2. Baris Tengah: Judul Agenda & Nama Toko/Lokasi */}
-                          <div className="space-y-1.5 py-1 border-y border-slate-100">
-                            <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-snug">
-                              {ag.title}
-                            </h4>
-
-                            {hasStore ? (
-                              <div className="flex items-center gap-1.5 text-xs text-slate-700 font-bold">
-                                <span>📍</span>
-                                {ag.storeCode && (
-                                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 shrink-0">
-                                    {ag.storeCode}
-                                  </span>
-                                )}
-                                <span className="font-black text-slate-900 truncate">
-                                  {ag.storeName || ag.location}
-                                </span>
-                              </div>
-                            ) : (
-                              <p className="text-xs font-medium text-slate-600 truncate">
-                                📍 {ag.location || 'Kantor / Daring'}
-                              </p>
-                            )}
-
-                            {ag.description && (
-                              <p className="text-[11px] text-slate-500 line-clamp-2">
-                                {ag.description}
-                              </p>
-                            )}
-
-                            {ag.kendala && (
-                              <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-[10px] text-amber-900 font-bold flex items-start gap-1.5">
-                                <span className="shrink-0">⚠️</span>
-                                <span className="line-clamp-2">{ag.kendala}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* 3. Footer Kartu: PIC, Status & Tombol Aksi Cepat */}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            {/* PIC & Status */}
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-7 h-7 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                                {ag.pic ? ag.pic.charAt(0).toUpperCase() : '?'}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="block text-[11px] font-black text-slate-800 truncate" title={ag.pic}>
-                                  {ag.pic || 'Unassigned'}
-                                </span>
-                                <div className="flex items-center gap-1 mt-0.5">
-                                  <span className={`w-1.5 h-1.5 rounded-full ${item.status.dot} shrink-0`} />
-                                  <span className="text-[10px] font-bold text-slate-500 truncate">
-                                    {item.status.label}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Tombol Aksi */}
-                            <div className="flex items-center gap-1 shrink-0">
-                              {item.isExplicitVisit && item.report && (
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewingReport(item.report!)}
-                                  title="Pratinjau Laporan PDF"
-                                  className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer active:scale-95"
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingAgenda(ag);
-                                  setIsAgendaModalOpen(true);
-                                }}
-                                title="Edit Agenda"
-                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer active:scale-95"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeletingAgenda(ag)}
-                                title="Hapus Agenda"
-                                className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition cursor-pointer active:scale-95"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Card View Footer Summary */}
-                <div className="p-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between text-xs text-slate-500 font-bold">
-                  <span>
-                    Menampilkan <strong className="text-slate-800">{filteredClassifiedAgendas.length}</strong> kartu agenda
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Mode Kartu Ramping Terpadu
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ============================================================
-            TAB 2: KALENDER INTERAKTIF (Full Month Interactive Matrix)
-            ============================================================ */}
-        {activeTab === 'calendar' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Left 2 Cols: Interactive Calendar Matrix */}
-            <div className="lg:col-span-2 bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-4">
-              {/* Calendar Month Header & Nav */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-black text-slate-900 leading-none">
-                    {calendarMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
-                  </h2>
-                  <p className="text-xs font-bold text-slate-500 mt-1">
-                    Klik pada tanggal untuk melihat agenda kerja
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1));
-                    }}
-                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition cursor-pointer"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = new Date();
-                      setCalendarMonth(now);
-                      setSelectedCalendarDate(formatLocalYmd(now));
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
-                  >
-                    Bulan Ini
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1));
-                    }}
-                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition cursor-pointer"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Day Labels */}
-              <div className="grid grid-cols-7 gap-1 text-center font-black text-[11px] text-slate-400 uppercase py-1 border-b border-slate-100">
-                <span>Sen</span>
-                <span>Sel</span>
-                <span>Rab</span>
-                <span>Kam</span>
-                <span>Jum</span>
-                <span className="text-amber-600">Sab</span>
-                <span className="text-rose-600">Min</span>
-              </div>
-
-              {/* Days Matrix */}
-              <div className="grid grid-cols-7 gap-1.5">
-                {calendarMatrix.map((cell) => {
-                  const dayAgendas = calendarAgendasMap.get(cell.dateStr) || [];
-                  const isSelected = selectedCalendarDate === cell.dateStr;
-                  const isToday = todayIso === cell.dateStr;
-
-                  const visitCount = dayAgendas.filter((i) => i.isExplicitVisit).length;
-                  const nonVisitCount = dayAgendas.filter((i) => !i.isExplicitVisit && i.kind !== 'LEAVE' && i.kind !== 'OFF').length;
-                  const leaveCount = dayAgendas.filter((i) => i.kind === 'LEAVE' || i.kind === 'OFF').length;
-
-                  return (
-                    <button
-                      key={cell.dateStr}
-                      type="button"
-                      onClick={() => setSelectedCalendarDate(cell.dateStr)}
-                      className={`min-h-[72px] sm:min-h-[82px] p-1.5 rounded-xl text-left border flex flex-col justify-between transition cursor-pointer ${
-                        isSelected
-                          ? 'border-slate-900 bg-slate-900 text-white shadow-md'
-                          : isToday
-                          ? 'border-emerald-400 bg-emerald-50/50 text-slate-900'
-                          : cell.isCurrentMonth
-                          ? 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800'
-                          : 'border-slate-100 bg-slate-50/50 text-slate-300'
-                      }`}
-                    >
-                      {/* Top Day Number */}
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={`text-xs font-black w-6 h-6 rounded-full flex items-center justify-center ${
-                            isToday && !isSelected
-                              ? 'bg-emerald-600 text-white'
-                              : isSelected
-                              ? 'text-white'
-                              : 'text-slate-700'
-                          }`}
-                        >
-                          {cell.dayNum}
-                        </span>
-
-                        {dayAgendas.length > 0 && (
-                          <span
-                            className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${
-                              isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-                            }`}
-                          >
-                            {dayAgendas.length}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Micro Dot Indicators */}
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {visitCount > 0 && (
-                          <span
-                            className="inline-block w-2 h-2 rounded-full bg-emerald-500"
-                            title={`${visitCount} Visit Toko`}
-                          />
-                        )}
-                        {nonVisitCount > 0 && (
-                          <span
-                            className="inline-block w-2 h-2 rounded-full bg-blue-500"
-                            title={`${nonVisitCount} Non-Visit (Meeting/Training)`}
-                          />
-                        )}
-                        {leaveCount > 0 && (
-                          <span
-                            className="inline-block w-2 h-2 rounded-full bg-rose-500"
-                            title={`${leaveCount} Cuti/Off`}
-                          />
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Legend */}
-              <div className="flex items-center justify-center gap-4 text-xs font-bold text-slate-500 pt-2 border-t border-slate-100 flex-wrap">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <span>Visit Toko</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                  <span>Meeting / Training</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                  <span>Cuti / Off</span>
-                </span>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  onSwitchToUserView();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <Eye className="w-4 h-4 text-slate-500" />
+                <span>Beralih ke Tampilan Staff</span>
+              </button>
             </div>
 
-            {/* Right 1 Col: Selected Date Agenda List */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-3">
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900 leading-none">
-                      Agenda Tanggal {selectedCalendarDate}
-                    </h3>
-                    <p className="text-xs font-bold text-slate-500 mt-1">
-                      {selectedCalendarAgendas.length} kegiatan terjadwal
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingAgenda(null);
-                      setDefaultDateForModal(selectedCalendarDate);
-                      setIsAgendaModalOpen(true);
-                    }}
-                    className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition active:scale-95 cursor-pointer"
-                    title="Tambah agenda pada tanggal ini"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* List Container */}
-                <div className="divide-y divide-slate-100 mt-2 max-h-[500px] overflow-y-auto no-scrollbar space-y-2">
-                  {selectedCalendarAgendas.length === 0 ? (
-                    <div className="py-12 text-center text-slate-400">
-                      <CalendarDays className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                      <p className="font-bold text-xs text-slate-600">Tidak ada agenda pada tanggal ini</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingAgenda(null);
-                          setDefaultDateForModal(selectedCalendarDate);
-                          setIsAgendaModalOpen(true);
-                        }}
-                        className="mt-3 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
-                      >
-                        + Jadwalkan Kegiatan
-                      </button>
-                    </div>
-                  ) : (
-                    selectedCalendarAgendas.map((item) => {
-                      const ag = item.agenda;
-                      return (
-                        <div key={ag.id} className="pt-2 pb-2 space-y-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className={`text-[9.5px] font-black px-2 py-0.5 rounded-md border ${item.badge.bg} ${item.badge.color} ${item.badge.border}`}
-                            >
-                              {item.badge.label}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-500">
-                              {ag.time || '08:00'} WIB
-                            </span>
-                          </div>
-
-                          <h4 className="text-xs font-black text-slate-900 leading-tight">
-                            {ag.title}
-                          </h4>
-
-                          <div className="flex items-center justify-between text-[11px] text-slate-600">
-                            <span className="font-bold text-slate-700 truncate">
-                              📍 {ag.storeName || ag.location || '-'}
-                            </span>
-                            <span className="font-bold text-slate-500 shrink-0">
-                              👤 {ag.pic}
-                            </span>
-                          </div>
-
-                          {/* Quick Actions */}
-                          <div className="flex items-center justify-end gap-1.5 pt-1">
-                            {item.report && (
-                              <button
-                                type="button"
-                                onClick={() => setPreviewingReport(item.report!)}
-                                className="text-[10px] font-black text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
-                              >
-                                <FileText className="w-3 h-3" />
-                                <span>Lihat Laporan</span>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingAgenda(ag);
-                                setIsAgendaModalOpen(true);
-                              }}
-                              className="text-[10px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-                            >
-                              Edit
-                            </button>
-                            <span className="text-slate-300">•</span>
-                            <button
-                              type="button"
-                              onClick={() => setDeletingAgenda(ag)}
-                              className="text-[10px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
-                            >
-                              Hapus
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
+            <div className="p-2.5 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={onLogout}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Keluar Akun</span>
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ============================================================
-            TAB 3: ANALITIK & REKAP PRODUKTIVITAS TIM
-            ============================================================ */}
-        {activeTab === 'analytics' && (
-          <div className="space-y-4">
-            {/* Top Row: Visual Breakdown Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Card 1: Distribusi Kegiatan */}
-              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black uppercase text-slate-500 tracking-wider">
-                    Distribusi Kegiatan Tim
-                  </h3>
-                  <PieChart className="w-4 h-4 text-slate-400" />
-                </div>
+      {/* ====================================================================
+          GLOBAL MODALS & DRAWERS
+          ==================================================================== */}
+      <AdminScheduleDrawer
+        isOpen={isScheduleDrawerOpen}
+        editingAgenda={editingAgenda}
+        defaultDate={drawerDefaultDate}
+        users={users}
+        masterStores={masterStores}
+        onClose={() => {
+          setIsScheduleDrawerOpen(false);
+          setEditingAgenda(null);
+        }}
+        onSaveSingle={handleSaveSingleSchedule}
+        onSaveBatch={handleSaveBatchSchedule}
+      />
 
-                <div className="space-y-2">
-                  {/* Visit Toko Bar */}
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span className="text-emerald-800 flex items-center gap-1">
-                        <Store className="w-3.5 h-3.5" /> Visit Toko Resmi
-                      </span>
-                      <span className="text-slate-800">
-                        {metrics.visitsCount} ({metrics.total > 0 ? Math.round((metrics.visitsCount / metrics.total) * 100) : 0}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full"
-                        style={{ width: `${metrics.total > 0 ? (metrics.visitsCount / metrics.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Meeting Bar */}
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span className="text-blue-800 flex items-center gap-1">
-                        <Building2 className="w-3.5 h-3.5" /> Meeting & Koordinasi
-                      </span>
-                      <span className="text-slate-800">
-                        {metrics.meetings} ({metrics.total > 0 ? Math.round((metrics.meetings / metrics.total) * 100) : 0}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 rounded-full"
-                        style={{ width: `${metrics.total > 0 ? (metrics.meetings / metrics.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Training Bar */}
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span className="text-cyan-800 flex items-center gap-1">
-                        <BookOpen className="w-3.5 h-3.5" /> Training & Coaching
-                      </span>
-                      <span className="text-slate-800">
-                        {metrics.trainings} ({metrics.total > 0 ? Math.round((metrics.trainings / metrics.total) * 100) : 0}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className="h-full bg-cyan-500 rounded-full"
-                        style={{ width: `${metrics.total > 0 ? (metrics.trainings / metrics.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Cuti & Off Bar */}
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span className="text-rose-800 flex items-center gap-1">
-                        <Coffee className="w-3.5 h-3.5" /> Cuti & Libur Off
-                      </span>
-                      <span className="text-slate-800">
-                        {metrics.leavesCount} ({metrics.total > 0 ? Math.round((metrics.leavesCount / metrics.total) * 100) : 0}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className="h-full bg-rose-500 rounded-full"
-                        style={{ width: `${metrics.total > 0 ? (metrics.leavesCount / metrics.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 2: Kepatuhan Visit Lapangan */}
-              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black uppercase text-slate-500 tracking-wider">
-                    Realisasi Visit Toko
-                  </h3>
-                  <Award className="w-4 h-4 text-emerald-600" />
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-500 flex flex-col items-center justify-center shrink-0">
-                    <span className="text-xl font-black text-emerald-800 leading-none">
-                      {metrics.visitPercentage}%
-                    </span>
-                    <span className="text-[9px] font-bold text-emerald-600 uppercase mt-0.5">Selesai</span>
-                  </div>
-
-                  <div className="space-y-1 text-xs">
-                    <p className="font-black text-slate-800">
-                      {metrics.visitDone} dari {metrics.visitsCount} Visit Selesai
-                    </p>
-                    <p className="text-[11px] font-bold text-slate-500">
-                      • {metrics.visitInProgress} sedang berada di toko
-                    </p>
-                    <p className="text-[11px] font-bold text-slate-500">
-                      • {metrics.visitPending} belum melakukan check-in
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 3: Master Toko Coverage */}
-              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black uppercase text-slate-500 tracking-wider">
-                    Database Master Toko
-                  </h3>
-                  <Store className="w-4 h-4 text-slate-400" />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl font-black text-slate-900 leading-none">
-                      {masterStores.length}
-                    </span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                      Cabang Aktif
-                    </span>
-                  </div>
-                  <p className="text-xs font-medium text-slate-500">
-                    Terdata resmi di seluruh area Jabodetabek, Bandung, dan sekitarnya.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('datahub')}
-                    className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Kelola Master Toko di Data Hub</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Radar Peta GPS Real-time & Status Akses Personel */}
-            <div className="grid grid-cols-1 gap-4">
-              {renderLiveGpsRadarCard()}
-            </div>
-
-            {/* Bottom Row: Team Productivity Leaderboard */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-              <div className="px-4 sm:px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 leading-none">
-                    Rekapitulasi Produktivitas Personil (Team Leaderboard)
-                  </h3>
-                  <p className="text-xs font-bold text-slate-500 mt-1">
-                    Akumulasi beban kerja, visit toko selesai, dan kegiatan operasional
-                  </p>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px] font-black tracking-wider">
-                      <th className="py-2.5 px-3 text-center w-12">Rank</th>
-                      <th className="py-2.5 px-3">Nama Personil</th>
-                      <th className="py-2.5 px-3 text-center">Total Agenda</th>
-                      <th className="py-2.5 px-3 text-center">Visit Selesai / Total</th>
-                      <th className="py-2.5 px-3 text-center">Meeting</th>
-                      <th className="py-2.5 px-3 text-center">Training</th>
-                      <th className="py-2.5 px-3 text-center">Cuti / Off</th>
-                      <th className="py-2.5 px-3 min-w-[120px]">Tingkat Realisasi Visit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold">
-                    {teamLeaderboard.map((person, idx) => (
-                      <tr key={person.name} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-2.5 px-3 text-center font-black text-slate-400">
-                          #{idx + 1}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                              {person.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="font-black text-slate-900 block leading-tight">{person.name}</span>
-                              {(() => {
-                                const p = presenceMap.get(person.name.toLowerCase().trim());
-                                const st = getUserPresenceDetailedStatus(p, now);
-                                return (
-                                  <span
-                                    className={`inline-flex items-center gap-1 text-[9px] font-bold mt-0.5 ${
-                                      st.isOnline ? 'text-emerald-700' : 'text-slate-400'
-                                    }`}
-                                    title={st.timeDetail}
-                                  >
-                                    <span
-                                      className={`w-1.5 h-1.5 rounded-full ${st.dotColor} ${
-                                        st.isOnline ? 'animate-pulse' : ''
-                                      }`}
-                                    />
-                                    {st.summaryText}
-                                  </span>
-                                );
-                              })()}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-black text-slate-800">
-                          {person.total}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="text-emerald-700 font-black">
-                            {person.visitDone}
-                          </span>{' '}
-                          / <span className="text-slate-500">{person.visits}</span>
-                        </td>
-                        <td className="py-2.5 px-3 text-center text-blue-700">
-                          {person.meetings}
-                        </td>
-                        <td className="py-2.5 px-3 text-center text-cyan-700">
-                          {person.trainings}
-                        </td>
-                        <td className="py-2.5 px-3 text-center text-rose-700">
-                          {person.leaves}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className="h-full bg-emerald-500 rounded-full"
-                                style={{ width: `${person.completionRate}%` }}
-                              />
-                            </div>
-                            <span className="text-[11px] font-black text-slate-700 w-9 text-right">
-                              {person.completionRate}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ============================================================
-            TAB 4: MONITORING VISIT TOKO & LAPORAN QSC
-            Khusus Kunjungan Toko Resmi (Wajib Geofence & Laporan)
-            ============================================================ */}
-        {activeTab === 'monitoring' && (
-          <div className="space-y-4">
-            {/* Top Grid: Monitoring Briefing & Live GPS Radar */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-              {/* Sisi Kiri: Briefing & Summary Audit */}
-              <div className="lg:col-span-7 bg-emerald-900 text-white rounded-3xl p-5 shadow-xs flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-300 border border-emerald-400/30">
-                        <ShieldCheck className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-black">
-                          Monitoring Kunjungan Toko Resmi FMCU
-                        </h2>
-                        <span className="text-[10px] text-emerald-300 font-semibold">
-                          Geofence Satelit 1–50m • Actual IN/OUT Otomatis
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={loadReports}
-                      disabled={isLoadingReports}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition active:scale-95 cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingReports ? 'animate-spin' : ''}`} />
-                      <span className="hidden sm:inline">Segarkan Laporan</span>
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-emerald-100/90 leading-relaxed mt-2">
-                    Menampilkan hanya agenda yang berstatus <strong>Visit Toko Resmi</strong>. Presensi actual IN/OUT terekam otomatis via radius 1–50m.
-                  </p>
-                </div>
-
-                {/* Quick Metric Pills */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 mt-3 border-t border-emerald-800/80 text-xs">
-                  <div className="p-2.5 rounded-2xl bg-white/10 border border-white/10">
-                    <span className="text-[10px] font-bold text-emerald-200 block">Total Visit</span>
-                    <span className="text-base font-black text-white mt-0.5 block">
-                      {allClassifiedAgendas.filter((i) => i.isExplicitVisit).length}
-                    </span>
-                  </div>
-                  <div className="p-2.5 rounded-2xl bg-white/10 border border-white/10">
-                    <span className="text-[10px] font-bold text-emerald-200 block">Visit Selesai</span>
-                    <span className="text-base font-black text-emerald-300 mt-0.5 block">
-                      {metrics.visitDone}
-                    </span>
-                  </div>
-                  <div className="p-2.5 rounded-2xl bg-white/10 border border-white/10">
-                    <span className="text-[10px] font-bold text-emerald-200 block">Sedang di Toko</span>
-                    <span className="text-base font-black text-teal-200 mt-0.5 block">
-                      {metrics.visitInProgress}
-                    </span>
-                  </div>
-                  <div className="p-2.5 rounded-2xl bg-white/10 border border-white/10">
-                    <span className="text-[10px] font-bold text-emerald-200 block">Belum Sesi</span>
-                    <span className="text-base font-black text-amber-200 mt-0.5 block">
-                      {metrics.visitPending}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sisi Kanan: Live GPS Radar Peta */}
-              <div className="lg:col-span-5">
-                {renderLiveGpsRadarCard()}
-              </div>
-            </div>
-
-            {/* Table of Store Visits */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-black tracking-wider">
-                      <th className="py-2.5 px-3 text-center w-10">No</th>
-                      <th className="py-2.5 px-3">Tanggal</th>
-                      <th className="py-2.5 px-3">PIC Lapangan</th>
-                      <th className="py-2.5 px-3">Kode & Nama Toko</th>
-                      <th className="py-2.5 px-3 text-center">Actual IN (Auto)</th>
-                      <th className="py-2.5 px-3 text-center">Actual OUT (Auto)</th>
-                      <th className="py-2.5 px-3 text-center">Status Audit</th>
-                      <th className="py-2.5 px-3 text-center">Laporan QSC</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold">
-                    {allClassifiedAgendas
-                      .filter((i) => i.isExplicitVisit)
-                      .map((item, idx) => {
-                        const ag = item.agenda;
-                        const inTime = ag.actualIn || item.report?.actualIn || '-';
-                        const outTime = ag.actualOut || item.report?.actualOut || '-';
-
-                        return (
-                          <tr key={ag.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-2.5 px-3 text-center text-slate-400 font-black">
-                              {idx + 1}
-                            </td>
-                            <td className="py-2.5 px-3 whitespace-nowrap text-slate-900 font-black">
-                              {ag.date}
-                            </td>
-                            <td className="py-2.5 px-3 whitespace-nowrap">
-                              <div className="min-w-0">
-                                <span className="font-black text-slate-900 block leading-tight">{ag.pic}</span>
-                                {(() => {
-                                  const p = presenceMap.get(ag.pic.toLowerCase().trim());
-                                  const st = getUserPresenceDetailedStatus(p, now);
-                                  return (
-                                    <span
-                                      className={`inline-flex items-center gap-1 text-[9px] font-bold mt-0.5 ${
-                                        st.isOnline ? 'text-emerald-700' : 'text-slate-400'
-                                      }`}
-                                      title={st.timeDetail}
-                                    >
-                                      <span
-                                        className={`w-1.5 h-1.5 rounded-full ${st.dotColor} ${
-                                          st.isOnline ? 'animate-pulse' : ''
-                                        }`}
-                                      />
-                                      {st.summaryText}
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-3">
-                              <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 mr-1.5">
-                                {ag.storeCode || '3006'}
-                              </span>
-                              <span className="font-black text-slate-900">
-                                {ag.storeName || ag.location}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-center font-mono">
-                              {inTime !== '-' ? (
-                                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                  {inTime} WIB
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">Belum IN</span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-center font-mono">
-                              {outTime !== '-' ? (
-                                <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                  {outTime} WIB
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">Belum OUT</span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-center">
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black border ${item.status.bg} ${item.status.color} ${item.status.border}`}
-                              >
-                                {item.status.label}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-center">
-                              {item.report ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewingReport(item.report!)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition cursor-pointer shadow-xs active:scale-95"
-                                >
-                                  <FileText className="w-3 h-3" />
-                                  <span>Lihat PDF</span>
-                                </button>
-                              ) : (
-                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                  Belum Submit
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ============================================================
-            TAB 5: DATA HUB & EXCEL SYNC (Schedule, Master Toko, R23)
-            ============================================================ */}
-        {activeTab === 'datahub' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-            {/* Box 1: Excel Schedule Sync */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-black">
-                  <CalendarDays className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-black uppercase text-slate-800">
-                    1. Sinkronisasi Jadwal Kerja
-                  </h3>
-                  <p className="text-[11px] font-medium text-slate-500">
-                    Upload, Preview &amp; Cloud Sync (D1 + GAS)
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx, .xls"
-                  onChange={handleExcelFileSelect}
-                  className="hidden"
-                />
-
-                <button
-                  type="button"
-                  disabled={isParsingExcel || isExecutingImport}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
-                >
-                  {isParsingExcel ? (
-                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5" />
-                  )}
-                  <span>{isParsingExcel ? 'Membaca File Excel...' : 'Pilih File Excel Jadwal...'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowScheduleUploadModal(true)}
-                  className="w-full py-2 px-3 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Upload dengan Preview Multi-Sheet</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleDownloadScheduleTemplate}
-                  className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  <span>Download Template Excel</span>
-                </button>
-
-                {importFeedback && (
-                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[11px] font-bold text-rose-700">
-                    {importFeedback}
-                  </div>
-                )}
-
-                {scheduleSyncFeedback && (
-                  <div
-                    className={`p-3 rounded-xl border text-[11px] space-y-2 ${
-                      scheduleSyncFeedback.ok
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                        : 'bg-amber-50 border-amber-300 text-amber-900'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      {scheduleSyncFeedback.ok ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      )}
-                      <div>
-                        <p className="font-black leading-snug">{scheduleSyncFeedback.title}</p>
-                        <p className="font-medium opacity-90 mt-0.5">{scheduleSyncFeedback.detail}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFilterDatePreset('ALL');
-                          setFilterKind('ALL');
-                          setFilterPic('ALL');
-                          setSearchQuery('');
-                          setActiveTab('table');
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-black text-white text-[10px] font-black transition cursor-pointer"
-                      >
-                        Lihat di Tabel Agenda
-                      </button>
-                      {(!scheduleSyncFeedback.ok || scheduleSyncFeedback.queuedOffline) && (
-                        <button
-                          type="button"
-                          disabled={isRetryingScheduleSync}
-                          onClick={handleRetryPendingScheduleSync}
-                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black transition cursor-pointer disabled:opacity-50"
-                        >
-                          {isRetryingScheduleSync ? 'Menyinkronkan...' : 'Coba Sinkronkan Ulang'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Pending offline queue warning if existing before new action */}
-                {!scheduleSyncFeedback && getPendingSchedulesQueue() && (
-                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 space-y-1.5">
-                    <p className="font-black flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Ada jadwal menunggu sinkronisasi ke Cloud</span>
-                    </p>
-                    <button
-                      type="button"
-                      disabled={isRetryingScheduleSync}
-                      onClick={handleRetryPendingScheduleSync}
-                      className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black transition cursor-pointer"
-                    >
-                      {isRetryingScheduleSync ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Summary Section if parsed */}
-                {excelSummary && (
-                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
-                    <p className="text-xs font-black text-emerald-900">
-                      File Siap Diimpor: {excelSummary.agendas.length} Agenda
-                    </p>
-                    {excelFile && (
-                      <p className="text-[10px] font-bold text-emerald-700 truncate">
-                        {excelFile.name} • {excelSummary.sheetName}
-                      </p>
-                    )}
-                    <div className="text-[11px] text-emerald-800 space-y-0.5">
-                      <p>• {excelSummary.stats.visitCount} Visit Toko Resmi</p>
-                      <p>• {excelSummary.stats.nonStoreAgendaCount} Agenda Non-Visit</p>
-                      <p>• {excelSummary.stats.cutiCount + excelSummary.stats.offCount} Cuti &amp; Off</p>
-                    </div>
-
-                    <div className="flex items-center gap-3 pt-1">
-                      <label className="text-[11px] font-bold text-emerald-950 flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="importMode"
-                          checked={importMode === 'merge'}
-                          disabled={isExecutingImport}
-                          onChange={() => setImportMode('merge')}
-                        />
-                        Gabung
-                      </label>
-                      <label className="text-[11px] font-bold text-emerald-950 flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="importMode"
-                          checked={importMode === 'replace'}
-                          disabled={isExecutingImport}
-                          onChange={() => setImportMode('replace')}
-                        />
-                        Timpa Semua
-                      </label>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={isExecutingImport}
-                      onClick={handleExecuteImport}
-                      className="w-full py-2 rounded-lg bg-emerald-700 text-white text-xs font-black hover:bg-emerald-800 transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
-                    >
-                      {isExecutingImport ? (
-                        <>
-                          <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Menyimpan &amp; Sinkronisasi Cloud...</span>
-                        </>
-                      ) : (
-                        <span>Eksekusi Impor &amp; Sync Cloud</span>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Box 2: Master Toko (Durable IndexedDB + Excel Update + Cloud Sync) */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-black shrink-0">
-                    <Store className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black uppercase text-slate-800">
-                      2. Master Toko ({masterStores.length} Cabang)
-                    </h3>
-                    <p className="text-[11px] font-medium text-slate-500">
-                      Database Koordinat &amp; Info Toko
-                    </p>
-                  </div>
-                </div>
-
-                {/* Cloud Sync Status Badge */}
-                {masterStoreMeta?.cloudSynced ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black shrink-0">
-                    <Cloud className="w-3 h-3" />
-                    <span>Cloud OK</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold shrink-0">
-                    <Database className="w-3 h-3" />
-                    <span>Lokal</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Metadata Badge */}
-              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1 text-[11px]">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-600">Total Database</span>
-                  <span className="font-black text-slate-900">
-                    {masterStores.length} Toko {masterStoreMeta?.version ? `• v${masterStoreMeta.version}` : ''}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span>Terakhir diperbarui</span>
-                  <span className="font-bold text-slate-700">
-                    {masterStoreMeta?.updatedAt
-                      ? new Date(masterStoreMeta.updatedAt).toLocaleString('id-ID', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : 'Seed Bawaan'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span>Diperbarui oleh</span>
-                  <span className="font-bold text-slate-700 truncate max-w-[160px]">
-                    {masterStoreMeta?.updatedBy || 'Sistem Awal'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-1">
-                <input
-                  ref={masterFileInputRef}
-                  type="file"
-                  accept=".xlsx, .xls"
-                  onChange={handleMasterExcelFileSelect}
-                  className="hidden"
-                />
-
-                {/* Primary Update Master Toko via Excel Button */}
-                <button
-                  type="button"
-                  disabled={isParsingMasterExcel || isExecutingMasterUpdate}
-                  onClick={() => masterFileInputRef.current?.click()}
-                  className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  {isParsingMasterExcel ? (
-                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5" />
-                  )}
-                  <span>
-                    {isParsingMasterExcel ? 'Membaca Excel Toko...' : 'Update Master Toko via Excel'}
-                  </span>
-                </button>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDownloadMasterTemplate}
-                    className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
-                    <span>Template (.xlsx)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleDownloadMasterStores}
-                    className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5 shrink-0" />
-                    <span>Export (.xlsx)</span>
-                  </button>
-                </div>
-
-                {/* Master Store Feedback Banner */}
-                {masterFeedback && (
-                  <div
-                    className={`p-3 rounded-xl border text-[11px] space-y-1.5 ${
-                      masterFeedback.ok
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                        : 'bg-amber-50 border-amber-300 text-amber-900'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      {masterFeedback.ok ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      )}
-                      <div>
-                        <p className="font-black leading-snug">{masterFeedback.title}</p>
-                        <p className="font-medium opacity-90 mt-0.5">{masterFeedback.detail}</p>
-                      </div>
-                    </div>
-
-                    {!masterFeedback.cloudSynced && (
-                      <button
-                        type="button"
-                        disabled={isSyncingMasterCloud}
-                        onClick={handleRetryMasterCloudSync}
-                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black transition cursor-pointer disabled:opacity-50"
-                      >
-                        {isSyncingMasterCloud ? 'Menyinkronkan...' : 'Sinkronkan Ulang ke Cloud'}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Parsed Preview & Mode Selector */}
-                {masterParseResult && masterLivePreview && (
-                  <div className="p-3 rounded-xl bg-teal-50/70 border border-teal-200 space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-black text-teal-950 truncate">
-                        {masterExcelFile?.name || 'Preview Excel Toko'}
-                      </p>
-                      <button
-                        type="button"
-                        disabled={isExecutingMasterUpdate}
-                        onClick={() => {
-                          setMasterExcelFile(null);
-                          setMasterParseResult(null);
-                        }}
-                        className="text-[10px] font-bold text-slate-500 hover:text-rose-600 cursor-pointer"
-                      >
-                        Batal
-                      </button>
-                    </div>
-
-                    {/* Multi-sheet selector */}
-                    {masterParseResult.availableSheets.length > 1 && (
-                      <div className="flex flex-wrap gap-1">
-                        {masterParseResult.availableSheets.map((sh) => (
-                          <button
-                            key={sh}
-                            type="button"
-                            onClick={() => handleMasterSheetChange(sh)}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer ${
-                              masterSelectedSheet === sh
-                                ? 'bg-teal-700 text-white'
-                                : 'bg-white text-slate-600 border border-slate-200'
-                            }`}
-                          >
-                            {sh}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Preview Stats Grid */}
-                    <div className="grid grid-cols-3 gap-1.5 text-center">
-                      <div className="p-1.5 rounded-lg bg-white border border-emerald-200">
-                        <span className="text-[9px] font-bold text-emerald-700 block uppercase">Baru</span>
-                        <span className="text-sm font-black text-emerald-900">
-                          +{masterLivePreview.addedCount}
-                        </span>
-                      </div>
-                      <div className="p-1.5 rounded-lg bg-white border border-blue-200">
-                        <span className="text-[9px] font-bold text-blue-700 block uppercase">Diperbarui</span>
-                        <span className="text-sm font-black text-blue-900">
-                          ~{masterLivePreview.updatedCount}
-                        </span>
-                      </div>
-                      <div className="p-1.5 rounded-lg bg-white border border-slate-200">
-                        <span className="text-[9px] font-bold text-slate-600 block uppercase">Total Akhir</span>
-                        <span className="text-sm font-black text-slate-900">
-                          {masterLivePreview.stores.length}
-                        </span>
-                      </div>
-                    </div>
-
-                    {masterLivePreview.invalidCount > 0 && (
-                      <p className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2 py-1 rounded-lg">
-                        ⚠️ {masterLivePreview.invalidCount} baris dilewati (kode/nama kosong atau koordinat tidak valid)
-                      </p>
-                    )}
-
-                    {/* Mini Preview Table (first 5 incoming rows) */}
-                    {masterParseResult.incomingStores.length > 0 && (
-                      <div className="max-h-32 overflow-y-auto rounded-lg border border-teal-200 bg-white">
-                        <table className="w-full text-left text-[10px] border-collapse">
-                          <thead className="bg-slate-100 text-slate-600 font-black uppercase sticky top-0">
-                            <tr>
-                              <th className="py-1 px-2">Kode</th>
-                              <th className="py-1 px-2">Nama Toko</th>
-                              <th className="py-1 px-2">Kota</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {masterParseResult.incomingStores.slice(0, 6).map((st, idx) => (
-                              <tr key={`${st.code || idx}-${idx}`}>
-                                <td className="py-1 px-2 font-black text-slate-800 whitespace-nowrap">
-                                  {st.code || '-'}
-                                </td>
-                                <td className="py-1 px-2 font-semibold text-slate-700 truncate max-w-[120px]">
-                                  {st.name || '-'}
-                                </td>
-                                <td className="py-1 px-2 text-slate-500 truncate max-w-[80px]">
-                                  {st.city || '-'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    {/* Mode Selector: Merge vs Replace */}
-                    <div className="flex items-center gap-3 pt-0.5">
-                      <label className="text-[11px] font-bold text-teal-950 flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="masterImportMode"
-                          checked={masterImportMode === 'merge'}
-                          disabled={isExecutingMasterUpdate}
-                          onChange={() => setMasterImportMode('merge')}
-                        />
-                        Merge / Update
-                      </label>
-                      <label className="text-[11px] font-bold text-rose-900 flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="masterImportMode"
-                          checked={masterImportMode === 'replace'}
-                          disabled={isExecutingMasterUpdate}
-                          onChange={() => setMasterImportMode('replace')}
-                        />
-                        Replace Semua
-                      </label>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={isExecutingMasterUpdate || masterLivePreview.stores.length === 0}
-                      onClick={handleExecuteMasterStoreUpdate}
-                      className="w-full py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-black transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
-                    >
-                      {isExecutingMasterUpdate ? (
-                        <>
-                          <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Menyimpan &amp; Sinkronisasi Cloud...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
-                          <span>Eksekusi Update ({masterLivePreview.stores.length} Toko)</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
-
-                <p className="text-[11px] text-slate-500">
-                  Pembaruan tersimpan permanen di IndexedDB + Cloudflare D1 + GAS Vault sehingga otomatis diterima seluruh perangkat tim.
-                </p>
-              </div>
-            </div>
-
-            {/* Box 3: Holding Time Standards (R23) */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-black">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-black uppercase text-slate-800">
-                    3. Standar Holding Time R23
-                  </h3>
-                  <p className="text-[11px] font-medium text-slate-500">
-                    71 Produk & 9 Kategori Resmi
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowHoldingTimeModal(true)}
-                  className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Lihat Standar Holding Time R23</span>
-                </button>
-
-                <p className="text-[11px] text-slate-500">
-                  Nomor Dokumen: STD/FMI/PD-QC/001/R23. Mencakup seluruh parameter holding time makanan, minuman, dan bakery.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* ============================================================
-          MODAL: TAMBAH / EDIT AGENDA (Domain-Aware Smart Form)
-          ============================================================ */}
-      {isAgendaModalOpen && (
-        <AgendaFormModal
-          isOpen={isAgendaModalOpen}
-          editingAgenda={editingAgenda}
-          defaultDate={defaultDateForModal}
-          users={users}
-          masterStores={masterStores}
-          onClose={() => {
-            setIsAgendaModalOpen(false);
-            setEditingAgenda(null);
-          }}
-          onSave={(saved) => {
-            if (editingAgenda) {
-              onUpdateAgenda(saved);
-            } else {
-              onAddAgenda(saved);
+      {showScheduleUploadModal && (
+        <ExcelScheduleUploadModal
+          existingUsers={users}
+          currentAgendasCount={agendas.length}
+          onClose={() => setShowScheduleUploadModal(false)}
+          onImportSuccess={async (updatedUsers, newAgendas, mode) => {
+            const res = await onImportExcel(updatedUsers, newAgendas, mode);
+            if (res && typeof res === 'object' && 'ok' in res) {
+              setSyncFeedback({
+                ok: res.ok && !res.queuedOffline,
+                title:
+                  res.ok && !res.queuedOffline
+                    ? `Berhasil import & sinkronisasi ${newAgendas.length} agenda`
+                    : `Tersimpan lokal (${newAgendas.length} agenda), sinkronisasi tertunda`,
+                detail: `D1: ${res.d1Synced ? 'OK' : 'Pending'} • GAS: ${
+                  res.gasSynced ? 'OK' : 'Latar'
+                }`,
+              });
             }
-            setIsAgendaModalOpen(false);
-            setEditingAgenda(null);
+            return res;
           }}
         />
       )}
 
-      {/* ============================================================
-          MODAL: KONFIRMASI HAPUS AGENDA
-          ============================================================ */}
       {deletingAgenda && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 shadow-xl border border-slate-200">
-            <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
-              <Trash2 className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+            onClick={() => setDeletingAgenda(null)}
+          />
+          <div className="relative z-10 w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-5 shadow-xl space-y-3 admin-sheet-up">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Hapus Jadwal Agenda?</h3>
+                <p className="text-[11px] text-slate-500">Tindakan ini akan disinkronkan ke cloud.</p>
+              </div>
             </div>
-            <div className="text-center">
-              <h3 className="text-sm font-black text-slate-900">Konfirmasi Hapus Agenda</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Apakah Anda yakin ingin menghapus agenda{' '}
-                <strong className="text-slate-800">"{deletingAgenda.title}"</strong> ({deletingAgenda.date})? Tindakan ini tidak dapat dibatalkan.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 pt-2">
+            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2">
+              <strong className="text-slate-900">{deletingAgenda.title}</strong>
+              <br />
+              {deletingAgenda.pic} • {deletingAgenda.date}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setDeletingAgenda(null)}
-                className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 cursor-pointer"
               >
                 Batal
               </button>
@@ -3625,7 +907,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   onDeleteAgenda(deletingAgenda.id);
                   setDeletingAgenda(null);
                 }}
-                className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold cursor-pointer"
               >
                 Hapus
               </button>
@@ -3634,325 +916,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         </div>
       )}
 
-      {/* ============================================================
-          MODAL: PREVIEW LAPORAN VISIT PDF (Executive Mode)
-          ============================================================ */}
-      {previewingReport && (
+      {previewModalState && (
         <ExecutiveReportPreviewModal
-          isOpen={Boolean(previewingReport)}
-          reportData={previewingReport}
-          onClose={() => setPreviewingReport(null)}
+          isOpen={Boolean(previewModalState)}
+          reportData={previewModalState.reportData}
+          gdrivePdfUrl={previewModalState.gdrivePdfUrl}
+          gdriveEmbedUrl={previewModalState.gdriveEmbedUrl}
+          storeFolderName={previewModalState.storeFolderName}
+          pdfFileName={previewModalState.pdfFileName}
+          gdriveSavedDate={previewModalState.gdriveSavedDate}
+          onClose={() => setPreviewModalState(null)}
         />
       )}
 
-      {/* ============================================================
-          MODAL: STANDAR HOLDING TIME R23
-          ============================================================ */}
       {showHoldingTimeModal && (
         <HoldingTimeR23Modal
           isOpen={showHoldingTimeModal}
           onClose={() => setShowHoldingTimeModal(false)}
         />
       )}
-
-      {/* ============================================================
-          MODAL: UPLOAD SCHEDULE EXCEL (MULTI-SHEET PREVIEW)
-          ============================================================ */}
-      {showScheduleUploadModal && (
-        <ExcelScheduleUploadModal
-          existingUsers={users}
-          currentAgendasCount={agendas.length}
-          onClose={() => setShowScheduleUploadModal(false)}
-          onImportSuccess={async (updatedUsers, newAgendas, mode) => {
-            const res = await onImportExcel(updatedUsers, newAgendas, mode);
-            if (res && typeof res === 'object' && 'ok' in res) {
-              setScheduleSyncFeedback({
-                ok: res.ok && !res.queuedOffline,
-                queuedOffline: res.queuedOffline,
-                title:
-                  res.ok && !res.queuedOffline
-                    ? `Berhasil menyimpan & sinkronisasi ${newAgendas.length} agenda ke Cloud!`
-                    : `Tersimpan lokal (${newAgendas.length} agenda), sinkronisasi Cloud tertunda`,
-                detail: `D1: ${res.d1Synced ? 'OK' : 'Tertunda'} • GAS: ${res.gasSynced ? 'OK' : 'Tertunda'}${
-                  res.error ? ` — ${res.error}` : ''
-                }`,
-              });
-            }
-            return res;
-          }}
-        />
-      )}
-
-      {/* Footer */}
-      <DeveloperFooter />
-    </div>
-  );
-};
-
-// ============================================================================
-// SUB-COMPONENT: AGENDA FORM MODAL (DOMAIN-AWARE)
-// ============================================================================
-interface AgendaFormModalProps {
-  isOpen: boolean;
-  editingAgenda: ScheduleAgenda | null;
-  defaultDate?: string;
-  users: User[];
-  masterStores: MasterStore[];
-  onClose: () => void;
-  onSave: (agenda: ScheduleAgenda) => void;
-}
-
-const AgendaFormModal: React.FC<AgendaFormModalProps> = ({
-  isOpen,
-  editingAgenda,
-  defaultDate,
-  users,
-  masterStores,
-  onClose,
-  onSave,
-}) => {
-  const [title, setTitle] = useState(editingAgenda?.title || '');
-  const [date, setDate] = useState(editingAgenda?.date || defaultDate || formatLocalYmd());
-  const [time, setTime] = useState(editingAgenda?.time || '08:00');
-  const [endTime, setEndTime] = useState(editingAgenda?.endTime || '17:00');
-  const [category, setCategory] = useState<ScheduleCategory>(editingAgenda?.category || 'VISIT');
-  const [pic, setPic] = useState(editingAgenda?.pic || (users[0]?.name || ''));
-  const [selectedStoreCode, setSelectedStoreCode] = useState(editingAgenda?.storeCode || '');
-  const [customLocation, setCustomLocation] = useState(editingAgenda?.location || '');
-  const [description, setDescription] = useState(editingAgenda?.description || '');
-  const [completed, setCompleted] = useState(Boolean(editingAgenda?.completed));
-
-  // Auto-detect if title is explicit visit
-  const isVisitCategory = category === 'VISIT';
-
-  // Handle store select
-  const handleStoreChange = (code: string) => {
-    setSelectedStoreCode(code);
-    const store = masterStores.find((s) => s.code === code);
-    if (store) {
-      if (!title || title.startsWith('Visit ')) {
-        setTitle(`Visit Toko ${store.name}`);
-      }
-      setCustomLocation(store.name);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !date) {
-      alert('Mohon isi Judul Agenda dan Tanggal');
-      return;
-    }
-
-    const matchedStore = masterStores.find((s) => s.code === selectedStoreCode);
-
-    const newAgenda: ScheduleAgenda = {
-      id: editingAgenda?.id || `ag-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      title: title.trim(),
-      date,
-      time: time || '08:00',
-      endTime: endTime || '17:00',
-      category,
-      location: matchedStore ? matchedStore.name : customLocation || 'Kantor Pusat',
-      pic: pic || 'Unassigned',
-      storeCode: matchedStore ? matchedStore.code : undefined,
-      storeName: matchedStore ? matchedStore.name : undefined,
-      storeType: matchedStore ? matchedStore.type : undefined,
-      description: description.trim(),
-      tags: [category.toLowerCase()],
-      completed,
-    };
-
-    onSave(newAgenda);
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div>
-            <h3 className="text-base font-black text-slate-900 leading-none">
-              {editingAgenda ? 'Edit Agenda Kerja' : 'Tambah Agenda Kerja Baru'}
-            </h3>
-            <p className="text-xs font-bold text-slate-500 mt-1">
-              FamilyMart Management Activity Form
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
-          {/* Row 1: Kategori Kegiatan */}
-          <div>
-            <label className="block font-black text-slate-700 mb-1">Jenis Kegiatan *</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ScheduleCategory)}
-              className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-            >
-              <option value="VISIT">🏪 Visit Toko Resmi (Wajib Presensi & Laporan QSC)</option>
-              <option value="MEETING">🏢 Meeting / Rapat / Koordinasi</option>
-              <option value="TRAINING">📚 Training / Coaching / Shadowing</option>
-              <option value="OPERATION">🛠️ Operasional Toko / Maintenance / Opname</option>
-              <option value="NSO">✨ NSO (New Store Opening)</option>
-              <option value="AUDIT">🛡️ Audit Investigasi</option>
-              <option value="WORK_PLAN">📋 Work Plan / Tugas Admin</option>
-              <option value="CUTI">☕ Cuti / Izin / Sakit</option>
-              <option value="OFF">💤 Off / Hari Libur</option>
-            </select>
-            {!isVisitCategory && (
-              <p className="text-[11px] font-bold text-slate-500 mt-1">
-                ℹ️ Agenda non-visit tidak mewajibkan check-in radius toko atau pembuatan laporan QSC.
-              </p>
-            )}
-          </div>
-
-          {/* Row 2: Store Picker (If Visit or Store Operation) */}
-          {isVisitCategory ? (
-            <div>
-              <label className="block font-black text-slate-700 mb-1">Pilih Toko FMCU (Master 610 Toko) *</label>
-              <select
-                value={selectedStoreCode}
-                onChange={(e) => handleStoreChange(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-              >
-                <option value="">-- Pilih Toko FamilyMart --</option>
-                {masterStores.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    [{s.code}] {s.name} ({s.type || 'CVS'})
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div>
-              <label className="block font-black text-slate-700 mb-1">Lokasi / Ruang / Keterangan Tempat</label>
-              <input
-                type="text"
-                value={customLocation}
-                onChange={(e) => setCustomLocation(e.target.value)}
-                placeholder="Misal: Kantor Pusat, Ruang Meeting Lt. 3, atau Zoom Online"
-                className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-              />
-            </div>
-          )}
-
-          {/* Row 3: Judul Agenda */}
-          <div>
-            <label className="block font-black text-slate-700 mb-1">Judul Agenda Kegiatan *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Misal: Visit Store BDG R.E Martadinata atau Training Barista Batch 3"
-              required
-              className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-            />
-          </div>
-
-          {/* Row 4: Tanggal & Waktu */}
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="block font-black text-slate-700 mb-1">Tanggal *</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-                className="w-full p-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block font-black text-slate-700 mb-1">Mulai</label>
-              <input
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="w-full p-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block font-black text-slate-700 mb-1">Selesai</label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-full p-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Row 5: PIC & Status */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block font-black text-slate-700 mb-1">Personil (PIC) *</label>
-              <select
-                value={pic}
-                onChange={(e) => setPic(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-              >
-                {users.map((u) => (
-                  <option key={u.name} value={u.name}>
-                    {u.name} ({u.role || 'Staff'})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-black text-slate-700 mb-1">Status Selesai</label>
-              <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={completed}
-                  onChange={(e) => setCompleted(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                />
-                <span>Tandai Selesai</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Row 6: Deskripsi / Catatan */}
-          <div>
-            <label className="block font-black text-slate-700 mb-1">Catatan / Detail Instruksi</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Catatan tambahan, agenda pembahasan, atau poin fokus pemeriksaan..."
-              rows={2}
-              className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none"
-            />
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition cursor-pointer"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black shadow-xs transition active:scale-95 cursor-pointer"
-            >
-              Simpan Agenda
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 };
