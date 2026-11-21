@@ -16,6 +16,8 @@ import {
   FileSpreadsheet,
   X,
   RefreshCw,
+  SlidersHorizontal,
+  MoreHorizontal,
 } from 'lucide-react';
 import { ScheduleAgenda, User, VisitReportData } from '../../types';
 import {
@@ -26,6 +28,7 @@ import {
   formatLocalYmd,
 } from './adminTypes';
 import { exportScheduleToTemplateExcel } from '../../services/scheduleExcelService';
+import { AdminMobileSheet } from './AdminMobileSheet';
 
 interface AdminAgendaSheetViewProps {
   classifiedAgendas: ClassifiedAgenda[];
@@ -77,6 +80,8 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showMobileFilter, setShowMobileFilter] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
 
   const exportRef = useRef<HTMLDivElement>(null);
 
@@ -252,12 +257,13 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
     exportRowsToExcel(rows, 'Jadwal Agenda FMCU', `FMCU_Jadwal_Agenda_${todayYmd}.xlsx`);
   };
 
-  const hasActiveFilters =
-    Boolean(search.trim()) ||
-    dateScope !== 'all' ||
-    selectedPic !== 'ALL' ||
-    selectedKind !== 'ALL' ||
-    selectedStatus !== 'ALL';
+  const activeFilterCount =
+    (dateScope !== 'all' ? 1 : 0) +
+    (selectedPic !== 'ALL' ? 1 : 0) +
+    (selectedKind !== 'ALL' ? 1 : 0) +
+    (selectedStatus !== 'ALL' ? 1 : 0);
+
+  const hasActiveFilters = Boolean(search.trim()) || activeFilterCount > 0;
 
   const resetFilters = () => {
     setSearch('');
@@ -310,10 +316,99 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
         </div>
       )}
 
-      {/* Main Flat Spreadsheet Sheet Container */}
-      <div className="bg-white border border-slate-200 rounded-xl flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* Top Row: Compact Inline Stats + Primary Actions (NO duplicate buttons) */}
-        <div className="px-3.5 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 bg-white">
+      {/* Main Flat Spreadsheet Sheet Container (edge-to-edge on mobile) */}
+      <div className="bg-white border-y md:border border-slate-200 rounded-none md:rounded-xl flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* ============================================================
+            MOBILE ULTRA-CLEAN SINGLE-ROW TOOLBAR (ZERO STACKED BUTTONS)
+            ============================================================ */}
+        <div className="md:hidden border-b border-slate-200 bg-white shrink-0">
+          <div className="px-3 py-2 flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari toko, PIC, agenda..."
+                className="w-full h-9 pl-8 pr-6 rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-900"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMobileFilter(true)}
+              className={`relative h-9 px-2.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer ${
+                activeFilterCount > 0
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-slate-200'
+              }`}
+              title="Filter Jadwal"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              {activeFilterCount > 0 && (
+                <span className="font-mono text-[10.5px] font-bold">{activeFilterCount}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowMobileActions(true)}
+              className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 flex items-center justify-center shrink-0 cursor-pointer"
+              title="Import / Export Excel"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onOpenCreate(dateScope === 'custom' ? customDate : todayYmd)}
+              className="h-9 w-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition"
+              title="Buat Jadwal Baru"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Slim Single-Line Non-Wrapping Stats Ticker */}
+          <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/70 flex items-center gap-3 text-[11px] overflow-x-auto no-scrollbar whitespace-nowrap">
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-900">{stats.total}</strong> Baris
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-emerald-700">{stats.visit}</strong> Visit
+            </span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-amber-600">{stats.nso}</strong> NSO
+            </span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-800">{stats.done}</strong> Selesai
+            </span>
+            {stats.kendala > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedStatus(selectedStatus === 'KENDALA' ? 'ALL' : 'KENDALA')}
+                className="text-rose-600 font-semibold cursor-pointer"
+              >
+                • {stats.kendala} Kendala
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ============================================================
+            DESKTOP TOP ROW & FILTER BAR (SPREADSHEET TOOLBAR)
+            ============================================================ */}
+        <div className="hidden md:flex px-3.5 py-2.5 border-b border-slate-200 flex-wrap items-center justify-between gap-2.5 bg-white">
           {/* Minimalist Horizontal KPI Strip */}
           <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto no-scrollbar">
             <div className="flex items-baseline gap-1.5 shrink-0">
@@ -329,13 +424,13 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
               <span className="font-bold text-amber-600 tabular-nums">{stats.nso}</span>
               <span className="text-slate-500">NSO</span>
             </div>
-            <span className="h-3.5 w-px bg-slate-200 shrink-0 hidden sm:block" />
-            <div className="hidden sm:flex items-baseline gap-1.5 shrink-0">
+            <span className="h-3.5 w-px bg-slate-200 shrink-0" />
+            <div className="flex items-baseline gap-1.5 shrink-0">
               <span className="font-bold text-slate-800 tabular-nums">{stats.done}</span>
               <span className="text-slate-500">Selesai</span>
             </div>
             {stats.inProgress > 0 && (
-              <div className="hidden sm:flex items-baseline gap-1.5 shrink-0">
+              <div className="flex items-baseline gap-1.5 shrink-0">
                 <span className="font-bold text-amber-700 tabular-nums">{stats.inProgress}</span>
                 <span className="text-slate-500">Di Toko</span>
               </div>
@@ -370,7 +465,7 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
               title="Upload Jadwal dari File Excel"
             >
               <Upload className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden sm:inline">Import Excel</span>
+              <span>Import Excel</span>
             </button>
 
             <div className="relative" ref={exportRef}>
@@ -380,7 +475,7 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold transition cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5 text-slate-500" />
-                <span className="hidden sm:inline">Export</span>
+                <span>Export</span>
                 <ChevronDown className="w-3 h-3 text-slate-400" />
               </button>
               {showExportMenu && (
@@ -410,8 +505,8 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
           </div>
         </div>
 
-        {/* Second Row: Spreadsheet Filter Bar */}
-        <div className="px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center gap-2">
+        {/* Desktop Filter Bar */}
+        <div className="hidden md:flex px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex-wrap items-center gap-2">
           {/* Search */}
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -840,6 +935,169 @@ export const AdminAgendaSheetView: React.FC<AdminAgendaSheetViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Mobile Bottom Sheet: Filter Jadwal */}
+      <AdminMobileSheet
+        isOpen={showMobileFilter}
+        title="Filter Jadwal Agenda"
+        onClose={() => setShowMobileFilter(false)}
+        onReset={resetFilters}
+        hasActiveFilters={hasActiveFilters}
+      >
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            Periode Tanggal
+          </label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(
+              [
+                ['all', 'Semua'],
+                ['today', 'Hari Ini'],
+                ['week', 'Minggu Ini'],
+                ['month', 'Bulan Ini'],
+                ['custom', 'Pilih Tgl'],
+              ] as [DateScope, string][]
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setDateScope(k)}
+                className={`py-2 px-2 rounded-lg text-xs font-semibold border cursor-pointer ${
+                  dateScope === k
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {dateScope === 'custom' && (
+            <div className="relative mt-2">
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => setCustomDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs tabular-nums"
+              />
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            Personil (PIC)
+          </label>
+          <select
+            value={selectedPic}
+            onChange={(e) => setSelectedPic(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+          >
+            <option value="ALL">Semua PIC ({uniquePics.length})</option>
+            {uniquePics.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+              Kategori
+            </label>
+            <select
+              value={selectedKind}
+              onChange={(e) => setSelectedKind(e.target.value as ActivityKind | 'ALL')}
+              className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+            >
+              <option value="ALL">Semua</option>
+              <option value="VISIT">Visit Toko</option>
+              <option value="NSO">NSO</option>
+              <option value="MEETING">Meeting</option>
+              <option value="TRAINING">Training</option>
+              <option value="AUDIT">Audit</option>
+              <option value="OPERATION">Operasional</option>
+              <option value="OTHER">Lainnya</option>
+              <option value="LEAVE">Cuti</option>
+              <option value="OFF">Off / Libur</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+              Status
+            </label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value as any)}
+              className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+            >
+              <option value="ALL">Semua</option>
+              <option value="COMPLETED">Selesai</option>
+              <option value="IN_PROGRESS">Di Toko</option>
+              <option value="SCHEDULED">Terjadwal</option>
+              <option value="KENDALA">Ada Kendala</option>
+            </select>
+          </div>
+        </div>
+      </AdminMobileSheet>
+
+      {/* Mobile Bottom Sheet: Import & Export Excel */}
+      <AdminMobileSheet
+        isOpen={showMobileActions}
+        title="Import & Export Jadwal"
+        onClose={() => setShowMobileActions(false)}
+      >
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowMobileActions(false);
+              onOpenUploadExcel();
+            }}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border border-slate-200 bg-white active:bg-slate-50 text-left cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-slate-900">Import Jadwal dari Excel</div>
+              <div className="text-[11px] text-slate-500">Upload file .xlsx / .xls untuk update jadwal</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowMobileActions(false);
+              handleExportFiltered();
+            }}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border border-slate-200 bg-white active:bg-slate-50 text-left cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-slate-700 shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-slate-900">
+                Tarik Data ke Excel ({filtered.length} baris)
+              </div>
+              <div className="text-[11px] text-slate-500">Unduh seluruh data jadwal sesuai filter aktif</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowMobileActions(false);
+              exportScheduleToTemplateExcel(agendas, users);
+            }}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border border-slate-200 bg-white active:bg-slate-50 text-left cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-slate-500 shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-slate-900">Unduh Template Excel Jadwal</div>
+              <div className="text-[11px] text-slate-500">Format resmi upload jadwal mingguan FMCU</div>
+            </div>
+          </button>
+        </div>
+      </AdminMobileSheet>
     </div>
   );
 };

@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Cloud,
   RefreshCw,
+  SlidersHorizontal,
+  MoreHorizontal,
 } from 'lucide-react';
 import {
   MasterStore,
@@ -28,6 +30,7 @@ import {
 } from '../../services/scheduleExcelService';
 import { parseMasterStorePdfFile } from '../../services/masterStorePdfService';
 import { pushMasterStoresToCloud } from '../../services/cloudScheduleSyncService';
+import { AdminMobileSheet } from './AdminMobileSheet';
 
 interface AdminMasterStoreViewProps {
   masterStores: MasterStore[];
@@ -60,6 +63,10 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
   const [cityFilter, setCityFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showMobileFilter, setShowMobileFilter] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
+
+  const activeFilterCount = (typeFilter !== 'ALL' ? 1 : 0) + (cityFilter !== 'ALL' ? 1 : 0);
 
   // Import Drawer State (PDF & Excel unified)
   const [showImportDrawer, setShowImportDrawer] = useState(false);
@@ -333,9 +340,89 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* Top Row: Compact Inline Stats + Actions */}
-        <div className="px-3.5 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 bg-white">
+      <div className="bg-white border-y md:border border-slate-200 rounded-none md:rounded-xl flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* Mobile Single-Row Compact Toolbar (ZERO stacked buttons) */}
+        <div className="md:hidden border-b border-slate-200 bg-white shrink-0">
+          <div className="px-3 py-2 flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari kode, nama toko, kota..."
+                className="w-full h-9 pl-8 pr-6 rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-900"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMobileFilter(true)}
+              className={`h-9 px-2.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer ${
+                activeFilterCount > 0
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-slate-200'
+              }`}
+              title="Filter Toko"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              {activeFilterCount > 0 && (
+                <span className="font-mono text-[10.5px] font-bold">{activeFilterCount}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowMobileActions(true)}
+              className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 flex items-center justify-center shrink-0 cursor-pointer"
+              title="Sync / Export Master Store"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setParseError(null);
+                setShowImportDrawer(true);
+              }}
+              className="h-9 w-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 cursor-pointer"
+              title="Upload PDF / Excel Master Store"
+            >
+              <Upload className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/70 flex items-center gap-3 text-[11px] overflow-x-auto no-scrollbar whitespace-nowrap">
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-900">{filtered.length}</strong>/{masterStores.length} Toko
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-800">{uniqueCities.length}</strong> Kota
+            </span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-800">{uniqueTypes.length}</strong> Tipe
+            </span>
+            {masterStoreMeta && (
+              <span className={masterStoreMeta.cloudSynced ? 'text-emerald-700 font-medium' : 'text-amber-600 font-medium'}>
+                • {masterStoreMeta.cloudSynced ? 'Synced' : 'Lokal'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Top Row: Compact Inline Stats + Actions */}
+        <div className="hidden md:flex px-3.5 py-2.5 border-b border-slate-200 flex-wrap items-center justify-between gap-2.5 bg-white">
           <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto no-scrollbar">
             <div className="flex items-baseline gap-1.5 shrink-0">
               <span className="font-bold text-slate-900 text-sm tabular-nums">{masterStores.length}</span>
@@ -352,8 +439,8 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
             </div>
             {masterStoreMeta && (
               <>
-                <span className="h-3.5 w-px bg-slate-200 shrink-0 hidden sm:block" />
-                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
+                <span className="h-3.5 w-px bg-slate-200 shrink-0" />
+                <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
                   <Cloud
                     className={`w-3.5 h-3.5 ${
                       masterStoreMeta.cloudSynced ? 'text-emerald-600' : 'text-amber-500'
@@ -388,7 +475,7 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
               title="Sinkronkan Master Toko ke Cloudflare D1"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Sync</span>
+              <span>Sync</span>
             </button>
 
             <div className="relative" ref={exportRef}>
@@ -398,7 +485,7 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold transition cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5 text-slate-500" />
-                <span className="hidden sm:inline">Export</span>
+                <span>Export</span>
                 <ChevronDown className="w-3 h-3 text-slate-400" />
               </button>
               {showExportMenu && (
@@ -431,8 +518,8 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
           </div>
         </div>
 
-        {/* Filter Bar */}
-        <div className="px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center gap-2">
+        {/* Desktop Filter Bar */}
+        <div className="hidden md:flex px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
@@ -902,6 +989,128 @@ export const AdminMasterStoreView: React.FC<AdminMasterStoreViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Mobile Filter Sheet */}
+      <AdminMobileSheet
+        isOpen={showMobileFilter}
+        title="Filter Master Store"
+        onClose={() => setShowMobileFilter(false)}
+        onReset={() => {
+          setSearch('');
+          setTypeFilter('ALL');
+          setCityFilter('ALL');
+        }}
+        hasActiveFilters={activeFilterCount > 0 || Boolean(search.trim())}
+      >
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            Tipe Toko
+          </label>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+          >
+            <option value="ALL">Semua Tipe ({uniqueTypes.length})</option>
+            {uniqueTypes.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            Kota / Wilayah
+          </label>
+          <select
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+          >
+            <option value="ALL">Semua Kota ({uniqueCities.length})</option>
+            {uniqueCities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+      </AdminMobileSheet>
+
+      {/* Mobile Secondary Actions Sheet */}
+      <AdminMobileSheet
+        isOpen={showMobileActions}
+        title="Aksi Master Store"
+        onClose={() => setShowMobileActions(false)}
+      >
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowMobileActions(false);
+              setParseError(null);
+              setShowImportDrawer(true);
+            }}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border border-slate-200 bg-white active:bg-slate-50 text-left cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-slate-900 shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-slate-900">Upload Master Store (PDF / Excel)</div>
+              <div className="text-[11px] text-slate-500">Perbarui database toko dari PDF atau Excel</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            disabled={isSyncingCloud}
+            onClick={() => {
+              setShowMobileActions(false);
+              handleManualCloudSync();
+            }}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border border-slate-200 bg-white active:bg-slate-50 text-left cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-slate-900">Sinkronkan ke Cloud D1</div>
+              <div className="text-[11px] text-slate-500">Kirim versi Master Store saat ini ke server</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowMobileActions(false);
+              exportMasterStoresToExcel(filtered);
+            }}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border border-slate-200 bg-white active:bg-slate-50 text-left cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-slate-900">
+                Export Master Toko ({filtered.length} toko)
+              </div>
+              <div className="text-[11px] text-slate-500">Tarik data toko ke file Excel (.xlsx)</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowMobileActions(false);
+              downloadMasterStoreTemplateExcel();
+            }}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border border-slate-200 bg-white active:bg-slate-50 text-left cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-slate-500 shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-slate-900">Unduh Template Excel</div>
+              <div className="text-[11px] text-slate-500">Format resmi update Master Store</div>
+            </div>
+          </button>
+        </div>
+      </AdminMobileSheet>
     </div>
   );
 };

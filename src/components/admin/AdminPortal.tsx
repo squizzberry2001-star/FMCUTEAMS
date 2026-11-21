@@ -566,8 +566,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           MAIN RIGHT COLUMN (TOP UTILITY BAR + EDGE-TO-EDGE WORKSPACE)
           ==================================================================== */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-        {/* Minimalist 52px Top Utility Bar */}
-        <header className="h-[52px] bg-white border-b border-slate-200 px-3.5 sm:px-5 flex items-center justify-between gap-3 shrink-0">
+        {/* Minimalist Top Utility Bar (48px mobile / 52px desktop) */}
+        <header className="h-12 lg:h-[52px] bg-white border-b border-slate-200 px-3 sm:px-5 flex items-center justify-between gap-2.5 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="lg:hidden w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
               FM
@@ -638,8 +638,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </header>
 
-        {/* Active View Workspace Canvas */}
-        <main className="flex-1 min-h-0 overflow-hidden p-2.5 sm:p-4 pb-[72px] lg:pb-4">
+        {/* Active View Workspace Canvas (edge-to-edge on mobile to maximize data viewport) */}
+        <main className="flex-1 min-h-0 overflow-hidden p-0 md:p-4 pb-[58px] lg:pb-4">
           {activeTab === 'agenda' && (
             <AdminAgendaSheetView
               classifiedAgendas={classifiedAgendas}

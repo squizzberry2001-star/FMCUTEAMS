@@ -154,43 +154,48 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-3 h-full min-h-0 admin-view-enter">
+    <div className="flex flex-col lg:flex-row gap-0 md:gap-3 h-full min-h-0 overflow-y-auto lg:overflow-hidden admin-sheet-scroll admin-view-enter">
       {/* Left: Crisp Calendar Grid Sheet */}
-      <div className="flex-1 bg-white border border-slate-200 rounded-xl flex flex-col min-h-0 overflow-hidden">
-        {/* Calendar Toolbar */}
-        <div className="px-3.5 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-white">
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center border border-slate-200 rounded-lg overflow-hidden">
+      <div className="lg:flex-1 bg-white border-b md:border border-slate-200 rounded-none md:rounded-xl flex flex-col lg:min-h-0 overflow-hidden shrink-0 lg:shrink">
+        {/* Single-Row Calendar Toolbar (never stacks on mobile) */}
+        <div className="px-3 md:px-3.5 py-2 border-b border-slate-200 flex items-center justify-between gap-2 bg-white">
+          <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
+            <div className="inline-flex items-center border border-slate-200 rounded-lg overflow-hidden shrink-0">
               <button
                 type="button"
                 onClick={goPrevMonth}
                 className="p-1.5 hover:bg-slate-50 text-slate-600 cursor-pointer"
                 title="Bulan Sebelumnya"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-3.5 h-3.5 md:w-4 md:h-4" />
               </button>
               <button
                 type="button"
                 onClick={goToday}
-                className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 border-x border-slate-200 cursor-pointer"
+                className="hidden sm:inline-block px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 border-x border-slate-200 cursor-pointer"
               >
                 Hari Ini
               </button>
               <button
                 type="button"
                 onClick={goNextMonth}
-                className="p-1.5 hover:bg-slate-50 text-slate-600 cursor-pointer"
+                className="p-1.5 hover:bg-slate-50 text-slate-600 border-l sm:border-l-0 border-slate-200 cursor-pointer"
                 title="Bulan Berikutnya"
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
               </button>
             </div>
 
-            <h3 className="text-sm font-bold text-slate-900">
+            <button
+              type="button"
+              onClick={goToday}
+              className="text-xs md:text-sm font-bold text-slate-900 truncate cursor-pointer text-left"
+              title="Kembali ke Hari Ini"
+            >
               {MONTH_NAMES_ID[cursorMonth.getMonth()]} {cursorMonth.getFullYear()}
-            </h3>
+            </button>
 
-            <span className="hidden sm:inline-flex items-center gap-2 text-[11px] text-slate-500 ml-2">
+            <span className="hidden md:inline-flex items-center gap-2 text-[11px] text-slate-500 ml-2 shrink-0">
               <span>
                 <strong className="text-slate-800 tabular-nums">{monthStats.total}</strong> agenda
               </span>
@@ -212,9 +217,9 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
           <select
             value={picFilter}
             onChange={(e) => setPicFilter(e.target.value)}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-700 focus:outline-none focus:border-slate-900 max-w-[180px]"
+            className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] md:text-xs text-slate-700 focus:outline-none focus:border-slate-900 max-w-[125px] md:max-w-[180px] shrink-0"
           >
-            <option value="ALL">Semua Personil ({uniquePics.length})</option>
+            <option value="ALL">Semua PIC</option>
             {uniquePics.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -224,11 +229,11 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
         </div>
 
         {/* Weekday Header */}
-        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[10.5px] md:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           {WEEKDAYS_ID.map((w, idx) => (
             <div
               key={w}
-              className={`py-2 text-center border-r last:border-r-0 border-slate-200/70 ${
+              className={`py-1.5 md:py-2 text-center border-r last:border-r-0 border-slate-200/70 ${
                 idx >= 5 ? 'text-slate-400' : ''
               }`}
             >
@@ -238,7 +243,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
         </div>
 
         {/* Calendar Cells */}
-        <div className="grid grid-cols-7 flex-1 auto-rows-fr overflow-y-auto admin-sheet-scroll">
+        <div className="grid grid-cols-7 lg:flex-1 auto-rows-fr lg:overflow-y-auto admin-sheet-scroll">
           {matrix.map((cell) => {
             const items = byDateMap.get(cell.dateStr) || [];
             const isToday = cell.dateStr === todayYmd;
@@ -252,7 +257,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                 key={cell.dateStr}
                 type="button"
                 onClick={() => setSelectedDate(cell.dateStr)}
-                className={`min-h-[68px] sm:min-h-[86px] p-1.5 border-r border-b border-slate-100 text-left flex flex-col transition cursor-pointer relative ${
+                className={`min-h-[44px] sm:min-h-[72px] lg:min-h-[82px] p-1 sm:p-1.5 border-r border-b border-slate-100 text-left flex flex-col transition cursor-pointer relative ${
                   !cell.isCurrentMonth ? 'bg-slate-50/50 text-slate-400' : 'bg-white text-slate-800'
                 } ${
                   isSelected
@@ -262,7 +267,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
               >
                 <div className="flex items-center justify-between w-full">
                   <span
-                    className={`w-6 h-6 rounded-md text-xs font-semibold flex items-center justify-center tabular-nums ${
+                    className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md text-[11px] sm:text-xs font-semibold flex items-center justify-center tabular-nums ${
                       isToday
                         ? 'bg-emerald-600 text-white font-bold'
                         : isSelected
@@ -273,7 +278,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                     {cell.dayNum}
                   </span>
                   {items.length > 0 && (
-                    <span className="text-[10px] font-mono font-semibold text-slate-400 tabular-nums">
+                    <span className="text-[9.5px] sm:text-[10px] font-mono font-semibold text-slate-400 tabular-nums">
                       {items.length}
                     </span>
                   )}
@@ -298,7 +303,7 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
 
                 {/* Compact Mobile Dots */}
                 {items.length > 0 && (
-                  <div className="flex sm:hidden items-center gap-1 mt-auto pt-1">
+                  <div className="flex sm:hidden items-center gap-0.5 mt-auto pt-0.5">
                     {visitCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
                     {nsoCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
                     {otherCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />}
@@ -310,8 +315,8 @@ export const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
         </div>
       </div>
 
-      {/* Right: Selected Date Agenda Sheet Panel */}
-      <div className="w-full lg:w-[360px] xl:w-[400px] bg-white border border-slate-200 rounded-xl flex flex-col min-h-[260px] lg:min-h-0 overflow-hidden shrink-0">
+      {/* Right / Below: Selected Date Agenda Sheet Panel */}
+      <div className="w-full lg:w-[360px] xl:w-[400px] bg-white border-t md:border border-slate-200 rounded-none md:rounded-xl flex flex-col lg:min-h-0 overflow-hidden shrink-0">
         <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2 bg-white">
           <div>
             <div className="text-xs font-bold text-slate-900">

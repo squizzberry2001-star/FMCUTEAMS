@@ -10,6 +10,7 @@ import {
   X,
   Check,
   Radio,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { User, VisitReportData } from '../../types';
 import { isSamePersonName } from '../../data/masterStoresData';
@@ -18,6 +19,7 @@ import {
   getUserPresenceDetailedStatus,
 } from '../../services/userLivePresenceService';
 import { ClassifiedAgenda, exportRowsToExcel } from './adminTypes';
+import { AdminMobileSheet } from './AdminMobileSheet';
 
 interface AdminLiveMonitorViewProps {
   users: User[];
@@ -46,6 +48,7 @@ export const AdminLiveMonitorView: React.FC<AdminLiveMonitorViewProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ONLINE' | 'SCHEDULED' | 'STANDBY'>('ALL');
+  const [showMobileFilter, setShowMobileFilter] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -232,9 +235,86 @@ export const AdminLiveMonitorView: React.FC<AdminLiveMonitorViewProps> = ({
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* Top Row: Live Inline Stats + Clean Actions */}
-        <div className="px-3.5 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 bg-white">
+      <div className="bg-white border-y md:border border-slate-200 rounded-none md:rounded-xl flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* Mobile Single-Row Compact Toolbar (ZERO stacked buttons) */}
+        <div className="md:hidden border-b border-slate-200 bg-white shrink-0">
+          <div className="px-3 py-2 flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari personil, NIK, toko..."
+                className="w-full h-9 pl-8 pr-6 rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-900"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMobileFilter(true)}
+              className={`h-9 px-2.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer ${
+                statusFilter !== 'ALL'
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-slate-200'
+              }`}
+              title="Filter & Export"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              {statusFilter !== 'ALL' && <span className="font-mono text-[10.5px] font-bold">1</span>}
+            </button>
+
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 flex items-center justify-center shrink-0 cursor-pointer disabled:opacity-50"
+              title="Live Sync"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+
+            {onAddUser && (
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="h-9 w-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 cursor-pointer"
+                title="Tambah Personil"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/70 flex items-center gap-3 text-[11px] overflow-x-auto no-scrollbar whitespace-nowrap">
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-900">{stats.total}</strong> Tim
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold tabular-nums">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {stats.online} Online
+            </span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-800">{stats.checkedIn}</strong> Check-In
+            </span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-800">{stats.scheduledToday}</strong> Jadwal
+            </span>
+          </div>
+        </div>
+
+        {/* Desktop Top Row: Live Inline Stats + Clean Actions */}
+        <div className="hidden md:flex px-3.5 py-2.5 border-b border-slate-200 flex-wrap items-center justify-between gap-2.5 bg-white">
           <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto no-scrollbar">
             <div className="flex items-baseline gap-1.5 shrink-0">
               <span className="font-bold text-slate-900 text-sm tabular-nums">{stats.total}</span>
@@ -250,8 +330,8 @@ export const AdminLiveMonitorView: React.FC<AdminLiveMonitorViewProps> = ({
               <span className="font-bold text-slate-800 tabular-nums">{stats.checkedIn}</span>
               <span className="text-slate-500">Check-In</span>
             </div>
-            <span className="h-3.5 w-px bg-slate-200 shrink-0 hidden sm:block" />
-            <div className="hidden sm:flex items-baseline gap-1.5 shrink-0">
+            <span className="h-3.5 w-px bg-slate-200 shrink-0" />
+            <div className="flex items-baseline gap-1.5 shrink-0">
               <span className="font-bold text-slate-800 tabular-nums">{stats.scheduledToday}</span>
               <span className="text-slate-500">Terjadwal Hari Ini</span>
             </div>
@@ -277,7 +357,7 @@ export const AdminLiveMonitorView: React.FC<AdminLiveMonitorViewProps> = ({
               title="Refresh Status Live"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Live Sync</span>
+              <span>Live Sync</span>
             </button>
 
             <button
@@ -287,13 +367,13 @@ export const AdminLiveMonitorView: React.FC<AdminLiveMonitorViewProps> = ({
               title="Tarik Data Live Monitoring ke Excel"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden sm:inline">Export</span>
+              <span>Export</span>
             </button>
           </div>
         </div>
 
-        {/* Filter Bar */}
-        <div className="px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center gap-2">
+        {/* Desktop Filter Bar */}
+        <div className="hidden md:flex px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
@@ -636,6 +716,59 @@ export const AdminLiveMonitorView: React.FC<AdminLiveMonitorViewProps> = ({
           </form>
         </div>
       )}
+
+      {/* Mobile Filter & Export Sheet */}
+      <AdminMobileSheet
+        isOpen={showMobileFilter}
+        title="Filter & Aksi Live Monitoring"
+        onClose={() => setShowMobileFilter(false)}
+        onReset={() => {
+          setSearch('');
+          setStatusFilter('ALL');
+        }}
+        hasActiveFilters={statusFilter !== 'ALL' || Boolean(search.trim())}
+      >
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            Status Personil
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {(
+              [
+                ['ALL', 'Semua'],
+                ['ONLINE', 'Online GPS'],
+                ['SCHEDULED', 'Jadwal Hari Ini'],
+                ['STANDBY', 'Offline / Standby'],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setStatusFilter(k)}
+                className={`py-2 px-2 rounded-lg text-xs font-semibold border cursor-pointer ${
+                  statusFilter === k
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowMobileFilter(false);
+            handleExportExcel();
+          }}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 cursor-pointer"
+        >
+          <Download className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Export Data Tim ke Excel ({filtered.length})</span>
+        </button>
+      </AdminMobileSheet>
     </div>
   );
 };

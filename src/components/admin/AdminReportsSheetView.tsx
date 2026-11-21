@@ -10,12 +10,14 @@ import {
   FileText,
   Cloud,
   X,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   UnifiedWebReport,
   exportRowsToExcel,
   formatDisplayDateShort,
 } from './adminTypes';
+import { AdminMobileSheet } from './AdminMobileSheet';
 
 interface AdminReportsSheetViewProps {
   reports: UnifiedWebReport[];
@@ -40,6 +42,21 @@ export const AdminReportsSheetView: React.FC<AdminReportsSheetViewProps> = ({
   const [picFilter, setPicFilter] = useState('ALL');
   const [monthFilter, setMonthFilter] = useState('ALL');
   const [page, setPage] = useState(1);
+  const [showMobileFilter, setShowMobileFilter] = useState(false);
+
+  const activeFilterCount =
+    (sourceFilter !== 'ALL' ? 1 : 0) +
+    (categoryFilter !== 'ALL' ? 1 : 0) +
+    (picFilter !== 'ALL' ? 1 : 0) +
+    (monthFilter !== 'ALL' ? 1 : 0);
+
+  const resetFilters = () => {
+    setSearch('');
+    setSourceFilter('ALL');
+    setCategoryFilter('ALL');
+    setPicFilter('ALL');
+    setMonthFilter('ALL');
+  };
 
   const uniquePics = useMemo(() => {
     const set = new Set<string>();
@@ -130,9 +147,85 @@ export const AdminReportsSheetView: React.FC<AdminReportsSheetViewProps> = ({
 
   return (
     <div className="flex flex-col h-full admin-view-enter">
-      <div className="bg-white border border-slate-200 rounded-xl flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* Top Row: Compact Inline Stats + Actions */}
-        <div className="px-3.5 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 bg-white">
+      <div className="bg-white border-y md:border border-slate-200 rounded-none md:rounded-xl flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* Mobile Single-Row Compact Toolbar (ZERO stacked buttons) */}
+        <div className="md:hidden border-b border-slate-200 bg-white shrink-0">
+          <div className="px-3 py-2 flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari laporan, toko, PIC..."
+                className="w-full h-9 pl-8 pr-6 rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-900"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMobileFilter(true)}
+              className={`h-9 px-2.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer ${
+                activeFilterCount > 0
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 border-slate-200'
+              }`}
+              title="Filter Laporan"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              {activeFilterCount > 0 && (
+                <span className="font-mono text-[10.5px] font-bold">{activeFilterCount}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 flex items-center justify-center shrink-0 cursor-pointer disabled:opacity-50"
+              title="Sinkron Cloud"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="h-9 w-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 cursor-pointer"
+              title="Export Excel Laporan"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/70 flex items-center gap-3 text-[11px] overflow-x-auto no-scrollbar whitespace-nowrap">
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-900">{stats.total}</strong> Laporan
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-emerald-700">{stats.visit}</strong> Visit
+            </span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-amber-600">{stats.nso}</strong> NSO
+            </span>
+            <span className="text-slate-600 tabular-nums">
+              <strong className="text-slate-800">{stats.cloud}</strong> Live
+            </span>
+          </div>
+        </div>
+
+        {/* Desktop Top Row: Compact Inline Stats + Actions */}
+        <div className="hidden md:flex px-3.5 py-2.5 border-b border-slate-200 flex-wrap items-center justify-between gap-2.5 bg-white">
           <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto no-scrollbar">
             <div className="flex items-baseline gap-1.5 shrink-0">
               <span className="font-bold text-slate-900 text-sm tabular-nums">{stats.total}</span>
@@ -147,12 +240,12 @@ export const AdminReportsSheetView: React.FC<AdminReportsSheetViewProps> = ({
               <span className="font-bold text-amber-600 tabular-nums">{stats.nso}</span>
               <span className="text-slate-500">NSO</span>
             </div>
-            <span className="h-3.5 w-px bg-slate-200 shrink-0 hidden sm:block" />
-            <div className="hidden sm:flex items-baseline gap-1.5 shrink-0">
+            <span className="h-3.5 w-px bg-slate-200 shrink-0" />
+            <div className="flex items-baseline gap-1.5 shrink-0">
               <span className="font-bold text-slate-800 tabular-nums">{stats.cloud}</span>
               <span className="text-slate-500">Live App</span>
             </div>
-            <div className="hidden sm:flex items-baseline gap-1.5 shrink-0">
+            <div className="flex items-baseline gap-1.5 shrink-0">
               <span className="font-bold text-slate-800 tabular-nums">{stats.gdrive}</span>
               <span className="text-slate-500">GDrive</span>
             </div>
@@ -167,7 +260,7 @@ export const AdminReportsSheetView: React.FC<AdminReportsSheetViewProps> = ({
               title="Muat ulang laporan terbaru dari Cloud"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Sinkron</span>
+              <span>Sinkron</span>
             </button>
 
             <button
@@ -181,8 +274,8 @@ export const AdminReportsSheetView: React.FC<AdminReportsSheetViewProps> = ({
           </div>
         </div>
 
-        {/* Filter Bar */}
-        <div className="px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center gap-2">
+        {/* Desktop Filter Bar */}
+        <div className="hidden md:flex px-3.5 py-2 border-b border-slate-200 bg-slate-50/70 flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
@@ -457,6 +550,95 @@ export const AdminReportsSheetView: React.FC<AdminReportsSheetViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Mobile Filter Sheet */}
+      <AdminMobileSheet
+        isOpen={showMobileFilter}
+        title="Filter Laporan"
+        onClose={() => setShowMobileFilter(false)}
+        onReset={resetFilters}
+        hasActiveFilters={activeFilterCount > 0 || Boolean(search.trim())}
+      >
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            Kategori Laporan
+          </label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(
+              [
+                ['ALL', 'Semua'],
+                ['VISIT', 'Visit'],
+                ['NSO', 'NSO'],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setCategoryFilter(k)}
+                className={`py-2 rounded-lg text-xs font-semibold border cursor-pointer ${
+                  categoryFilter === k
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            Sumber Data
+          </label>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value as any)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+          >
+            <option value="ALL">Semua Sumber</option>
+            <option value="CLOUD">Cloud App Live</option>
+            <option value="GDRIVE">Arsip Google Drive</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+              Personil
+            </label>
+            <select
+              value={picFilter}
+              onChange={(e) => setPicFilter(e.target.value)}
+              className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800"
+            >
+              <option value="ALL">Semua</option>
+              {uniquePics.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+              Bulan
+            </label>
+            <select
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 tabular-nums"
+            >
+              <option value="ALL">Semua</option>
+              {uniqueMonths.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </AdminMobileSheet>
     </div>
   );
 };

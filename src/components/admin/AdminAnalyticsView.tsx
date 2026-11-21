@@ -192,14 +192,14 @@ export const AdminAnalyticsView: React.FC<AdminAnalyticsViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-3 h-full overflow-y-auto admin-sheet-scroll admin-view-enter pb-2">
-      {/* Top Compact Toolbar + Unified KPI Strip */}
+    <div className="flex flex-col gap-2.5 md:gap-3 h-full overflow-y-auto admin-sheet-scroll admin-view-enter p-2.5 md:p-0 pb-4">
+      {/* Top Single-Row Toolbar + Unified KPI Strip */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shrink-0">
-        <div className="px-4 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex items-center bg-slate-100 rounded-lg p-0.5 text-[11px] font-medium">
+        <div className="px-3 md:px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2">
+          <div className="inline-flex items-center bg-slate-100 rounded-lg p-0.5 text-[11px] font-medium overflow-x-auto no-scrollbar whitespace-nowrap min-w-0">
             {(
               [
-                ['all', 'Semua Periode'],
+                ['all', 'Semua'],
                 ['month', 'Bulan Ini'],
                 ['30d', '30 Hari'],
                 ['week', 'Minggu Ini'],
@@ -209,7 +209,7 @@ export const AdminAnalyticsView: React.FC<AdminAnalyticsViewProps> = ({
                 key={k}
                 type="button"
                 onClick={() => setPeriod(k)}
-                className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
                   period === k
                     ? 'bg-white text-slate-900 font-semibold shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -223,10 +223,11 @@ export const AdminAnalyticsView: React.FC<AdminAnalyticsViewProps> = ({
           <button
             type="button"
             onClick={handleExportAnalytics}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition cursor-pointer shrink-0"
+            title="Export Analitik ke Excel"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export Analitik</span>
+            <span className="hidden sm:inline">Export Analitik</span>
           </button>
         </div>
 
