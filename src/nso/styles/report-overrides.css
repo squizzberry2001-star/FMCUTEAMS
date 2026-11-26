@@ -1,0 +1,456 @@
+/* =========================================================================
+   FAMILYMART EXECUTIVE REPORT - COMPLETE DESIGN OVERRIDES
+   ========================================================================= */
+
+/* --- PRINT MEDIA --- */
+@media print {
+  .pdf-page-frame {
+    width: 960pt !important;
+    height: 540pt !important;
+    margin: 0 !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  .pdf-page-frame > .pdf-page {
+    transform: none !important;
+    box-shadow: none !important;
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+}
+
+/* --- 1. GLOBAL --- */
+.pdf-page {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  color: #1e293b !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+/* --- 2. LOGO (Symmetrical, compact) --- */
+.pdf-logo {
+  position: absolute !important;
+  left: 28px !important;
+  top: 18px !important;
+  width: 56px !important;
+  height: auto !important;
+  background: transparent !important;
+  border-radius: 3px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+}
+.pdf-logo .fg { height: 14px !important; background: #00a651 !important; }
+.pdf-logo .fw {
+  height: 14px !important;
+  background: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: max(10px, 7.5px) !important;
+  font-weight: 900 !important;
+  color: #00a651 !important;
+  letter-spacing: -0.3px !important;
+}
+.pdf-logo .fb { height: 7px !important; background: #0072bc !important; }
+
+/* --- 3. MINIMALIST TITLE ROW --- */
+.pdf-title-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 20px 28px 14px 96px !important;
+  min-height: auto !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+  margin-bottom: 0 !important;
+}
+.pdf-title-row h2 {
+  font-size: max(10px, 17px) !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.3px !important;
+  text-transform: none !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+}
+.pdf-subtitle {
+  font-size: max(10px, 12px) !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  padding-top: 0 !important;
+  white-space: nowrap !important;
+}
+
+/* --- 4. COVER PAGE --- */
+.cover-page-pdf {
+  background: #fff !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+}
+.cover-left h1 {
+  font-size: max(10px, 30px) !important;
+  color: #0f172a !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  line-height: 1.15 !important;
+}
+.cover-store {
+  font-size: max(10px, 20px) !important;
+  color: #0072bc !important;
+  font-weight: 800 !important;
+}
+.cover-info { font-size: max(10px, 14px) !important; line-height: 1.5 !important; }
+.cover-info b { color: #0f172a !important; font-weight: 800 !important; }
+
+/* --- 5. GLOBAL TABLES (Behavior, Speed) --- */
+.pdf-table th,
+.summary-table th {
+  background-color: #00a651 !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+  border: 1px solid #008742 !important;
+}
+.pdf-table td,
+.summary-table td {
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+}
+.pdf-table tbody tr:nth-child(even),
+.summary-table tbody tr:nth-child(even) {
+  background-color: #f8fafc !important;
+}
+.pdf-table .name-col,
+.summary-table td:first-child {
+  background-color: #f1f5f9 !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+
+/* --- 6. ROTATED HEADERS (Fix alignment) --- */
+.rotate-head {
+  padding: 0 !important;
+  height: 88px !important;
+  width: 24px !important;
+  vertical-align: bottom !important;
+  background-color: #00a651 !important;
+  color: #fff !important;
+}
+.rotate-head > div {
+  transform: rotate(-90deg) !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+}
+.speed-crew-table .rotate-head { height: 88px !important; }
+
+/* --- 7. CREW STORE CARDS (4-column polaroid) --- */
+.crew-store-page .crew-single-grid-pdf {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 18px !important;
+  padding: 20px 28px 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  align-content: start !important;
+}
+.crew-card-pdf {
+  display: flex !important;
+  flex-direction: column !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: #fff !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+.crew-store-page .crew-card-photo {
+  width: 100% !important;
+  height: 170px !important;
+  min-height: 170px !important;
+  max-height: 170px !important;
+  overflow: hidden !important;
+}
+.crew-store-page .crew-card-photo .avatar-pdf,
+.crew-store-page .crew-card-photo .crew-card-photo-cover,
+.crew-store-page .crew-card-photo-img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center top !important;
+  display: block !important;
+  border-radius: 0 !important;
+}
+.crew-single-table-pdf {
+  width: 100% !important;
+  border: none !important;
+  border-collapse: collapse !important;
+  height: auto !important;
+}
+.crew-single-table-pdf th {
+  background: #0072bc !important;
+  color: #fff !important;
+  padding: 7px 8px !important;
+  font-size: max(10px, 10px) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  text-align: center !important;
+  border: none !important;
+  height: auto !important;
+}
+.crew-single-table-pdf td {
+  padding: 8px 8px !important;
+  text-align: center !important;
+  border-top: 1px solid #f1f5f9 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+.crew-single-table-pdf span {
+  font-size: max(10px, 8px) !important;
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  display: block !important;
+}
+.crew-single-table-pdf b {
+  font-size: max(10px, 12px) !important;
+  color: #0f172a !important;
+  margin-top: 2px !important;
+  display: block !important;
+  font-weight: 800 !important;
+}
+.crew-single-photo { display: none !important; }
+
+/* --- 8. TEAM SPEED - Header Info --- */
+.team-speed-header-info {
+  margin: 12px 28px 12px !important;
+  padding: 10px 16px !important;
+  background: #f8fafc !important;
+  border-left: 4px solid #0072bc !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-left: 4px solid #0072bc !important;
+}
+.team-mode-badge {
+  background: #0072bc !important;
+  color: #fff !important;
+  padding: 4px 10px !important;
+  font-size: max(10px, 10px) !important;
+  font-weight: 800 !important;
+  border-radius: 3px !important;
+  letter-spacing: 0.5px !important;
+  white-space: nowrap !important;
+}
+.team-role-list {
+  display: flex !important;
+  gap: 8px !important;
+  font-size: max(10px, 10px) !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  flex-wrap: wrap !important;
+}
+.team-role-list span {
+  background: #fff !important;
+  padding: 3px 8px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 3px !important;
+  font-size: max(10px, 10px) !important;
+}
+
+/* --- 9. TRX CARDS (1x2 grid) --- */
+.trx-card-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 16px !important;
+  margin: 0 28px !important;
+  align-content: start !important;
+}
+.trx-card {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  background: #fff !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.trx-card-header {
+  background: #00a651 !important;
+  color: #fff !important;
+  padding: 6px 12px !important;
+  font-size: max(10px, 10px) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+}
+.trx-card-body {
+  padding: 10px 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+.trx-table { width: 100% !important; border-collapse: collapse !important; }
+.trx-table td, .trx-table th {
+  border: 0 !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  padding: 4px 6px !important;
+  font-size: max(10px, 8px) !important;
+  background: transparent !important;
+  color: #1e293b !important;
+  line-height: 1.3 !important;
+}
+.trx-table th {
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  font-size: max(10px, 7px) !important;
+  font-weight: 800 !important;
+  border-bottom: 1.5px solid #e2e8f0 !important;
+}
+.trx-table tr:last-child td { border-bottom: 0 !important; }
+.trx-table .trx-qty-col, .trx-table .trx-qty-cell {
+  width: 32px !important;
+  text-align: center !important;
+  font-weight: 700 !important;
+}
+.trx-card-timings {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  background: #f8fafc !important;
+  padding: 8px 10px !important;
+  border-radius: 4px !important;
+  border: 1px solid #e2e8f0 !important;
+}
+.timing-box {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+.timing-box span {
+  font-size: max(10px, 7px) !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  display: block !important;
+}
+.timing-box strong {
+  font-size: max(10px, 11px) !important;
+  color: #0f172a !important;
+  font-weight: 900 !important;
+}
+.trx-card-notes {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr 1fr !important;
+  gap: 8px !important;
+}
+.note-box { font-size: max(10px, 8px) !important; color: #1e293b !important; line-height: 1.3 !important; }
+.note-box span {
+  display: block !important;
+  font-size: max(10px, 7px) !important;
+  font-weight: 800 !important;
+  color: #0072bc !important;
+  text-transform: uppercase !important;
+  margin-bottom: 2px !important;
+  letter-spacing: 0.3px !important;
+}
+.note-box p { margin: 0 !important; }
+
+/* --- 10. PHOTO GRIDS --- */
+.photo-grid-pdf { gap: 14px !important; padding: 16px 28px 0 !important; }
+.photo-grid-pdf img, .photo-grid-pdf .photo-empty {
+  border-radius: 6px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+}
+.layout-grid-pdf, .planogram-grid-pdf { gap: 14px !important; padding: 16px 28px 0 !important; }
+.layout-grid-pdf img, .planogram-grid-pdf img {
+  border-radius: 6px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+}
+.photo-empty {
+  border: 2px dashed #cbd5e1 !important;
+  background: #f8fafc !important;
+  border-radius: 6px !important;
+  color: #94a3b8 !important;
+  font-size: max(10px, 11px) !important;
+  font-weight: 600 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* --- 11. WATERMARK --- */
+.pdf-page::after {
+  content: 'GENERATED BY NSO WEB REPORT' !important;
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 8px !important;
+  z-index: 50 !important;
+  pointer-events: none !important;
+  text-align: center !important;
+  font-size: max(10px, 9px) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.3em !important;
+  color: rgba(15,23,42,0.08) !important;
+  opacity: 1 !important;
+  text-transform: uppercase !important;
+}
+
+
+/* =========================================================
+   PDF CREW GRID - 2x4 Layout, Centered & Fit
+   ========================================================= */
+.crew-store-page {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+}
+
+.crew-store-page .crew-single-grid-pdf {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  grid-template-rows: repeat(2, auto) !important;
+  gap: 24px 20px !important;
+  padding: 30px 40px !important;
+  width: 100% !important;
+  height: 100% !important; /* Take remaining page height */
+  align-content: center !important; /* Center the grid vertically */
+  flex-grow: 1 !important;
+}
+
+.crew-card-pdf {
+  /* Make cards slightly taller/bigger to fill space nicely */
+  transform: scale(1.02) !important;
+  transform-origin: center center !important;
+}
+
+.crew-store-page .crew-card-photo {
+  /* Enforce exact 3:4 portrait ratio for pasfoto */
+  aspect-ratio: 3 / 4 !important;
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+}
+
+
+/* ADAPT TO LARGER FONTS */
+.crew-store-page .crew-single-grid-pdf {
+  grid-template-columns: repeat(5, 140px) !important;
+  gap: 12px 14px !important;
+  justify-content: center !important;
+}
+.crew-store-page .crew-card-photo {
+  aspect-ratio: 1 / 1 !important;
+}
+.crew-card-pdf {
+  width: auto !important;
+  min-height: auto !important;
+}

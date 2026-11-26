@@ -70,6 +70,21 @@ const DesktopDashboard = lazy(() =>
 const VisitReportForm = lazy(() =>
   import('./components/visit/VisitReportForm').then((m) => ({ default: m.VisitReportForm }))
 );
+const NsoModuleHost = lazy(() =>
+  import('./nso/NsoModuleHost').then((m) => ({ default: m.NsoModuleHost }))
+);
+
+function isPublicNsoPathname(pathname: string): boolean {
+  return /^\/(audience|checklist|leftover|timer)\/[^/]+/.test(pathname);
+}
+
+function isProtectedNsoPathname(pathname: string): boolean {
+  return (
+    pathname === '/facilitator' ||
+    pathname.startsWith('/facilitator/') ||
+    pathname.startsWith('/report/')
+  );
+}
 
 export const App: React.FC = () => {
   // 1. Master State for Users (Admin + 36 User dari Excel dengan password NIK/0000)
@@ -197,8 +212,14 @@ export const App: React.FC = () => {
   // Mobile navigation active tab
   const [mobileTab, setMobileTab] = useState<'home' | 'calendar' | 'history' | 'profile'>('home');
 
-  // Screen routing: 'main' (normal tabs), 'detail' (agenda detail), 'visit-form' (UI/UX Form Visit)
-  const [mobileScreen, setMobileScreen] = useState<'main' | 'detail' | 'visit-form'>('main');
+  // Screen routing: 'main' (normal tabs), 'detail' (agenda detail), 'visit-form' (Form Visit), 'nso-form' (NSO Report System)
+  const [mobileScreen, setMobileScreen] = useState<'main' | 'detail' | 'visit-form' | 'nso-form'>('main');
+  const [directNsoPath, setDirectNsoPath] = useState<string | null>(() => {
+    if (typeof window !== 'undefined' && isProtectedNsoPathname(window.location.pathname)) {
+      return window.location.pathname;
+    }
+    return null;
+  });
 
   // Modal State for New Agenda, Excel Schedule Upload & Live Maps
   const [showNewAgendaModal, setShowNewAgendaModal] = useState(false);
@@ -597,6 +618,15 @@ export const App: React.FC = () => {
     setUser(null);
     setSelectedAgenda(null);
     setAdminPreviewMode(false);
+    setDirectNsoPath(null);
+    setMobileScreen('main');
+    try {
+      sessionStorage.removeItem('nso-regional-bestie-auth');
+      sessionStorage.removeItem('nso-regional-bestie-nik');
+      sessionStorage.removeItem('nso-regional-bestie-name');
+    } catch {
+      // ignore
+    }
   };
 
   const handleUpdateUser = (updatedUser: User) => {
@@ -765,7 +795,17 @@ export const App: React.FC = () => {
   const isMobileLayout =
     layoutMode === 'mobile' || (layoutMode === 'auto' && isMobileViewport);
 
-  // 1. If not authenticated, render Login Page
+  // 0. Public QR-scanned NSO participant pages (/audience, /checklist, /leftover, /timer)
+  // Must stay accessible without FMCU Teams login so store crew & audience can scan QR codes directly
+  if (typeof window !== 'undefined' && isPublicNsoPathname(window.location.pathname)) {
+    return (
+      <Suspense fallback={<PageTransitionLoader visible={true} />}>
+        <NsoModuleHost user={user} initialPath={window.location.pathname} />
+      </Suspense>
+    );
+  }
+
+  // 1. If not authenticated, render Login Page (Single login gate for both FMCU Teams & NSO)
   if (!user) {
     return (
       <GpsEnforcerGuard>
@@ -783,6 +823,34 @@ export const App: React.FC = () => {
           onReplaySplash={() => setShowSplash(true)}
         />
       </GpsEnforcerGuard>
+    );
+  }
+
+  // 1b. If user opened a protected NSO URL directly (/facilitator/* or /report/*) or opened Form NSO from an agenda,
+  // render NsoModuleHost at top-level document flow (so sticky headers & html2canvas PDF export work 100% natively)
+  if (directNsoPath || mobileScreen === 'nso-form') {
+    const startPath = directNsoPath || '/facilitator';
+    const prefillStore = directNsoPath
+      ? undefined
+      : selectedAgenda?.storeName ||
+        (selectedAgenda?.title || '').replace(/^nso\s*[-:–]?\s*/i, '').trim();
+
+    return (
+      <Suspense fallback={<PageTransitionLoader visible={true} />}>
+        <NsoModuleHost
+          user={user}
+          initialPath={startPath}
+          initialStoreName={prefillStore}
+          onExit={() => {
+            if (directNsoPath) {
+              setDirectNsoPath(null);
+              setMobileScreen('main');
+            } else {
+              setMobileScreen(isMobileLayout ? 'detail' : 'main');
+            }
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -935,6 +1003,9 @@ export const App: React.FC = () => {
               onOpenVisitForm={() => {
                 setMobileScreen('visit-form');
               }}
+              onOpenNsoForm={() => {
+                setMobileScreen('nso-form');
+              }}
             />
           ) : (
             <>
@@ -1016,6 +1087,10 @@ export const App: React.FC = () => {
               onOpenVisitForm={(agenda) => {
                 setSelectedAgenda(agenda);
                 setMobileScreen('visit-form');
+              }}
+              onOpenNsoForm={(agenda) => {
+                setSelectedAgenda(agenda);
+                setMobileScreen('nso-form');
               }}
               onUpdateAgenda={handleUpdateAgenda}
               onDeleteAgenda={handleDeleteAgenda}

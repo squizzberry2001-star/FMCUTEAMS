@@ -1,0 +1,1200 @@
+.report-stage { display: grid; gap: 24px; justify-items: center; padding: 16px 0 40px; }
+.pdf-page {
+  width: 960px;
+  height: 540px;
+  background: #fff;
+  color: #1e293b; /* Softer black for better readability */
+  position: relative;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  box-shadow: 0 20px 60px rgba(0,0,0,.18);
+}
+.pdf-page * { box-sizing: border-box; }
+.pdf-logo { position: absolute; left: 24px; top: 18px; width: 48px; height: 42px; background: #fff; border-radius: 4px; overflow: hidden; }
+.pdf-logo .fg { height: 13px; background: #00a651; }
+.pdf-logo .fw { height: 14px; display: flex; align-items: center; justify-content: center; font-size: 6.5px; font-weight: 800; color: #00a651; letter-spacing: 0.5px; }
+.pdf-logo .fb { height: 13px; background: #0072bc; }
+.pdf-title-row { display: flex; align-items: flex-start; gap: 14px; padding: 22px 28px 0 88px; min-height: 62px; overflow: hidden; }
+.pdf-title-row h2 { margin: 0; max-width: 820px; font-size: max(10px, 26px); line-height: 1.15; font-weight: 800; letter-spacing: -0.3px; white-space: normal; color: #0f172a; }
+.pdf-subtitle { font-size: max(10px, 15px); font-weight: 700; white-space: nowrap; padding-top: 6px; color: #334155; }
+.cover-page-pdf { background: linear-gradient(90deg, #fff 0%, #fff 55%, #f8fafc 55%, #f8fafc 100%); }
+.cover-bars { position: absolute; left: 0; top: 32px; width: 512px; }
+.cover-bars .green { height: 26px; background: #00a651; }
+.cover-bars .blue { margin-top: 12px; height: 18px; background: #009fe3; }
+.cover-left { position: absolute; left: 32px; top: 160px; width: 480px; }
+.cover-left h1 { margin: 0; font-size: max(10px, 30px); line-height: 1.25; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; }
+.cover-store { font-size: max(10px, 20px); font-weight: 800; margin: 30px 0 24px; text-transform: uppercase; line-height: 1.2; overflow-wrap: anywhere; color: #1e293b; letter-spacing: 0.5px; }
+.cover-info { display: grid; grid-template-columns: 180px 14px 1fr; row-gap: 10px; font-size: max(10px, 15px); line-height: 1.3; color: #334155; }
+.cover-info b { font-weight: 700; overflow-wrap: anywhere; color: #0f172a; }
+.cover-photo { position: absolute; right: 24px; top: 24px; width: 400px; height: 492px; object-fit: cover; background: #e2e8f0; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,.08); }
+.cover-placeholder { position: absolute; right: 24px; top: 24px; width: 400px; height: 492px; background: linear-gradient(135deg,#f1f5f9,#f8fafc); border-radius: 8px; border: 2px dashed #cbd5e1; display: flex; align-items: center; justify-content: center; font-size: max(10px, 20px); font-weight: 600; color: #94a3b8; }
+.crew-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px; padding: 50px 32px 0; }
+.crew-card-pdf { text-align: center; min-width: 0; }
+.crew-card-pdf img, .crew-card-pdf .avatar-pdf { width: 100%; height: 128px; object-fit: cover; background: #e2e8f0; display: block; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.05); }
+.avatar-pdf { position: relative; overflow: hidden; }
+.avatar-pdf:before { content: ''; position: absolute; width: 48px; height: 48px; border-radius: 999px; background: #cbd5e1; left: 50%; top: 24px; transform: translateX(-50%); }
+.avatar-pdf:after { content: ''; position: absolute; width: 84px; height: 50px; border-radius: 50% 50% 0 0; background: #cbd5e1; left: 50%; bottom: 0; transform: translateX(-50%); }
+.crew-card-pdf .name { margin-top: 10px; font-weight: 700; font-size: max(10px, 12px); line-height: 1.25; text-transform: uppercase; min-height: 30px; overflow: hidden; color: #0f172a; }
+.crew-card-pdf .nik, .crew-card-pdf .level { font-size: max(10px, 11px); line-height: 1.3; color: #475569; }
+.pdf-table { width: calc(100% - 56px); margin: 12px 28px 0; border-collapse: collapse; table-layout: fixed; }
+.pdf-table th, .pdf-table td { border: 1px solid #cbd5e1; padding: 4px 6px; font-size: max(10px, 8.5px); line-height: 1.3; vertical-align: middle; overflow-wrap: anywhere; color: #1e293b; }
+.pdf-table tbody td { min-height: 24px; }
+.pdf-table th { background: #f1f5f9; font-weight: 700; text-align: center; color: #0f172a; }
+.pdf-table .name-col { width: 112px; font-weight: 700; color: #0f172a; }
+.pdf-table .check-col { width: 22px; text-align: center; font-weight: 700; }
+.pdf-table .text-col { width: 132px; }
+.pdf-table .suggest-col { width: 76px; text-align: center; }
+.pdf-table .time-col { width: 42px; text-align: center; font-weight: 700; }
+.rotate-head { height: 78px; width: 22px; padding: 0 !important; }
+.rotate-head > div { transform: rotate(-90deg); white-space: nowrap; width: 74px; margin-left: -27px; font-size: max(10px, 6.7px); line-height: 1; }
+.time-head > div { width: 82px; margin-left: -31px; }
+.group-head { height: 22px; font-size: 5.5px !important; }
+.behavior-pdf-table { margin-top: 12px; }
+.behavior-pdf-table th, .behavior-pdf-table td { font-size: max(10px, 8.5px); }
+.speed-page .pdf-table th, .speed-page .pdf-table td { font-size: max(10px, 7.5px); }
+.speed-crew-table .name-col { width: 94px; }
+.speed-crew-table .text-col { width: 106px; }
+.speed-crew-table .check-col { width: 21px; }
+.speed-crew-table .time-col { width: 42px; }
+.speed-crew-table .rotate-head { height: 76px; }
+.speed-crew-table .rotate-head > div { width: 72px; margin-left: -27px; font-size: 6.5px; }
+.team-speed-page .pdf-title-row h2 { max-width: 520px; }
+.team-pdf-table { position: absolute; left: 32px; right: 32px; top: 76px; width: calc(100% - 64px); border-collapse: collapse; table-layout: fixed; }
+.team-pdf-table th, .team-pdf-table td { border: 1px solid #cbd5e1; padding: 6px; font-size: max(10px, 9px); line-height: 1.3; vertical-align: middle; overflow-wrap: anywhere; white-space: pre-line; color: #1e293b; }
+.team-pdf-table th { height: 36px; background: #f1f5f9; font-weight: 700; text-align: center; color: #0f172a; }
+.team-pdf-table .team-col { width: 108px; }
+.team-pdf-table .target-col { width: 58px; text-align: center; font-weight: 700; }
+.team-pdf-table .actual-col { width: 58px; text-align: center; font-weight: 700; }
+.team-members-pdf { font-size: max(10px, 10.5px) !important; font-weight: 700; text-align: center; color: #0f172a; }
+.yellow-pdf { background: #fef3c7; font-weight: 700; text-align: center; color: #b45309; }
+.products-cell { padding: 0 !important; }
+.trx-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.trx-table td, .trx-table th { border: 1px solid #e2e8f0; padding: 4px; font-size: max(10px, 7.2px); line-height: 1.25; color: #334155; }
+.trx-table th { background: #d9f99d; font-weight: 700; color: #166534; }
+.summary-table { width: calc(100% - 90px); margin: 38px auto 0; border-collapse: collapse; table-layout: fixed; }
+.summary-table th, .summary-table td { border: 1px solid #cbd5e1; padding: 12px 14px; font-size: max(10px, 14px); line-height: 1.4; vertical-align: top; white-space: pre-line; overflow-wrap: anywhere; color: #1e293b; }
+.summary-table th { font-size: max(10px, 18px); text-align: center; font-weight: 800; background: #f8fafc; color: #0f172a; }
+.summary-table td:first-child { width: 24%; font-weight: 700; color: #0f172a; }
+.photo-grid-pdf { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; padding: 46px 32px 0; }
+.photo-grid-pdf .photo-filled, .photo-grid-pdf .photo-empty { width: 100%; height: 180px; object-fit: cover; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,.04); }
+.photo-empty { display: flex; align-items: center; justify-content: center; font-size: max(10px, 14px); font-weight: 600; color: #94a3b8; }
+.layout-grid-pdf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 74px 32px 0; }
+.layout-grid-pdf .photo-filled, .layout-grid-pdf .photo-empty { width: 100%; height: 418px; object-fit: cover; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,.04); }
+.planogram-grid-pdf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 74px 32px 0; }
+.planogram-grid-pdf .photo-filled, .planogram-grid-pdf .photo-empty { width: 100%; height: 418px; object-fit: cover; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,.04); }
+.thankyou { display: flex; height: 100%; align-items: center; justify-content: center; font-size: max(10px, 44px); font-weight: 300; letter-spacing: 1px; color: #1e293b; font-family: 'Inter', sans-serif; }
+.print-toolbar { position: sticky; top: 72px; z-index: 30; display: flex; gap: 10px; align-items: center; justify-content: center; padding: 12px; background: rgba(245,247,251,.9); backdrop-filter: blur(8px); }
+
+@media print {
+  body { background: #fff; }
+  .topbar, .print-toolbar, .quick-nav, .no-print { display: none !important; }
+  .container { width: 100%; margin: 0; }
+  .report-stage { display: block; padding: 0; }
+  .pdf-page { box-shadow: none; break-after: page; page-break-after: always; transform: none; margin: 0; }
+  @page { size: 960pt 540pt; margin: 0; }
+}
+
+/* v3 PDF precision pass */
+.report-stage { overflow-x: auto; padding: 14px 0 44px; }
+.pdf-page { isolation: isolate; }
+.pdf-title-row { padding-top: 16px; min-height: 60px; }
+.pdf-title-row h2 { font-size: max(10px, 27px); line-height: 1.02; letter-spacing: -0.8px; }
+.cover-left { top: 142px; width: 500px; }
+.cover-left h1 { font-size: max(10px, 31px); line-height: 1.12; }
+.cover-store { font-size: max(10px, 20px); margin: 28px 0 18px; max-height: 50px; }
+.cover-info { grid-template-columns: 162px 14px 1fr; row-gap: 6px; font-size: max(10px, 14.5px); }
+.cover-photo, .cover-placeholder { right: 20px; top: 22px; width: 386px; height: 496px; object-fit: cover; object-position: center; border-radius: 0; }
+.crew-grid { grid-template-columns: repeat(8, 1fr); gap: 9px 10px; padding: 58px 30px 0; }
+.crew-card-pdf img, .crew-card-pdf .avatar-pdf { height: 126px; aspect-ratio: 3 / 4; object-fit: cover; object-position: center; }
+.crew-card-pdf .name { font-size: max(10px, 12px); line-height: 1.05; min-height: 26px; }
+.crew-card-pdf .nik, .crew-card-pdf .level { font-size: max(10px, 10.8px); }
+.pdf-table { width: calc(100% - 52px); margin: 6px 26px 0; table-layout: fixed; }
+.pdf-table th, .pdf-table td { padding: 2.6px 3.3px; font-size: max(10px, 7.5px); line-height: 1.12; vertical-align: top; }
+.pdf-table .name-col { width: 104px; }
+.pdf-table .text-col { width: 126px; }
+.pdf-table .check-col { width: 22px; vertical-align: middle; }
+.rotate-head { height: 72px; }
+.rotate-head > div { font-size: max(10px, 6.1px); width: 70px; margin-left: -25px; }
+.group-head { height: 18px; font-size: max(10px, 7.2px) !important; }
+.speed-page .pdf-table th, .speed-page .pdf-table td { font-size: max(10px, 6.7px); line-height: 1.1; }
+.speed-crew-table .name-col { width: 92px; }
+.speed-crew-table .text-col { width: 104px; }
+.speed-crew-table .check-col { width: 20px; }
+.speed-crew-table .time-col { width: 42px; }
+.speed-crew-table .suggest-col { width: 64px; }
+.speed-crew-table .rotate-head > div { font-size: max(10px, 5.7px); }
+.team-pdf-table { top: 66px; left: 26px; right: 26px; width: calc(100% - 52px); }
+.team-pdf-table th, .team-pdf-table td { padding: 3px; font-size: max(10px, 7.4px); line-height: 1.08; }
+.team-pdf-table th { height: 26px; }
+.team-pdf-table .team-col { width: 100px; }
+.team-pdf-table .target-col, .team-pdf-table .actual-col { width: 52px; }
+.team-members-pdf { font-size: max(10px, 8px) !important; }
+.trx-table td, .trx-table th { padding: 1.7px 2px; font-size: max(10px, 6.1px); line-height: 1.02; }
+.summary-table { width: calc(100% - 110px); margin: 34px auto 0; }
+.summary-table th, .summary-table td { padding: 4px 6px; font-size: max(10px, 9.5px); line-height: 1.1; }
+.summary-table th { font-size: max(10px, 11px); }
+.photo-grid-pdf { grid-template-columns: repeat(5, 1fr); gap: 10px; padding: 62px 28px 0; }
+.photo-grid-pdf .photo-filled, .photo-grid-pdf .photo-empty { width: 100%; aspect-ratio: 1 / 1; height: auto; max-height: 188px; object-fit: cover; object-position: center; background: #f1f5f9; border: 1px solid #dbe3ea; }
+.layout-grid-pdf, .planogram-grid-pdf { grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 76px 30px 0; }
+.layout-grid-pdf .photo-filled, .layout-grid-pdf .photo-empty, .planogram-grid-pdf .photo-filled, .planogram-grid-pdf .photo-empty { width: 100%; height: 398px; object-fit: contain; object-position: center; background: #f8fafc; border: 1px solid #dbe3ea; }
+.print-toolbar { top: 64px; gap: 8px; border-bottom: 1px solid #e2e8f0; }
+
+@media (max-width: 980px) {
+  .report-stage { display: block; padding: 10px 10px 38px; }
+  .pdf-page { margin: 0 auto 18px; box-shadow: 0 12px 34px rgba(15,23,42,.16); }
+  .print-toolbar { position: sticky; top: 0; justify-content: flex-start; overflow-x: auto; }
+  .print-toolbar .btn { min-height: 40px; padding: 8px 10px; white-space: nowrap; }
+}
+
+
+/* v4 PDF overflow and team-table precision */
+.pdf-table th, .pdf-table td,
+.team-pdf-table th, .team-pdf-table td,
+.trx-table td, .trx-table th {
+  overflow-wrap: break-word; word-wrap: break-word; word-break: normal; white-space: normal;
+}
+.behavior-pdf-table th, .behavior-pdf-table td { font-size: max(10px, 7px); line-height: 1.04; padding: 2px; }
+.behavior-pdf-table .text-col { width: 118px; }
+.behavior-pdf-table .check-col { width: 20px; }
+.speed-page .pdf-title-row h2 { font-size: max(10px, 25px); max-width: 560px; }
+.speed-page .pdf-subtitle { font-size: max(10px, 13px); padding-top: 6px; }
+.speed-crew-table th, .speed-crew-table td { font-size: max(10px, 6.2px) !important; line-height: 1.03 !important; padding: 2px !important; }
+.speed-crew-table .name-col { width: 86px; }
+.speed-crew-table .text-col { width: 92px; }
+.speed-crew-table .check-col { width: 18px; }
+.speed-crew-table .time-col { width: 39px; }
+.speed-crew-table .suggest-col { width: 60px; }
+.speed-crew-table .rotate-head { height: 66px; }
+.speed-crew-table .rotate-head > div { font-size: max(10px, 5.25px); width: 65px; margin-left: -24px; }
+.team-pdf-table { top: 64px; left: 20px; right: 20px; width: calc(100% - 40px); }
+.team-pdf-table th, .team-pdf-table td { font-size: max(10px, 7px); line-height: 1.05; padding: 2.6px; vertical-align: top; }
+.team-pdf-table th { height: 24px; }
+.team-pdf-table .team-col { width: 120px; }
+.team-pdf-table .target-col { width: 50px; }
+.team-pdf-table .actual-col { width: 48px; }
+.team-members-pdf { font-size: max(10px, 7.2px) !important; line-height: 1.15 !important; text-align: left; white-space: pre-line; background: #fff; }
+.products-cell { padding: 0 !important; }
+.trx-table { table-layout: fixed; }
+.trx-table th:first-child, .trx-table td:first-child { width: 78%; }
+.trx-table th:last-child, .trx-table td:last-child { width: 22%; text-align: center; }
+.trx-table td, .trx-table th { font-size: max(10px, 5.65px) !important; line-height: 1.02 !important; padding: 1.5px 2px !important; }
+.summary-table td { max-height: 360px; }
+
+/* v5 PDF table readability fix - proportional text, safer wrapping, team roles in Team column */
+.pdf-page {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.pdf-title-row {
+  padding: 14px 22px 0 74px;
+  min-height: 58px;
+}
+.pdf-title-row h2 {
+  font-size: max(10px, 28px);
+  line-height: 1.02;
+  letter-spacing: -0.9px;
+}
+.pdf-subtitle {
+  font-size: max(10px, 13.5px);
+  line-height: 1.05;
+  padding-top: 7px;
+}
+.pdf-table,
+.team-pdf-table,
+.summary-table,
+.trx-table {
+  border-spacing: 0;
+}
+.pdf-table th,
+.pdf-table td,
+.team-pdf-table th,
+.team-pdf-table td,
+.summary-table th,
+.summary-table td,
+.trx-table th,
+.trx-table td {
+  font-family: Arial, Helvetica, sans-serif;
+  text-rendering: geometricPrecision;
+  word-wrap: break-word; overflow-wrap: break-word; word-break: normal; white-space: normal;
+}
+
+.behavior-pdf-table {
+  width: calc(100% - 42px);
+  margin: 6px 21px 0;
+}
+.behavior-pdf-table th,
+.behavior-pdf-table td {
+  font-size: max(10px, 7.8px) !important;
+  line-height: 1.12 !important;
+  padding: 2.6px 3px !important;
+  vertical-align: middle !important;
+}
+.behavior-pdf-table th {
+  font-weight: 800;
+}
+.behavior-pdf-table .name-col {
+  width: 118px !important;
+  font-size: max(10px, 7.9px) !important;
+  text-align: left;
+}
+.behavior-pdf-table .check-col {
+  width: 24px !important;
+  text-align: center;
+  font-size: max(10px, 7.4px) !important;
+  padding-left: 1px !important;
+  padding-right: 1px !important;
+}
+.behavior-pdf-table .text-col {
+  width: 126px !important;
+}
+.behavior-pdf-table .group-head {
+  height: 20px !important;
+  font-size: max(10px, 7.6px) !important;
+  text-align: center;
+}
+.behavior-pdf-table .rotate-head {
+  height: 82px !important;
+  padding: 0 !important;
+  vertical-align: bottom !important;
+}
+
+.speed-page .pdf-title-row h2 {
+  font-size: max(10px, 26px) !important;
+  max-width: 565px;
+}
+.speed-crew-table {
+  width: calc(100% - 34px);
+  margin: 6px 17px 0;
+}
+.speed-crew-table th,
+.speed-crew-table td {
+  font-size: max(10px, 6.55px) !important;
+  line-height: 1.08 !important;
+  padding: 2.1px 2.4px !important;
+  vertical-align: middle !important;
+}
+.speed-crew-table .name-col {
+  width: 98px !important;
+  font-size: max(10px, 6.95px) !important;
+  text-align: left;
+}
+.speed-crew-table .check-col {
+  width: 20px !important;
+  text-align: center;
+  padding-left: 1px !important;
+  padding-right: 1px !important;
+}
+.speed-crew-table .time-col {
+  width: 42px !important;
+  font-size: max(10px, 6.3px) !important;
+  text-align: center;
+  font-weight: 800;
+}
+.speed-crew-table .text-col {
+  width: 106px !important;
+}
+.speed-crew-table .suggest-col {
+  width: 64px !important;
+  text-align: center;
+  font-size: max(10px, 6.2px) !important;
+}
+.speed-crew-table .rotate-head {
+  height: 78px !important;
+  padding: 0 !important;
+  vertical-align: bottom !important;
+}
+.speed-crew-table .time-head > div {
+  width: 84px;
+  margin-left: -32px;
+  font-size: max(10px, 5.2px) !important;
+}
+.speed-crew-table .group-head {
+  height: 19px !important;
+  font-size: max(10px, 7px) !important;
+}
+
+.team-speed-page .pdf-title-row h2 {
+  font-size: max(10px, 25px) !important;
+  max-width: 800px;
+}
+.team-pdf-table {
+  top: 66px !important;
+  left: 14px !important;
+  right: 14px !important;
+  width: calc(100% - 28px) !important;
+  table-layout: fixed !important;
+}
+.team-pdf-table th,
+.team-pdf-table td {
+  font-size: max(10px, 7.2px) !important;
+  line-height: 1.12 !important;
+  padding: 2.8px 3px !important;
+  vertical-align: top !important;
+}
+.team-pdf-table th {
+  height: 27px !important;
+  text-align: center;
+  font-weight: 800;
+}
+.team-pdf-table .team-col {
+  width: 130px !important;
+}
+.team-pdf-table .products-col {
+  width: 185px !important;
+}
+.team-pdf-table .target-col {
+  width: 50px !important;
+  text-align: center;
+  font-weight: 800;
+}
+.team-pdf-table .actual-col {
+  width: 48px !important;
+  text-align: center;
+  font-weight: 800;
+}
+.team-pdf-table .note-col,
+.team-pdf-table .note-cell {
+  width: 142px !important;
+}
+.team-members-pdf {
+  background: #fff !important;
+  text-align: left !important;
+  vertical-align: top !important;
+  padding: 4px !important;
+}
+.team-cell-content {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+  min-height: 100%;
+}
+.team-mode-line {
+  font-size: max(10px, 7.2px);
+  line-height: 1.15;
+  font-weight: 800;
+  text-align: center;
+  padding: 3px 2px;
+  background: #f3f4f6;
+  border: .6px solid #9ca3af;
+}
+.team-role-lines {
+  display: grid;
+  gap: 2px;
+  font-size: max(10px, 7.4px);
+  line-height: 1.16;
+  font-weight: 800;
+}
+.team-role-lines div {
+  padding: 2px 3px;
+  border-bottom: .5px solid #d1d5db;
+}
+.products-cell {
+  padding: 0 !important;
+  vertical-align: top !important;
+}
+.trx-table {
+  width: 100%;
+  table-layout: fixed !important;
+  border-collapse: collapse;
+}
+.trx-table th,
+.trx-table td {
+  font-size: max(10px, 6.25px) !important;
+  line-height: 1.08 !important;
+  padding: 1.8px 2.2px !important;
+  vertical-align: middle !important;
+}
+.trx-table th {
+  background: #d9f99d !important;
+  text-align: center;
+  font-weight: 800;
+}
+.trx-table .trx-no-col,
+.trx-table .trx-no-cell {
+  width: 27px !important;
+  min-width: 27px !important;
+  max-width: 27px !important;
+  text-align: center;
+  font-weight: 800;
+}
+.trx-table .trx-qty-col,
+.trx-table .trx-qty-cell {
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  text-align: center;
+  font-weight: 800;
+}
+.trx-table .trx-product-name {
+  font-weight: 600;
+}
+
+/* revamp request: crew table, team cover, summary auto text and centered layout photos */
+.crew-table-pdf {
+  width: calc(100% - 80px);
+  height: 430px;
+  margin: 14px auto 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.crew-table-pdf th,
+.crew-table-pdf td {
+  border: 1px solid #111827;
+  padding: 6px 8px;
+  font-size: max(10px, 15px);
+  line-height: 1.12;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+.crew-table-pdf th {
+  background: #e5e7eb;
+  text-align: center;
+  font-size: max(10px, 16px);
+  font-weight: 900;
+}
+.crew-table-pdf .crew-no-pdf { width: 46px; text-align: center; font-weight: 900; }
+.crew-table-pdf .crew-photo-cell { width: 96px; text-align: center; padding: 4px; }
+.crew-table-pdf .crew-photo-cell img,
+.crew-table-pdf .crew-photo-cell .avatar-pdf {
+  width: 70px;
+  height: 84px;
+  object-fit: cover;
+  object-position: center;
+  display: inline-block;
+  border: 1px solid #cbd5e1;
+}
+.crew-table-pdf .crew-name-cell { font-weight: 900; text-transform: uppercase; }
+.team-cover-page {
+  background: linear-gradient(135deg, #ffffff 0%, #f0fff7 48%, #eef7ff 100%);
+}
+.team-cover-content {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  text-align: center;
+}
+.team-cover-content h1 {
+  margin: 0;
+  font-size: max(10px, 58px);
+  line-height: .95;
+  letter-spacing: -2px;
+  color: #0f172a;
+}
+.summary-table {
+  table-layout: auto !important;
+  width: calc(100% - 72px) !important;
+}
+.summary-table th:nth-child(1), .summary-table td:nth-child(1) { width: 20% !important; }
+.summary-table th:nth-child(2), .summary-table td:nth-child(2),
+.summary-table th:nth-child(3), .summary-table td:nth-child(3) { width: 40% !important; white-space: pre-line !important; }
+.layout-grid-pdf, .planogram-grid-pdf { align-items: center; justify-items: center; }
+.layout-grid-pdf .photo-filled, .layout-grid-pdf .photo-empty,
+.planogram-grid-pdf .photo-filled, .planogram-grid-pdf .photo-empty {
+  display: block;
+  margin: 0 auto;
+  object-position: center center !important;
+}
+.cover-info { grid-template-columns: 150px 14px 1fr !important; row-gap: 5px !important; font-size: max(10px, 13.7px) !important; }
+
+/* v6 PDF mobile preview and one-table-per-crew layout */
+.pdf-page-frame {
+  width: 960px;
+  height: 540px;
+  position: relative;
+  margin: 0 auto 24px;
+}
+.pdf-page-frame > .pdf-page {
+  margin: 0;
+}
+.crew-single-grid-pdf {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 58px 32px 0;
+}
+.crew-single-table-pdf {
+  width: 100%;
+  height: 142px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #fff;
+}
+.crew-single-table-pdf th,
+.crew-single-table-pdf td {
+  border: 1px solid #111827;
+  padding: 5px 7px;
+  font-size: max(10px, 13px);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+.crew-single-table-pdf th {
+  height: 28px;
+  background: #e5e7eb;
+  font-size: max(10px, 13.5px);
+  font-weight: 900;
+  text-align: left;
+  text-transform: uppercase;
+}
+.crew-single-photo {
+  width: 92px;
+  text-align: center;
+  padding: 4px !important;
+}
+.crew-single-photo img,
+.crew-single-photo .avatar-pdf {
+  width: 72px;
+  height: 92px;
+  object-fit: cover;
+  object-position: center;
+  display: inline-block;
+  border: 1px solid #cbd5e1;
+  background: #e5e7eb;
+}
+.crew-single-table-pdf span {
+  display: block;
+  font-size: max(10px, 10px);
+  font-weight: 900;
+  color: #64748b;
+  letter-spacing: .04em;
+}
+.crew-single-table-pdf b {
+  display: block;
+  margin-top: 2px;
+  font-size: max(10px, 15px);
+  font-weight: 900;
+  color: #0f172a;
+}
+.speed-crew-cover-content h1 span {
+  display: block;
+  margin-top: 10px;
+  font-size: max(10px, 35px);
+  letter-spacing: -1px;
+}
+.report-stage {
+  overflow-x: hidden;
+}
+.exporting-pdf .pdf-page-frame {
+  width: 960px !important;
+  height: 540px !important;
+  margin: 0 !important;
+}
+.exporting-pdf .pdf-page-frame > .pdf-page {
+  transform: none !important;
+  transform-origin: top left !important;
+  box-shadow: none !important;
+}
+@media (max-width: 980px) {
+  .report-stage {
+    --preview-scale: calc((100vw - 24px) / 960);
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+    padding: 10px 0 36px;
+    overflow-x: hidden;
+  }
+  .pdf-page-frame {
+    width: calc(960px * var(--preview-scale));
+    height: calc(540px * var(--preview-scale));
+    margin: 0 auto 4px;
+  }
+  .pdf-page-frame > .pdf-page {
+    transform: scale(var(--preview-scale));
+    transform-origin: top left;
+    box-shadow: 0 12px 34px rgba(15,23,42,.16);
+  }
+  .print-toolbar {
+    top: 0;
+  }
+}
+
+/* =========================================================================
+   FAMILYMART EXECUTIVE REPORT - COMPLETE DESIGN OVERRIDES
+   ========================================================================= */
+
+/* --- PRINT MEDIA --- */
+@media print {
+  .pdf-page-frame {
+    width: 960pt !important;
+    height: 540pt !important;
+    margin: 0 !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  .pdf-page-frame > .pdf-page {
+    transform: none !important;
+    box-shadow: none !important;
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+}
+
+/* --- 1. GLOBAL --- */
+.pdf-page {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  color: #1e293b !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+/* --- 2. LOGO (Symmetrical, compact) --- */
+.pdf-logo {
+  position: absolute !important;
+  left: 24px !important;
+    top: 12px !important;
+    width: 46px !important;
+  height: auto !important;
+  background: transparent !important;
+  border-radius: 3px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+}
+.pdf-logo .fg { height: 10px !important; background: #00a651 !important; }
+.pdf-logo .fw {
+  height: 12px !important;
+    background: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 5.5px !important;
+  font-weight: 900 !important;
+  color: #00a651 !important;
+  letter-spacing: -0.3px !important;
+}
+.pdf-logo .fb { height: 6px !important; background: #0072bc !important; }
+
+/* --- 3. MINIMALIST TITLE ROW --- */
+.pdf-title-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 14px 28px 14px 92px !important;
+  min-height: auto !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+  margin-bottom: 0 !important;
+}
+.pdf-title-row h2 {
+  font-size: max(10px, 17px) !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.3px !important;
+  text-transform: none !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+}
+.pdf-subtitle {
+  font-size: max(10px, 12px) !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  padding-top: 0 !important;
+  white-space: nowrap !important;
+}
+
+/* --- 4. COVER PAGE --- */
+.cover-page-pdf {
+  background: #fff !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+}
+.cover-left h1 {
+  font-size: max(10px, 30px) !important;
+  color: #0f172a !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  line-height: 1.15 !important;
+}
+.cover-store {
+  font-size: max(10px, 20px) !important;
+  color: #0072bc !important;
+  font-weight: 800 !important;
+}
+.cover-info { font-size: max(10px, 14px) !important; line-height: 1.5 !important; }
+.cover-info b { color: #0f172a !important; font-weight: 800 !important; }
+
+/* --- 5. GLOBAL TABLES (Behavior, Speed) --- */
+.pdf-table th,
+.summary-table th {
+  background-color: #00a651 !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+  border: 1px solid #008742 !important;
+}
+.pdf-table td,
+.summary-table td {
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+}
+.pdf-table tbody tr:nth-child(even),
+.summary-table tbody tr:nth-child(even) {
+  background-color: #f8fafc !important;
+}
+.pdf-table .name-col,
+.summary-table td:first-child {
+  background-color: #f1f5f9 !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+
+/* --- 6. ROTATED HEADERS (Fix alignment) --- */
+.behavior-pdf-table .rotate-head {
+  height: 82px !important;
+  padding: 0 !important;
+  vertical-align: bottom !important;
+}
+.behavior-pdf-table .rotate-head > div {
+  transform: rotate(-90deg);
+  width: 78px;
+  margin-left: -28px;
+  margin-bottom: 33px;
+  font-size: max(10px, 7.2px) !important;
+  line-height: 1.02 !important;
+  white-space: nowrap;
+}
+.speed-crew-table .rotate-head {
+  height: 78px !important;
+  padding: 0 !important;
+  vertical-align: bottom !important;
+}
+.speed-crew-table .rotate-head > div {
+  transform: rotate(-90deg);
+  width: 74px;
+  margin-left: -27px;
+  margin-bottom: 31px;
+  font-size: max(10px, 7.2px) !important;
+  line-height: 1 !important;
+  white-space: nowrap;
+}
+
+/* --- 7. CREW STORE CARDS (4-column polaroid) --- */
+.crew-store-page .crew-single-grid-pdf {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 18px !important;
+  padding: 20px 28px 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  align-content: start !important;
+}
+.crew-card-pdf {
+  display: flex !important;
+  flex-direction: column !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: #fff !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+.crew-store-page .crew-card-photo {
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+/* Photo is a background-image div — must fill and cover */
+.crew-store-page .crew-card-photo .crew-card-photo-cover {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background-size: cover !important;
+  background-position: center top !important;
+  background-repeat: no-repeat !important;
+  border-radius: 0 !important;
+}
+/* Preload img is just a trigger — hide it visually */
+.crew-store-page .crew-card-photo .crew-card-photo-preload {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+/* Fallback avatar */
+.crew-store-page .crew-card-photo .avatar-pdf {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  border-radius: 0 !important;
+}
+.crew-single-table-pdf {
+  width: 100% !important;
+  border: none !important;
+  border-collapse: collapse !important;
+  height: auto !important;
+}
+.crew-single-table-pdf th {
+  background: #0072bc !important;
+  color: #fff !important;
+  padding: 7px 8px !important;
+  font-size: max(10px, 10px) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  text-align: center !important;
+  border: none !important;
+  height: auto !important;
+}
+.crew-single-table-pdf td {
+  padding: 8px 8px !important;
+  text-align: center !important;
+  border-top: 1px solid #f1f5f9 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+.crew-single-table-pdf span {
+  font-size: max(10px, 8px) !important;
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  display: block !important;
+}
+.crew-single-table-pdf b {
+  font-size: max(10px, 12px) !important;
+  color: #0f172a !important;
+  margin-top: 0 !important; line-height: 1 !important;
+  display: block !important;
+  font-weight: 800 !important;
+}
+.crew-single-photo { display: none !important; }
+
+/* --- 8. TEAM SPEED - Header Info --- */
+.team-speed-header-info {
+  margin: 12px 28px 12px !important;
+  padding: 10px 16px !important;
+  background: #f8fafc !important;
+  border-left: 4px solid #0072bc !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-left: 4px solid #0072bc !important;
+}
+.team-mode-badge {
+  background: #0072bc !important;
+  color: #fff !important;
+  padding: 4px 10px !important;
+  font-size: max(10px, 10px) !important;
+  font-weight: 800 !important;
+  border-radius: 3px !important;
+  letter-spacing: 0.5px !important;
+  white-space: nowrap !important;
+}
+.team-role-list {
+  display: flex !important;
+  gap: 8px !important;
+  font-size: max(10px, 10px) !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  flex-wrap: wrap !important;
+}
+.team-role-list span {
+  background: #fff !important;
+  padding: 3px 8px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 3px !important;
+  font-size: max(10px, 10px) !important;
+}
+
+/* --- 9. TRX CARDS (1x2 grid) --- */
+.trx-card-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 16px !important;
+  margin: 0 28px !important;
+  align-content: start !important;
+}
+.trx-card {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  background: #fff !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.trx-card-header {
+  background: #00a651 !important;
+  color: #fff !important;
+  padding: 6px 12px !important;
+  font-size: max(10px, 10px) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+}
+.trx-card-body {
+  padding: 10px 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+.trx-table { width: 100% !important; border-collapse: collapse !important; }
+.trx-table td, .trx-table th {
+  border: 0 !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  padding: 4px 6px !important;
+  font-size: max(10px, 8px) !important;
+  background: transparent !important;
+  color: #1e293b !important;
+  line-height: 1.3 !important;
+}
+.trx-table th {
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  font-size: max(10px, 7px) !important;
+  font-weight: 800 !important;
+  border-bottom: 1.5px solid #e2e8f0 !important;
+}
+.trx-table tr:last-child td { border-bottom: 0 !important; }
+.trx-table .trx-qty-col, .trx-table .trx-qty-cell {
+  width: 32px !important;
+  text-align: center !important;
+  font-weight: 700 !important;
+}
+.trx-card-timings {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  background: #f8fafc !important;
+  padding: 8px 10px !important;
+  border-radius: 4px !important;
+  border: 1px solid #e2e8f0 !important;
+}
+.timing-box {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+.timing-box span {
+  font-size: max(10px, 7px) !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  display: block !important;
+}
+.timing-box strong {
+  font-size: max(10px, 11px) !important;
+  color: #0f172a !important;
+  font-weight: 900 !important;
+}
+.trx-card-notes {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr 1fr !important;
+  gap: 8px !important;
+}
+.note-box { font-size: max(10px, 8px) !important; color: #1e293b !important; line-height: 1.3 !important; }
+.note-box span {
+  display: block !important;
+  font-size: max(10px, 7px) !important;
+  font-weight: 800 !important;
+  color: #0072bc !important;
+  text-transform: uppercase !important;
+  margin-bottom: 0px !important;
+  letter-spacing: 0.3px !important;
+}
+.note-box p { margin: 0 !important; }
+
+/* --- 10. PHOTO GRIDS --- */
+.photo-grid-pdf { gap: 14px !important; padding: 16px 28px 0 !important; }
+.photo-grid-pdf .photo-filled, .photo-grid-pdf .photo-empty {
+    border-radius: 6px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+    aspect-ratio: 4 / 5 !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+.layout-grid-pdf, .planogram-grid-pdf { gap: 14px !important; padding: 16px 28px 0 !important; }
+.layout-grid-pdf .photo-filled, .planogram-grid-pdf .photo-filled {
+  border-radius: 6px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+}
+.photo-empty {
+  border: 2px dashed #cbd5e1 !important;
+  background: #f8fafc !important;
+  border-radius: 6px !important;
+  color: #94a3b8 !important;
+  font-size: max(10px, 11px) !important;
+  font-weight: 600 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* --- 11. WATERMARK --- */
+.pdf-page::after {
+  content: 'GENERATED BY NSO WEB REPORT' !important;
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 4px !important;
+  z-index: 50 !important;
+  pointer-events: none !important;
+  text-align: center !important;
+  font-family: inherit !important;
+  font-size: 8px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.45em !important;
+  color: rgba(15,23,42,0.28) !important;
+  opacity: 1 !important;
+  text-transform: uppercase !important;
+}
+
+
+
+/* =========================================================
+   PDF CREW GRID - 2x4 Layout, Centered & Fit
+   ========================================================= */
+.crew-store-page {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+}
+
+.crew-store-page .crew-single-grid-pdf {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  grid-template-rows: repeat(2, auto) !important;
+  gap: 24px 20px !important;
+  padding: 30px 40px !important;
+  width: 100% !important;
+  height: calc(100% - 90px) !important; /* Subtract header */
+  align-content: center !important; /* Center the grid vertically */
+  flex-grow: 1 !important;
+}
+
+.crew-store-page .crew-card-pdf {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+  border-radius: 12px !important;
+}
+
+.crew-store-page .crew-card-photo {
+  /* Enforce exact 3:4 portrait ratio for pasfoto */
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+}
+
+/* =========================================================
+   CREW CARD INFO MINIMALIST
+   ========================================================= */
+.crew-card-info {
+  padding: 6px 4px !important;
+  text-align: center !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  flex-grow: 1 !important;
+}
+
+.crew-card-name {
+  font-size: max(10px, 8px) !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  margin-bottom: 0px !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  min-height: 18px !important; /* reserve space for 2 lines */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.crew-card-label {
+  font-size: max(10px, 5px) !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  margin-top: 0 !important; line-height: 1 !important;
+}
+
+.crew-card-value {
+  font-size: max(10px, 7px) !important;
+  font-weight: 700 !important;
+  color: #334155 !important;
+}
+
+.crew-card-value.level {
+  color: #0072bc !important;
+  font-weight: 800 !important;
+}
+
+.crew-store-page .crew-single-grid-pdf {
+  grid-template-columns: repeat(5, 166px) !important;
+  justify-content: center !important;
+  grid-template-rows: repeat(2, auto) !important;
+  align-content: center !important;
+  height: auto !important; /* Allow grid to expand naturally */
+  gap: 12px 14px !important; /* Tighten horizontal gap slightly */
+  padding: 16px 20px !important; /* Minimal top padding */
+}
+
+.crew-store-page .crew-card-pdf {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important; /* Center content horizontally */
+  justify-content: flex-start !important;
+  height: auto !important;
+  min-height: min-content !important; 
+  padding: 0 !important;
+}
+
+.crew-store-page .crew-card-photo {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 6px 6px 0 0 !important;
+  flex: none !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05) !important;
+}
+
+.crew-store-page .crew-card-info {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  height: auto !important;
+  min-height: 52px !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  padding: 6px 4px !important;
+  background: #fff !important;
+  z-index: 10 !important;
+  position: relative !important;
+}
+.crew-store-page .crew-card-photo .crew-card-photo-cover {
+  border-radius: 6px !important;
+}
+.crew-store-page .crew-card-photo .crew-card-photo-cover {
+  border-radius: 6px 6px 0 0 !important;
+}
+
+/* --- HD PDF EXPORT ENHANCEMENTS --- */
+.exporting-pdf img,
+.exporting-pdf .photo-filled,
+.exporting-pdf .cover-photo,
+.exporting-pdf .crew-card-photo-cover,
+.pdf-hd-export img,
+.pdf-hd-export .photo-filled,
+.pdf-hd-export .cover-photo,
+.pdf-hd-export .crew-card-photo-cover {
+  image-rendering: -webkit-optimize-contrast !important;
+  image-rendering: crisp-edges !important;
+}

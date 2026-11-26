@@ -27,6 +27,7 @@ import {
   Trash2,
   Lock,
   AlertTriangle,
+  Building2,
 } from 'lucide-react';
 import { KendalaAgendaModal } from './common/KendalaAgendaModal';
 import { ScheduleAgenda, User, SCHEDULE_CATEGORY_OPTIONS } from '../types';
@@ -56,6 +57,7 @@ interface DesktopDashboardProps {
   onOpenExcelUpload?: () => void;
   onOpenLiveMaps?: () => void;
   onOpenVisitForm?: (agenda: ScheduleAgenda) => void;
+  onOpenNsoForm?: (agenda: ScheduleAgenda) => void;
   onUpdateAgenda?: (updatedAgenda: ScheduleAgenda) => void;
   onDeleteAgenda?: (id: string) => void;
   onToggleComplete?: (id: string, e?: React.MouseEvent) => void;
@@ -76,6 +78,7 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
   onOpenExcelUpload,
   onOpenLiveMaps,
   onOpenVisitForm,
+  onOpenNsoForm,
   onUpdateAgenda,
   onDeleteAgenda,
   onToggleComplete,
@@ -1053,6 +1056,54 @@ export const DesktopDashboard: React.FC<DesktopDashboardProps> = ({
                       >
                         <Camera className="w-4 h-4" />
                         <span>Buka Form Visit Report</span>
+                      </button>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Action 3b: Tombol Buka Form NSO Report (Khusus Jadwal NSO) */}
+              {(selectedAgenda.category === 'NSO' ||
+                /\bnso\b|grand\s*opening|new\s*store\s*opening/i.test(selectedAgenda.title || '')) && (
+                <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-br from-rose-50 to-amber-50/60 border border-rose-200">
+                  <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider block mb-1">
+                    Formulir NSO Report System
+                  </span>
+                  <p className="text-[11px] text-slate-600 mb-2.5">
+                    Buka dashboard fasilitator NSO, checklist persiapan, evaluasi crew, timer, QR peserta, dan export PDF.
+                  </p>
+                  {(() => {
+                    const picName = (selectedAgenda.pic || '').trim();
+                    const currentName = (user?.name || '').trim();
+                    const isAssigned =
+                      Boolean(user?.isAdmin) ||
+                      !picName ||
+                      (currentName &&
+                        (isSamePersonName(picName, currentName) ||
+                          picName.toLowerCase().includes(currentName.toLowerCase()) ||
+                          currentName.toLowerCase().includes(picName.toLowerCase())));
+
+                    if (!isAssigned) {
+                      return (
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed select-none"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>Khusus untuk {selectedAgenda.pic}</span>
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => onOpenNsoForm && onOpenNsoForm(selectedAgenda)}
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#FF7E98] to-[#FF5376] text-white text-xs font-extrabold shadow-sm hover:brightness-105 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Building2 className="w-4 h-4" />
+                        <span>Buka Form NSO Report</span>
                       </button>
                     );
                   })()}

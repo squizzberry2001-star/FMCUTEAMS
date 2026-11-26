@@ -49,6 +49,7 @@ interface AgendaDetailViewProps {
   currentUser?: User | null;
   onBack: () => void;
   onOpenVisitForm?: () => void;
+  onOpenNsoForm?: () => void;
 }
 
 function getMinimalistPinLabel(rawName: string): string {
@@ -66,9 +67,12 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
   currentUser,
   onBack,
   onOpenVisitForm,
+  onOpenNsoForm,
 }) => {
   // Hanya tampilkan Maps jika agenda adalah VISIT
   const isVisitAgenda = agenda.category === 'VISIT';
+  const isNsoAgenda =
+    agenda.category === 'NSO' || /\bnso\b|grand\s*opening|new\s*store\s*opening/i.test(agenda.title || '');
   const [liveDistanceMeters, setLiveDistanceMeters] = useState<number | undefined>(
     agenda.silentAudit?.inDistanceToStoreMeters
   );
@@ -828,6 +832,53 @@ export const AgendaDetailView: React.FC<AgendaDetailViewProps> = ({
               Jadwal visit ke depan terkunci hingga tanggal kunjungan ({agenda.date}). Jadwal hari ini atau yang sudah lewat dapat dibuka.
             </p>
           ) : null}
+        </div>
+      ) : isNsoAgenda ? (
+        <div className="shrink-0 space-y-2 pt-1">
+          <div className="flex items-center gap-2 w-full">
+            <button
+              type="button"
+              onClick={() => setShowKendalaModal(true)}
+              className={`py-3 px-3 sm:px-3.5 rounded-2xl border transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 font-black text-xs shadow-xs cursor-pointer shrink-0 ${
+                agenda.kendala
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
+                  : 'bg-white hover:bg-amber-50/80 border-slate-200/90 text-amber-800 hover:border-amber-300'
+              }`}
+              title="Lapor Kendala Agenda NSO"
+            >
+              <AlertTriangle className={`w-4 h-4 ${agenda.kendala ? 'text-white' : 'text-amber-600'} stroke-[2.2]`} />
+              <span>KENDALA</span>
+            </button>
+
+            <div className="flex-1 min-w-0">
+              {isAssignedPerson || currentUser?.isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenNsoForm && onOpenNsoForm()}
+                  className="w-full py-3 px-3.5 sm:px-4 rounded-2xl bg-gradient-to-r from-[#FF7E98] to-[#FF5376] text-white text-xs font-black shadow-sm hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer truncate"
+                >
+                  <Building2 className="w-4 h-4 shrink-0" />
+                  <span className="truncate">BUKA FORM NSO REPORT</span>
+                  <ArrowRight className="w-4 h-4 stroke-[2.5] shrink-0" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-3 px-3 rounded-2xl bg-slate-100 text-slate-400 text-xs font-black border border-slate-200 flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-none truncate"
+                  title={`Form NSO khusus untuk ${agenda.pic}.`}
+                >
+                  <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">KHUSUS UNTUK {agenda.pic?.toUpperCase() || 'PERSONEL TERJADWAL'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+          {!isAssignedPerson && !currentUser?.isAdmin && (
+            <p className="text-[10px] text-center font-semibold text-amber-700 bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200/80">
+              🔒 Form NSO ini hanya dapat dibuka oleh personel yang dijadwalkan ({agenda.pic}).
+            </p>
+          )}
         </div>
       ) : (
         <div className="shrink-0 pt-1">
