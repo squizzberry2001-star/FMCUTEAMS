@@ -122,17 +122,42 @@ export const NsoModuleHost: React.FC<NsoModuleHostProps> = ({
 
     // Small reset bridge so Tailwind's preflight doesn't shrink NSO headings/scrolls while active
     const hostBridgeCss = `
-      html.fmcu-nso-active, html.fmcu-nso-active body {
-        overflow-x: visible !important;
-        overflow-y: auto !important;
-        height: auto !important;
+      html.fmcu-nso-active,
+      html.fmcu-nso-active body,
+      html.fmcu-nso-active #root {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
         user-select: text !important;
         -webkit-user-select: text !important;
+      }
+      .nso-module-host {
+        position: relative !important;
+        width: 100% !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-y: contain !important;
       }
       .nso-module-host h1 { font-size: 2em; font-weight: 700; }
       .nso-module-host h2 { font-size: 1.5em; font-weight: 700; }
       .nso-module-host h3 { font-size: 1.17em; font-weight: 700; }
       .nso-module-host img, .nso-module-host svg { display: inline-block; }
+      @media print {
+        html.fmcu-nso-active,
+        html.fmcu-nso-active body,
+        html.fmcu-nso-active #root,
+        .nso-module-host {
+          height: auto !important;
+          max-height: none !important;
+          overflow: visible !important;
+        }
+      }
     `;
 
     styleEl.textContent = `${globalsCss}\n${reportCss}\n${reportOverridesCss}\n${hostBridgeCss}`;
@@ -202,7 +227,7 @@ export const NsoModuleHost: React.FC<NsoModuleHostProps> = ({
   );
 
   return (
-    <div className="nso-module-host min-h-screen w-full bg-[#f8fafc] select-text">
+    <div className="nso-module-host h-screen h-[100dvh] max-h-[100dvh] w-full bg-[#f8fafc] select-text overflow-y-auto overflow-x-hidden">
       <NsoRouterProvider value={routerValue}>
         {matched.kind === 'facilitator-home' && <FacilitatorHomePage />}
         {matched.kind === 'facilitator-editor' && <FacilitatorEditorPage />}

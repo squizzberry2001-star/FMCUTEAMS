@@ -230,7 +230,7 @@ export default function FacilitatorHome() {
   return (
     <main className="app-shell">
       <AppHeader />
-      <div className="container grid dashboard-home">
+      <div className="container grid dashboard-home pb-16">
         <section className="card hero-card dashboard-create-card">
           <h1 className="dashboard-secret-title" onClick={revealSecretPanel}>Dashboard Fasilitator</h1>
           <div className="notice firebase-diagnostic-notice">
@@ -284,7 +284,7 @@ export default function FacilitatorHome() {
                 </div>
                 <div className="actions">
                   <button className="btn blue icon-home-btn" type="button" onClick={() => openProtected(item, `/facilitator/${item.id}`)}>✎ Buka</button>
-                  <button className="btn secondary icon-home-btn" type="button" onClick={() => openProtected(item, `/report/${item.id}`)}>PDF</button>
+                  <button className="btn secondary icon-home-btn" type="button" onClick={() => navigate(`/report/${item.id}`)}>PDF</button>
                   <button className="btn danger icon-home-btn" type="button" onClick={() => requestClearStore(item)}>Clear</button>
                 </div>
               </div>
